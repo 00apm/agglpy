@@ -1,0 +1,19 @@
+# ignore pycache folder (pandas cython caching)
+__pycache__
+*.py[cod]
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Environments
+.env
+.venv
+env/
+venv/
+
+# IDE internal data
+.vscode/
+.pylint.d/
+
+# ignore testers folder
+testers
