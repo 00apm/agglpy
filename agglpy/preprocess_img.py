@@ -131,7 +131,6 @@ def reset_imgset_struct(path):
         raise Exception("Unrecognized folder structure.")
 
 
-
 def imgset_struc_iscorrect(path):
     assert os.path.exists(path), "Given path does not exist."
     for dirpath, dirs, files in os.walk(path):
@@ -198,8 +197,9 @@ def activate_images(path, imgnames=None):
                              sep=";",
                              usecols=[0],
                              header=None,
-                             squeeze=True,
                              )
+        ignore = ignore.squeeze('columns')
+        
     except FileNotFoundError:
         ignore = pd.DataFrame(list(";"))
         ignore.to_csv(ignorepath, header=False, index=False)
@@ -239,8 +239,8 @@ def deactivate_images(path, imgnames=None):
                              sep=";",
                              usecols=[0],
                              header=None,
-                             squeeze=True,
                              )
+        ignore = ignore.squeeze('columns')
     except FileNotFoundError:
         ignore = pd.DataFrame(list(";"))
         ignore.to_csv(ignorepath, header=False, index=False)
@@ -267,7 +267,6 @@ def deactivate_images(path, imgnames=None):
             warnings.warn("Following data sets are not present in SEM IMG folder"
                           " structure: "
                           + str(notinDS.to_string(index=False).split('\n')))
-        
     else:
         ignore = pd.DataFrame(DS)
 
