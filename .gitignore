@@ -2,6 +2,10 @@
 __pycache__
 *.py[cod]
 
+# ignore logs
+**/logs
+*.log
+
 # Jupyter Notebook
 .ipynb_checkpoints
 

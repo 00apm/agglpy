@@ -6,8 +6,8 @@ Created on Thu Feb 27 09:04:44 2020
 """
 
 import cv2
-import skimage as ski
-import skimage.io
+# import skimage as ski
+# import skimage.io
 import numpy as np
 import pandas as pd
 import os
@@ -15,7 +15,7 @@ import os
 # import skimage.filters as ski.filters
 
 # from skimage import io, filters
-from skimage.feature import canny
+# from skimage.feature import canny
 
 
 def draw_particles(image, particles, color = (100, 255, 100)):
@@ -228,7 +228,7 @@ if __name__ == "__main__":
                      dist2R=0.4, param1=250, param2=20,
                      display_img=False, export_edges=False,
                      export_img=False, export_csv=False)
-    display(circs)
+    # display(circs)
 
 
 
