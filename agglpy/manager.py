@@ -1,16 +1,19 @@
 import os
+from pathlib import Path
 
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
 import matplotlib as mpl
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 from tqdm import tqdm
+import yaml
 
 from agglpy.aggl import ImgAgl
-from agglpy.auxiliary import txt_istrue, PSD_space
+from agglpy.auxiliary import PSD_space, txt_istrue
+from agglpy.cfg import load_manager_settings
 
 
-class MultiImgAgl:
+class Manager:
     """
     description
 
@@ -22,55 +25,99 @@ class MultiImgAgl:
 
     """
 
-    def __init__(self, working_folder, settings_filename="settings.csv"):
+    def __init__(
+        self,
+        working_dir: Path,
+        settings_filename: str = "settings.csv",
+        initialize: bool = True,
+    ):
 
-        self._path = working_folder
+        self._workdir = Path(working_dir)
+        self._settings_path = self._workdir / settings_filename
 
-        # Loading settings.csv file
-        self._settings_DF = pd.read_csv(
-            self._path + os.sep + settings_filename,
-            sep=";",
-            encoding="ansi",
-            index_col=0,
-            header=None,
-        )
+        # Loading settings file
+        self._settings = load_manager_settings(path=self._settings_path)
+        
+        if initialize:
+            self._settings_DF = None
 
-        self.collector_threshold = float(
-            self._settings_DF.loc["collector_threshold", 1]
-        )
-        self.exp_conditions = self._settings_DF.iloc[
-            (self._settings_DF.index.get_loc("experimental_conditions") + 1) :,
-            :,
-        ]
+            self._init_DFs()
 
-        # Defining directories to work with
-        self._DS_paths = self._find_DataSets()
+            # Defining directories to work with
+            self._DS_paths = self._find_DataSets()
 
-        # Constructing DataSets (ImgAgl objects) for analysis
-        # and creating IMG_INFO table
-        self._DS = []
-        self.img_info = pd.DataFrame()
-        for i, path in enumerate(self._DS_paths):
-            self._DS.append(
-                ImgAgl(
-                    path,
-                    settings_filename=(os.path.basename(path) + "_names.csv"),
+            # Constructing DataSets (ImgAgl objects) for analysis
+            # and creating IMG_INFO table
+            self._DS = []
+            self.img_info = pd.DataFrame()
+            for i, path in enumerate(self._DS_paths):
+                self._DS.append(
+                    ImgAgl(
+                        path,
+                        settings_filename=(os.path.basename(path) + "_names.csv"),
+                    )
                 )
+
+                self.img_info.loc[i, "img_name"] = self._DS[i].get_img_filename()
+                self.img_info.loc[i, "magnification"] = self._DS[i].mag
+                self.img_info.loc[i, "pixel size [um]"] = self._DS[i].scf
+                self.img_info.loc[i, "subdir"] = (
+                    os.path.basename(self._workdir)
+                    + os.sep
+                    + os.path.basename(path)
+                )
+
+            self.batch_res_pDF = pd.DataFrame()
+            self.batch_res_aglDF = pd.DataFrame()
+            self.batch_res_PSD = pd.DataFrame()
+            self.batch_res_DSsummary = pd.DataFrame()
+            self.batch_res_summary = pd.DataFrame()
+            self._PSD_space = np.array([])
+
+    def _init_DFs(self):
+        """
+        Assign parts of settings file to object's attributes
+
+        """
+        # This is backward compatibility code
+        # to deprecate / refactor
+
+        if "collector_threshold" in self._settings["analysis"]:
+            self.collector_threshold = float(
+                self._settings["analysis"]["collector_threshold"]
             )
 
-            self.img_info.loc[i, "img_name"] = self._DS[i].get_img_filename()
-            self.img_info.loc[i, "magnification"] = self._DS[i].mag
-            self.img_info.loc[i, "pixel size [um]"] = self._DS[i].scf
-            self.img_info.loc[i, "subdir"] = (
-                os.path.basename(self._path) + os.sep + os.path.basename(path)
-            )
+        # create experimental condition DF for later export to xls file
+        if "conditions" in self._settings["metadata"]:
+            # Assert that experimental conditions have proper structure
+            expcond = self._settings["metadata"]["conditions"]
+            for key, val in expcond.items():
+                if not isinstance(val, list):
+                    raise ValueError(
+                        f"Experimental condition key '{key}'"
+                        " should have a structure [<quantity>, <unit>]"
+                        " of type List[float, str]."
+                    )
+                elif not isinstance(val[0], (float, int)):
+                    raise ValueError(
+                        f"First element of list for experimental"
+                        f" condition '{key}' must be quantity of type float"
+                    )
+                elif not isinstance(val[1], str):
+                    raise ValueError(
+                        f"Second element of list for experimental"
+                        f" condition '{key}' must be of type str (unit)"
+                    )
 
-        self.batch_res_pDF = pd.DataFrame()
-        self.batch_res_aglDF = pd.DataFrame()
-        self.batch_res_PSD = pd.DataFrame()
-        self.batch_res_DSsummary = pd.DataFrame()
-        self.batch_res_summary = pd.DataFrame()
-        self._PSD_space = np.array([])
+            self.exp_conditions = pd.DataFrame.from_dict(
+                expcond,
+                orient="index",
+                columns=["quantity", "unit"],
+            )
+        # self.exp_conditions = self._settings_DF.iloc[
+        #     (self._settings_DF.index.get_loc("experimental_conditions") + 1) :,
+        #     :,
+        # ]
 
     def batch_analysis(self, export_img=True):
         """
@@ -386,7 +433,7 @@ class MultiImgAgl:
         self.batch_res_summary = summ.T
 
     def get_path(self):
-        return self._path
+        return self._workdir
 
     def get_pTable(self):
         return self.batch_res_pDF
@@ -540,16 +587,16 @@ class MultiImgAgl:
         if export == True:
             if norm == True:
                 PSDimg = (
-                    self._path
+                    self._workdir
                     + os.sep
-                    + os.path.basename(self._path)
+                    + os.path.basename(self._workdir)
                     + "_particle_normPSD.png"
                 )
             else:
                 PSDimg = (
-                    self._path
+                    self._workdir
                     + os.sep
-                    + os.path.basename(self._path)
+                    + os.path.basename(self._workdir)
                     + "_particle_PSD.png"
                 )
             plt.savefig(PSDimg, dpi=300)
@@ -602,25 +649,25 @@ class MultiImgAgl:
         if export == True:
             if norm == True:
                 PSDimg = (
-                    self._path
+                    self._workdir
                     + os.sep
-                    + os.path.basename(self._path)
+                    + os.path.basename(self._workdir)
                     + "_agl_normPSD.png"
                 )
             else:
                 PSDimg = (
-                    self._path
+                    self._workdir
                     + os.sep
-                    + os.path.basename(self._path)
+                    + os.path.basename(self._workdir)
                     + "_agl_PSD.png"
                 )
             plt.savefig(PSDimg, dpi=300)
 
     def export_all_results(self):
         xls_file = (
-            self._path
+            self._workdir
             + os.sep
-            + os.path.basename(self._path)
+            + os.path.basename(self._workdir)
             + "_agl_analysis.xlsx"
         )
         with pd.ExcelWriter(xls_file) as writer:
@@ -706,11 +753,25 @@ class MultiImgAgl:
         self._PSD_space = space
         return space
 
+    def _find_datasets_paths(self, ignore=True):
+        """Method to find datasets paths for analysis
+
+        Finds dataset paths. A dataset is a directory containing:
+        1) image settings yaml file with valid structure
+        2) image file specified in settings
+
+        Args:
+            ignore (bool, optional): If True datasets listed . Defaults to True.
+        """
+
+
     def _find_DataSets(self, ignore=True):
+        # TO DEPRECATE
+        # create new method based on yaml cfg
         DSpaths = []
 
         if ignore:
-            ignorepath = self._path + os.sep + "ignore.csv"
+            ignorepath = self._workdir + os.sep + "ignore.csv"
             ig = pd.read_csv(
                 ignorepath,
                 sep=";",
@@ -721,10 +782,10 @@ class MultiImgAgl:
         else:
             ig = pd.Series([";"], dtype="object")
 
-        for dirpath, dirs, files in os.walk(self._path):
+        for dirpath, dirs, files in os.walk(self._workdir):
             counter = 0
             for name in files:
-                if dirpath != self._path:
+                if dirpath != self._workdir:
                     cfg_file = os.path.basename(dirpath) + "_names.csv"
                     fitting_file = os.path.basename(dirpath) + "_fitting.csv"
                     isin_ig = ig.str.contains(name.split(".")[0]).any()

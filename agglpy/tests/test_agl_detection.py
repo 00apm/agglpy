@@ -3,7 +3,6 @@ import pathlib
 import pytest
 
 from ..aggl import ImgAgl
-from .fixtures import case_dir, model_IA
 
 
 def test_generateEmptyImgAgl(model_IA: ImgAgl):

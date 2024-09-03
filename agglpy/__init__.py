@@ -1,2 +1,2 @@
 from agglpy.aggl import ImgAgl
-from agglpy.img_manager import MultiImgAgl
+from agglpy.manager import Manager

@@ -2,14 +2,18 @@ import pathlib
 
 import pytest
 
-from ..aggl import ImgAgl
-from .fixtures import case_dir, model_IA
+from agglpy.aggl import ImgAgl
+from agglpy.tests.fixtures import (
+    input_multi_raw_wdir,
+    manager_obj,
+)
 
 
-def test_hasSettingsFile(case_dir):
-    assert (case_dir / "names.csv").exists()
+def test_manager_construct(manager_obj):
+    M = manager_obj
+    assert 0
 
 
-def test_csvFittingFileExists(case_dir):
-    csv_file_path = case_dir / "test_fitting.csv"
+def test_csv_fitting_file_exists(input_multi_raw_wdir):
+    csv_file_path = input_multi_raw_wdir / "test_fitting.csv"
     assert csv_file_path.exists()

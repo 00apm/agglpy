@@ -1,5 +1,8 @@
+from typing import Any
 import os
+
 import numpy as np
+
 
 
 def PSD_space(start=0, end=10, periods=20, log=False, step=False):
@@ -60,6 +63,13 @@ def RGB_shader(color, factor):
         return wcol
 
 
+def isdefault(input: Any) -> bool:
+    c1 = input is None
+    c2 = txt_isdefault(input)
+    c3 = txt_isnone(input)
+    c4 = txt_isempty(input)
+    return c1 or c2 or c3 or c4
+
 def txt_istrue(txt):
     accepted_strings = ["true", "1", "t", "y", "yes", "yeah", "yup"]
     return txt in accepted_strings
@@ -74,6 +84,8 @@ def txt_isnone(txt):
     accepted_strings = ["none", "null", "nan"]
     return txt in accepted_strings
 
+def txt_isempty(txt):
+    return txt == ""
 
 def txt_isnumber(string):
     try:

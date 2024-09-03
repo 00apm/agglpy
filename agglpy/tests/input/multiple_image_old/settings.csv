@@ -1,0 +1,11 @@
+collector_threshold;0;-
+PSD_space;0,10,step,auto
+PSD_space_log;False
+draw_alpha;0.2
+draw_labels;False
+experimental_conditions;-;-
+U_AGL;32;kV
+U_ESP;0;kV
+fFAN;30;Hz
+
+
