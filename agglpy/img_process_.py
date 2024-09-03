@@ -5,35 +5,19 @@ Created on Thu Feb 27 09:04:44 2020
 @author: Artur
 """
 
+import os
+
 import cv2
 # import skimage as ski
 # import skimage.io
 import numpy as np
 import pandas as pd
-import os
 
 # import skimage.filters as ski.filters
 
 # from skimage import io, filters
 # from skimage.feature import canny
 
-
-def draw_particles(image, particles, color = (100, 255, 100)):
-
-    alpha = 0.2
-    work_image = image.copy()
-    overlay = image.copy()
-
-    for i, row in particles.iterrows():
-        X = row.X
-        Y = row.Y
-        R = row.R
-        cv2.circle(overlay, (int(X), int(Y)), int(R), color, -1)
-        cv2.circle(work_image, (int(X), int(Y)), int(R), (255,255,255), 1)
-
-    cv2.addWeighted(overlay, alpha, work_image, 1-alpha, 0, work_image)
-
-    return work_image
 
 def HCTcv(img_path, Dmin, Dmax, dist2R=0.4, param1=200, param2=15,\
              display_img=True,
@@ -210,6 +194,23 @@ def HCTcv_multi(img_path, Dspace, dist2R=0.4,
         circlesDF.index.name = "ID"
         circlesDF.to_csv(img_dir + os.sep + os.path.splitext(img_filename)[0] + "_HCT.csv")
     return circlesDF
+
+def draw_particles(image, particles, color = (100, 255, 100)):
+
+    alpha = 0.2
+    work_image = image.copy()
+    overlay = image.copy()
+
+    for i, row in particles.iterrows():
+        X = row.X
+        Y = row.Y
+        R = row.R
+        cv2.circle(overlay, (int(X), int(Y)), int(R), color, -1)
+        cv2.circle(work_image, (int(X), int(Y)), int(R), (255,255,255), 1)
+
+    cv2.addWeighted(overlay, alpha, work_image, 1-alpha, 0, work_image)
+
+    return work_image
 
 
 
