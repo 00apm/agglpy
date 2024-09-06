@@ -6,23 +6,20 @@ Created on Fri Feb  7 10:25:40 2020
 """
 
 import os
+from pathlib import Path
+from typing import Optional
+
+import cv2
+import matplotlib as mpl
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from scipy import spatial as spsp
-from scipy import constants
-import cv2
-import matplotlib.pyplot as plt
-import matplotlib as mpl
 from fluids import particle_size_distribution as fPSD
+from scipy import constants
+from scipy import spatial as spsp
 from tqdm import tqdm
 
-from agglpy.auxiliary import (
-    txt_isdefault,
-    txt_isnumber,
-    txt_isnone,
-    RGB_shader,
-    RGB_convert_to256,
-)
+from agglpy.auxiliary import RGB_convert_to256, RGB_shader
 
 
 class ImgAgl:
@@ -45,77 +42,38 @@ class ImgAgl:
     def __init__(
         self,
         working_folder,
-        settings_filename="names.csv",
+        settings,
     ):
-        self._path = working_folder  # os.path.abspath(file)
+        self._path: Path = working_folder  # os.path.abspath(file)
         self.name = os.path.basename(self._path)
 
-        # Loading names.csv file
-        # =============================================================================
-        #
-        #         self._load_settings(settings_filename)
-        # =============================================================================
-
-        self._settings_DF = pd.read_csv(
-            self._path + os.sep + settings_filename,
-            sep=";",
-            encoding="ansi",
-            index_col=0,
-            header=None,
-        )
-        self._settings_DF = self._settings_DF.squeeze()
-
-        # Setting variables based on settings file info
-
-        if txt_isdefault(self._settings_DF["img_name"]):
-            self._img_filename = "SEM.tif"
-        else:
-            self._img_filename = self._settings_DF["img_name"]
-        if txt_isdefault(self._settings_DF["fitting_file_name"]):
-            self._fitRes_filename = "fitting_Results.csv"
-        else:
-            self._fitRes_filename = self._settings_DF["fitting_file_name"]
+        self._settings = settings
+        self._img_filename = self._settings["img_file"]
+        self._img_path = self._path / self._img_filename
+        # TO DO: change _fitRes_filename to corrected
+        self._fitRes_filename = self._settings["correction_file"]
+        self._corrected_path = self._path / self._fitRes_filename
 
         # Checking if files declared in settings exists
-        assert os.path.exists(
-            working_folder + os.sep + self._img_filename
-        ), "Image file not found!"
-        assert os.path.exists(
-            working_folder + os.sep + self._fitRes_filename
-        ), "HCT fitting file not found!"
+        assert (
+            self._img_path.exists()
+        ), f"Image file {self._img_path} not found"
+        assert (
+            self._corrected_path.exists()
+        ), f"Corrected fitting file {self._corrected_path} not found"
 
         # Loading SEM image file
-        self._img = cv2.imread(working_folder + os.sep + self._img_filename)
+        self._img = cv2.imread(str(self._img_path))
         self._img = cv2.cvtColor(self._img, cv2.COLOR_BGR2RGB)
 
         # Loading circle fitting file
         self._fitRes = pd.read_csv(
-            self._path + os.sep + self._fitRes_filename,
+            self._corrected_path,
             sep=",",
             encoding="ansi",
         )
 
-        # Setting magnification
-        if txt_isnumber(self._settings_DF["magnification"]):
-            self._settings_DF["magnification"] = pd.to_numeric(
-                self._settings_DF["magnification"]
-            )
-            self.mag = pd.to_numeric(self._settings_DF["magnification"])
-        elif txt_isdefault(self._settings_DF["magnification"]):
-            self._img_meta_dict = self._read_meta_tif(
-                self._path + os.sep + self._settings_DF["img_name"]
-            )
-            lmag = self._img_meta_dict["CZ_SEM"]["ap_mag"][1].split()
-            if "K" in lmag:
-                self.mag = pd.to_numeric(lmag[0]) * 1000
-            else:
-                self.mag = pd.to_numeric(lmag[0])
-        elif txt_isnone(self._settings_DF["magnification"]):
-            self.mag = None
-        else:
-            raise ValueError(
-                "Inappropriate value of 'magnification' in settings file"
-            )
+        self.mag = self.set_magnification()
 
         # Setting scale factor (pixel size in um)
         width_const = 300000  # image width (in um) for magnification 1X
@@ -584,13 +542,24 @@ class ImgAgl:
     def get_img_filename(self):
         return self._img_filename
 
+    def set_magnification(self, mag: Optional[float] = None) -> None:
+        if not mag:
+            self._img_meta_dict = self._read_meta_tif(self._img_path)
+            lmag = self._img_meta_dict["CZ_SEM"]["ap_mag"][1].split()
+            if "K" in lmag:
+                self.mag = pd.to_numeric(lmag[0]) * 1000
+            else:
+                self.mag = pd.to_numeric(lmag[0])
+        else:
+            self.mag = float(mag)
+
     def plot_img(
         self,
         img,
         show=True,
         export=True,
         export_dpi=300,
-        dirpath=None,
+        dirpath: Optional[Path] = None,
         bar=False,
         bar_data=None,
         bar_discrete=False,
@@ -655,26 +624,10 @@ class ImgAgl:
 
         if export == True:
 
-            fname = (
-                self._path
-                + os.sep
-                + os.path.basename(self._path)
-                + "_circles.png"
-            )
             if dirpath is not None:
-                fname = (
-                    dirpath
-                    + os.sep
-                    + os.path.basename(self._path)
-                    + "_circles.png"
-                )
+                fname = dirpath / self.name.join("_circles.png")
             else:
-                fname = (
-                    self._path
-                    + os.sep
-                    + os.path.basename(self._path)
-                    + "_circles.png"
-                )
+                fname = self._path / self.name.join("_circles.png")
             fig.savefig(
                 fname,
                 facecolor="w",
@@ -1021,31 +974,6 @@ class ImgAgl:
 
     # -------------- internal methods ---------------------------
 
-    def _load_settings(self, file="settings.csv"):
-        self._settings_DF = pd.read_csv(
-            self._path + os.sep + file,
-            sep=";",
-            encoding="ansi",
-            index_col=0,
-            header=None,
-        )
-        if txt_isdefault(self._settings_DF["magnification"][0]):
-            meta_dict = self._read_meta_tif(
-                self._path + os.sep + self._settings_DF["img_name"]
-            )
-            mag = meta_dict["CZ_SEM"]["ap_mag"][1].split()
-
-            if "K" in mag:
-                self._settings_DF["magnification"] = (
-                    pd.to_numeric(mag[0]) * 1000
-                )
-            else:
-                self._settings_DF["magnification"] = pd.to_numeric(mag[0])
-        else:
-            self._settings_DF["magnification"] = pd.to_numeric(
-                self._settings_DF["magnification"]
-            )
-
     def _read_meta_tif(self, file):
         """
         Method for reading .tif exif based metadata. Produces dictionary of
@@ -1074,35 +1002,35 @@ class ImgAgl:
                 tif_tags[name] = value
         return tif_tags
 
-    def _load_fitting_data(self, path=None):
-        """
+    # def _load_fitting_data(self, path=None):
+    #     """
 
-        UNFINISHED METHOD -
-        to do:
-            remake file loading system (settings, names.csv, image, fitting data)
+    #     UNFINISHED METHOD -
+    #     to do:
+    #         remake file loading system (settings, names.csv, image, fitting data)
 
-        Parameters
-        ----------
-        path : TYPE, optional
-            DESCRIPTION. The default is None.
+    #     Parameters
+    #     ----------
+    #     path : TYPE, optional
+    #         DESCRIPTION. The default is None.
 
-        Returns
-        -------
-        None.
+    #     Returns
+    #     -------
+    #     None.
 
-        """
-        if path == None:
-            path = self._path + os.sep
+    #     """
+    #     if path == None:
+    #         path = self._path + os.sep
 
-        if self._settings_DF["fitting_file_name"] == "default":
-            self._fitRes_filename = "fitting_Results.csv"
-        else:
-            self._fitRes_filename = self._settings_DF["fitting_file_name"]
-        self._fitRes = pd.read_csv(
-            self._path + os.sep + self._fitRes_filename,
-            sep=",",
-            encoding="ansi",
-        )
+    #     if self._settings_DF["fitting_file_name"] == "default":
+    #         self._fitRes_filename = "fitting_Results.csv"
+    #     else:
+    #         self._fitRes_filename = self._settings_DF["fitting_file_name"]
+    #     self._fitRes = pd.read_csv(
+    #         self._path + os.sep + self._fitRes_filename,
+    #         sep=",",
+    #         encoding="ansi",
+    #     )
 
     def _init_p_coor_data(self):
         """

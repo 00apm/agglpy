@@ -18,14 +18,17 @@ data:
     param2: [14, 24]
     additional_info: null
   images:
-    D7-017: *default_img
-    D7-018:
-    D7-021: 
+    D7-017: 
       <<: *default_img
-      Dmin: 201
+      correction_file: "D7-017_fitting.csv"
+    D7-019:
+      <<: *default_img
+      correction_file: "D7-019_fitting.csv"
+    D7-021: *default_img 
+    D7-023:
   exclude_images:
-    - D7-017
     - D7-021
+    - D7-023
 analysis:
   PSD_space: [0, 10, step, auto]
   PSD_space_log: false
