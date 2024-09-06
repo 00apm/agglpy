@@ -1,7 +1,9 @@
 import copy
+import os
 from pathlib import Path
 import re
 from typing import Any
+import filecmp
 
 import pytest
 
@@ -9,16 +11,24 @@ from agglpy.cfg import (
     DEFAULT_SETTINGS_SCHEMA,
     load_manager_settings,
     validate_settings,
+    find_images,
+    create_settings_dict,
+    create_settings,
 )
-from agglpy.tests.fixtures import input_multi_raw_wdir, valid_config
+from agglpy.tests.fixtures import (
+    input_multi_raw_wdir,
+    expected_valid_config,
+    expected_valid_config_processed,
+    tests_dir,
+)
 
 
 def test_settings_file_exists(input_multi_raw_wdir: Path):
     assert (input_multi_raw_wdir / "settings.yml").exists()
 
 
-def test_valid_config(valid_config: dict[str, Any]):
-    config = valid_config
+def test_config_validation(expected_valid_config: dict[str, Any]):
+    config = expected_valid_config
     # No exception should be raised
     validate_settings(config, DEFAULT_SETTINGS_SCHEMA)
 
@@ -40,8 +50,8 @@ def test_missing_keys():
         validate_settings(config, DEFAULT_SETTINGS_SCHEMA)
 
 
-def test_wrong_condition_structure(valid_config: dict[str, Any]):
-    config = valid_config
+def test_wrong_condition_structure(expected_valid_config: dict[str, Any]):
+    config = expected_valid_config
     cfg = list(copy.deepcopy(config) for i in range(3))
     cfg[0]["metadata"]["conditions"]["ambient_temp"] = [21]
     cfg[1]["metadata"]["conditions"]["ambient_temp"] = 1
@@ -84,19 +94,29 @@ def test_wrong_condition_structure(valid_config: dict[str, Any]):
         validate_settings(cfg_wrong_list[1], DEFAULT_SETTINGS_SCHEMA)
 
 
-def test_wrong_value_type(valid_config: dict[str, Any]):
-    config = valid_config
+def test_wrong_value_type(expected_valid_config: dict[str, Any]):
+    # Case 1- wrong multiple type (tuple)
+    config = expected_valid_config
     config["data"]["default"]["Dmin"] = "should_be_int"
     expected_error_message = (
-        "Expected one of (<class 'int'>, <class 'float'>, <class 'NoneType'>) "
-        "at .data.default.Dmin, but got str"
+        f"Expected one of (<class 'int'>, <class 'float'>, <class 'NoneType'>) "
+        f"at .data.default.Dmin, but got str"
     )
     with pytest.raises(ValueError, match=re.escape(expected_error_message)):
         validate_settings(config, DEFAULT_SETTINGS_SCHEMA)
 
+    # Case 2- wrong single type
+    config2 = expected_valid_config
+    config2["general"]["working_dir"] = 1
+    expected_error_message2 = (
+        f"Expected <class 'str'> at .general.working_dir, but got int"
+    )
+    with pytest.raises(ValueError, match=expected_error_message2):
+        validate_settings(config2, DEFAULT_SETTINGS_SCHEMA)
 
-def test_extra_keys(valid_config):
-    config = valid_config
+
+def test_extra_keys(expected_valid_config):
+    config = expected_valid_config
     # case1 error in root lvl
     config_extra_key_root = copy.deepcopy(config)
     config_extra_key_root["extra_key"] = "This key should trigger an error"
@@ -131,6 +151,95 @@ def test_extra_keys(valid_config):
         validate_settings(config_extra_key_lvl3, DEFAULT_SETTINGS_SCHEMA)
 
 
-def test_valid_config_file(input_multi_raw_wdir):
-    settings = load_manager_settings(input_multi_raw_wdir / "settings.yml")
-    print(settings)
+def test_valid_config_file_loading(tests_dir, expected_valid_config_processed):
+    settings = load_manager_settings(
+        tests_dir / "input/valid_config_only/settings.yml"
+    )
+    assert settings == expected_valid_config_processed
+
+
+def test_find_images(input_multi_raw_wdir):
+    images = find_images(input_multi_raw_wdir)
+    expected = [
+        input_multi_raw_wdir / Path("D7-017.tif"),
+        input_multi_raw_wdir / Path("D7-021.tif"),
+    ]
+    assert images == expected
+
+
+def test_create_settings_dict(input_multi_raw_wdir):
+    images = find_images(input_multi_raw_wdir)
+    settings = create_settings_dict(images=images)
+    expected = {
+        "general": {"working_dir": "."},
+        "metadata": {"conditions": {}},
+        "data": {
+            "default": {
+                "img_file": "auto",
+                "HCT_file": "auto",
+                "correction_file": "auto",
+                "magnification": "auto",
+                "Dmin": 3,
+                "Dmax": 250,
+                "Dspace": [3, 50, 140],
+                "dist2R": 0.5,
+                "param1": [220, 270],
+                "param2": [14, 24],
+                "additional_info": None,
+            },
+            "images": {
+                "D7-017": "*default_img",
+                "D7-021": "*default_img",
+            },
+            "exclude_images": [],
+        },
+        "analysis": {
+            "PSD_space": [0, 10, "step", "auto"],
+            "PSD_space_log": False,
+            "collector_threshold": 0.5,
+        },
+        "export": {
+            "draw_particles": {
+                "labels": True,
+                "alpha": 0.2,
+            },
+        },
+        
+    }
+    assert settings == expected
+
+
+def test_create_yaml_settings(monkeypatch, tests_dir, input_multi_raw_wdir):
+
+    # Use monkeypatch to simulate user input
+    monkeypatch.setattr("builtins.input", lambda _: "y")
+
+    # Ensure the output directory exists
+    output_dir = tests_dir.joinpath("output/settings")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    expected_path = tests_dir.joinpath("expected/settings/settings.yml")
+    assert expected_path.exists(), "Expected YAML settings file not found"
+
+    # Generate the settings.yml file
+    create_settings(
+        dir_path=input_multi_raw_wdir,
+        output_path=output_dir / "settings.yml",
+    )
+
+    # Compare the generated file with the expected file
+    assert filecmp.cmp(
+        expected_path,
+        output_dir / "settings.yml",
+        shallow=False,
+    ), "The generated settings.yml file does not match the expected file."
+
+
+# Clean up the output files after the test
+@pytest.fixture(autouse=False)
+def cleanup_output_file(tests_dir):
+    yield
+    out_default_settings_path = tests_dir.joinpath(
+        "output/settings/settings.yml"
+    )
+    if out_default_settings_path.exists():
+        os.remove(out_default_settings_path)

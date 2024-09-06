@@ -1,22 +1,8 @@
-from typing import Any
+from typing import Any, List
 import os
+from pathlib import Path
 
 import numpy as np
-
-
-
-def PSD_space(start=0, end=10, periods=20, log=False, step=False):
-    if log == True:
-        bins_arr = np.logspace(
-            int(np.floor(np.log10(start))),
-            int(np.ceil(np.log10(end))),
-            periods + 1,
-        )
-    elif step == True:
-        bins_arr = np.arange(start, end + periods, periods)
-    else:
-        bins_arr = np.linspace(start, end, periods + 1)
-    return bins_arr
 
 
 def RGB_convert_to256(color):
@@ -70,13 +56,14 @@ def isdefault(input: Any) -> bool:
     c4 = txt_isempty(input)
     return c1 or c2 or c3 or c4
 
+
 def txt_istrue(txt):
     accepted_strings = ["true", "1", "t", "y", "yes", "yeah", "yup"]
     return txt in accepted_strings
 
 
 def txt_isdefault(txt):
-    accepted_strings = ["default", "def", "auto", "a", "d"]
+    accepted_strings = ["default", "auto", "normal"]
     return txt in accepted_strings
 
 
@@ -84,8 +71,10 @@ def txt_isnone(txt):
     accepted_strings = ["none", "null", "nan"]
     return txt in accepted_strings
 
+
 def txt_isempty(txt):
     return txt == ""
+
 
 def txt_isnumber(string):
     try:

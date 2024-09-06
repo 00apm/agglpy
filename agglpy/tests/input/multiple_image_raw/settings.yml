@@ -6,8 +6,9 @@ metadata:
     ambient_pressure: [101.3, kPa]
 data: 
   default: &default_img
-    img_name: auto
-    fitting_name: auto
+    img_file: auto
+    HCT_file: auto
+    correction_file: auto
     magnification: auto
     Dmin: 3
     Dmax: 250
@@ -22,6 +23,9 @@ data:
     D7-021: 
       <<: *default_img
       Dmin: 201
+  exclude_images:
+    - D7-017
+    - D7-021
 analysis:
   PSD_space: [0, 10, step, auto]
   PSD_space_log: false
@@ -30,6 +34,3 @@ export:
   draw_particles:
     labels: true
     alpha: 0.2
-exclude_images:
-  - D7-017
-  - D7-021

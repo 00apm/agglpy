@@ -1,5 +1,9 @@
 import os
 from pathlib import Path
+from typing import (
+    List,
+    Union,
+)
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -9,8 +13,11 @@ from tqdm import tqdm
 import yaml
 
 from agglpy.aggl import ImgAgl
-from agglpy.auxiliary import PSD_space, txt_istrue
-from agglpy.cfg import load_manager_settings
+from agglpy.cfg import (
+    load_manager_settings,
+    SUPPORTED_IMG_FORMATS,
+)
+from agglpy.errors import MultipleFilesFoundError
 
 
 class Manager:
@@ -28,23 +35,27 @@ class Manager:
     def __init__(
         self,
         working_dir: Path,
-        settings_filename: str = "settings.csv",
+        settings_filepath: Path = Path("settings.yml"),
         initialize: bool = True,
     ):
 
-        self._workdir = Path(working_dir)
-        self._settings_path = self._workdir / settings_filename
+        self._workdir = Path(working_dir) # Working directory
+
+        if not settings_filepath.is_absolute(): # Settings path
+            self._settings_path = self._workdir / settings_filepath
+        else:
+            self._settings_path = settings_filepath
 
         # Loading settings file
         self._settings = load_manager_settings(path=self._settings_path)
-        
-        if initialize:
-            self._settings_DF = None
 
+        if initialize:
             self._init_DFs()
 
             # Defining directories to work with
-            self._DS_paths = self._find_DataSets()
+            # TO DO: first check directory structure
+            # and then iterate over datsets
+            self._DS_paths = self._find_datasets_paths()
 
             # Constructing DataSets (ImgAgl objects) for analysis
             # and creating IMG_INFO table
@@ -53,12 +64,14 @@ class Manager:
             for i, path in enumerate(self._DS_paths):
                 self._DS.append(
                     ImgAgl(
-                        path,
-                        settings_filename=(os.path.basename(path) + "_names.csv"),
+                        path.parent,
+                        settings=self._settings["data"]["images"][path.stem],
                     )
                 )
 
-                self.img_info.loc[i, "img_name"] = self._DS[i].get_img_filename()
+                self.img_info.loc[i, "img_name"] = self._DS[
+                    i
+                ].get_img_filename()
                 self.img_info.loc[i, "magnification"] = self._DS[i].mag
                 self.img_info.loc[i, "pixel size [um]"] = self._DS[i].scf
                 self.img_info.loc[i, "subdir"] = (
@@ -74,50 +87,19 @@ class Manager:
             self.batch_res_summary = pd.DataFrame()
             self._PSD_space = np.array([])
 
-    def _init_DFs(self):
+    # ----------- Manager Properties
+    @property
+    def working_dir(self) -> Path:
+        """Working directory of analysis manager
+
+        This is read-only attribute setted at the Manager object construction
+
+        Returns:
+            Path: Working directory path
         """
-        Assign parts of settings file to object's attributes
+        return self._workdir
 
-        """
-        # This is backward compatibility code
-        # to deprecate / refactor
-
-        if "collector_threshold" in self._settings["analysis"]:
-            self.collector_threshold = float(
-                self._settings["analysis"]["collector_threshold"]
-            )
-
-        # create experimental condition DF for later export to xls file
-        if "conditions" in self._settings["metadata"]:
-            # Assert that experimental conditions have proper structure
-            expcond = self._settings["metadata"]["conditions"]
-            for key, val in expcond.items():
-                if not isinstance(val, list):
-                    raise ValueError(
-                        f"Experimental condition key '{key}'"
-                        " should have a structure [<quantity>, <unit>]"
-                        " of type List[float, str]."
-                    )
-                elif not isinstance(val[0], (float, int)):
-                    raise ValueError(
-                        f"First element of list for experimental"
-                        f" condition '{key}' must be quantity of type float"
-                    )
-                elif not isinstance(val[1], str):
-                    raise ValueError(
-                        f"Second element of list for experimental"
-                        f" condition '{key}' must be of type str (unit)"
-                    )
-
-            self.exp_conditions = pd.DataFrame.from_dict(
-                expcond,
-                orient="index",
-                columns=["quantity", "unit"],
-            )
-        # self.exp_conditions = self._settings_DF.iloc[
-        #     (self._settings_DF.index.get_loc("experimental_conditions") + 1) :,
-        #     :,
-        # ]
+    
 
     def batch_analysis(self, export_img=True):
         """
@@ -144,9 +126,9 @@ class Manager:
             pbar1.update(0)
             if export_img == True:
                 pbar1.set_description(desc0 + "- drawing agglomerates...")
-                draw_labels = txt_istrue(
-                    self._settings_DF.loc["draw_labels"][1]
-                )
+                draw_labels = self._settings["export"]["draw_particles"][
+                    "labels"
+                ]
                 img = i.draw_all_agl_by(prop="ID", labels=draw_labels)
                 i.plot_img(img, show=True, export=True)
                 pbar1.update(0)
@@ -588,16 +570,14 @@ class Manager:
             if norm == True:
                 PSDimg = (
                     self._workdir
-                    + os.sep
-                    + os.path.basename(self._workdir)
-                    + "_particle_normPSD.png"
+                    / os.path.basename(self._workdir)
+                    / "_particle_normPSD.png"
                 )
             else:
                 PSDimg = (
                     self._workdir
-                    + os.sep
-                    + os.path.basename(self._workdir)
-                    + "_particle_PSD.png"
+                    / os.path.basename(self._workdir)
+                    / "_particle_PSD.png"
                 )
             plt.savefig(PSDimg, dpi=300)
 
@@ -650,25 +630,22 @@ class Manager:
             if norm == True:
                 PSDimg = (
                     self._workdir
-                    + os.sep
-                    + os.path.basename(self._workdir)
-                    + "_agl_normPSD.png"
+                    / os.path.basename(self._workdir)
+                    / "_agl_normPSD.png"
                 )
             else:
                 PSDimg = (
                     self._workdir
-                    + os.sep
-                    + os.path.basename(self._workdir)
-                    + "_agl_PSD.png"
+                    / os.path.basename(self._workdir)
+                    / "_agl_PSD.png"
                 )
             plt.savefig(PSDimg, dpi=300)
 
     def export_all_results(self):
         xls_file = (
             self._workdir
-            + os.sep
-            + os.path.basename(self._workdir)
-            + "_agl_analysis.xlsx"
+            / os.path.basename(self._workdir)
+            / "_agl_analysis.xlsx"
         )
         with pd.ExcelWriter(xls_file) as writer:
             self.exp_conditions.to_excel(writer, sheet_name="conditions")
@@ -684,13 +661,8 @@ class Manager:
             self.batch_res_aglDF.to_excel(writer, sheet_name="agl_data")
 
     def set_PSD_space(self):
-        s = self._settings_DF.loc["PSD_space"][1]
-        log = self._settings_DF.loc["PSD_space_log"][1]
-
-        if txt_istrue(log):
-            log_bool = True
-        else:
-            log_bool = False
+        s = self._settings["analysis"]["PSD_space"]
+        log = self._settings["analysis"]["PSD_space_log"]
 
         space = []
         if ("[" == s[0]) and ("]" == s[-1]):
@@ -725,7 +697,7 @@ class Manager:
                 sp_periods = int(param[2])
 
             space = PSD_space(
-                sp_start, sp_end, sp_periods, log=log_bool, step=step_bool
+                sp_start, sp_end, sp_periods, log=log, step=step_bool
             )
 
         else:
@@ -734,9 +706,7 @@ class Manager:
                     sp_start = self.get_min_pD()
                     sp_end = self.get_max_pD()
                     sp_periods = int(s)
-                    space = PSD_space(
-                        sp_start, sp_end, sp_periods, log=log_bool
-                    )
+                    space = PSD_space(sp_start, sp_end, sp_periods, log=log)
             except ValueError:
                 sp_start = self.get_min_pD()
                 sp_end = self.get_max_pD()
@@ -745,85 +715,91 @@ class Manager:
                     sp_start, sp_end, sp_periods, log=False, step=True
                 )
 
-        # =============================================================================
-        #             else:
-        #                 raise ValueError("Wrong structure of PSD_space variable in settings.csv. If input is number of bins- provide positive integer number")
-        # =============================================================================
-
         self._PSD_space = space
         return space
 
-    def _find_datasets_paths(self, ignore=True):
-        """Method to find datasets paths for analysis
 
-        Finds dataset paths. A dataset is a directory containing:
-        1) image settings yaml file with valid structure
-        2) image file specified in settings
+    # ----------- Manager internal methods
+
+    def _find_datasets_paths(self, ignore: bool = True):
+        """Detect Data Sets directory structure
+
+        Detect Data Sets in working directory. Data Set is an image that:
+        1)  is included in settings yaml at `.data.images`
+        2)  is placed in a separate directory at
+            working_directory/images/<image_name>
 
         Args:
-            ignore (bool, optional): If True datasets listed . Defaults to True.
+            ignore (bool, optional): If True images listed in settings
+                at `.data.exclude_images`. Defaults to True.
         """
-
-
-    def _find_DataSets(self, ignore=True):
-        # TO DEPRECATE
-        # create new method based on yaml cfg
         DSpaths = []
-
+        ignore_list = []
         if ignore:
-            ignorepath = self._workdir + os.sep + "ignore.csv"
-            ig = pd.read_csv(
-                ignorepath,
-                sep=";",
-                usecols=[0],
-                header=None,
-            ).astype(str)
-            ig = ig.squeeze("columns")
-        else:
-            ig = pd.Series([";"], dtype="object")
+            ignore_list = self._settings["data"]["exclude_images"]
 
-        for dirpath, dirs, files in os.walk(self._workdir):
-            counter = 0
-            for name in files:
-                if dirpath != self._workdir:
-                    cfg_file = os.path.basename(dirpath) + "_names.csv"
-                    fitting_file = os.path.basename(dirpath) + "_fitting.csv"
-                    isin_ig = ig.str.contains(name.split(".")[0]).any()
-                    if name == cfg_file:
-                        counter += 1
-                    if name == fitting_file:
-                        counter += 1
-                    if name.split(".")[0] == os.path.basename(dirpath):
-                        counter += 1
-                        if not isin_ig:
-                            counter += 1
-            if counter == 4:
-                DSpaths.append(dirpath)
+        DS_main_dir = self._workdir / "images"
 
-        print("List of detected Data Sets:")
-        for i in DSpaths:
-            print(i)
+        images = self._settings["data"]["images"]
+        for i in images:
+            if i not in ignore_list:
+                img_dir = DS_main_dir / Path(images[i]["img_file"]).stem
+                if img_dir.exists():
+                    img_file = img_dir / Path(images[i]["img_file"])
 
+                    # If img_file in settings is without extension
+                    # find images with supported extensions
+                    if img_file.suffix == "":
+                        img_list = []
+                        # Iterate over the supported extensions
+                        for ext in SUPPORTED_IMG_FORMATS:
+                            # Search for files with the specified name and extension
+                            img_list.extend(
+                                img_dir.glob(f"{img_file.name}.{ext}")
+                            )
+                        if len(img_list) > 1:
+                            raise MultipleFilesFoundError(
+                                img_file.name,
+                                img_list,
+                            )
+                        elif len(img_list) == 0:
+                            raise FileNotFoundError(
+                                f"File {img_file} not ",
+                                f"found in {img_dir}",
+                            )
+                        else:
+                            img_file = img_list[0]
+                            # update img_file in settings
+                            self._settings["data"]["images"][i][
+                                "img_file"
+                            ] = img_file.name
+
+                    DSpaths.append(img_file)
+
+                else:
+                    raise FileNotFoundError(f"Directory {img_dir} not found")
         return DSpaths
 
 
-# =============================================================================
-#         DSpaths = []
-#         for dirpath, dirs, files in os.walk(self._path):
-#             n = False
-#             f = False
-#             for name in files:
-#                 if name == "names.csv":
-#                     n = True
-#                 if "_fitting.csv" in name:
-#                     f = True
-#             if n & f:
-#                 DSpaths.append(dirpath)
-#             elif (n==True) and (f==False):
-#                 print("In path:", dirpath, "correct settings file (names.csv) was detected, but no HCT fitting csv file was detected.")
-#         print("List of detected Data Sets:")
-#         for i in DSpaths:
-#             print(i)
-#
-#         return DSpaths
-# =============================================================================
+def PSD_space(start=0, end=10, periods=20, log=False, step=False):
+    if log == True:
+        bins_arr = np.logspace(
+            int(np.floor(np.log10(start))),
+            int(np.ceil(np.log10(end))),
+            periods + 1,
+        )
+    elif step == True:
+        bins_arr = np.arange(start, end + periods, periods)
+    else:
+        bins_arr = np.linspace(start, end, periods + 1)
+    return bins_arr
+
+
+def find_suported_images(img_name: str, supported_ext: List[str], dir: Path):
+    matching_files = []
+
+    # Iterate over the supported extensions
+    for ext in SUPPORTED_IMG_FORMATS:
+        # Use glob to search for files with the specified name and extension
+        matching_files.extend(dir.glob(f"{img_name}{ext}"))
+    return matching_files

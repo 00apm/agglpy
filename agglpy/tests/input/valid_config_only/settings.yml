@@ -1,0 +1,43 @@
+general:
+  working_dir: .
+metadata:
+  conditions:
+    ambient_temp: [21, °C]
+    ambient_pressure: [101.3, kPa]
+data:
+  default: &default_img
+    img_file: auto
+    HCT_file: auto
+    correction_file: auto
+    magnification: auto
+    Dmin: null
+    Dmax: null
+    Dspace:
+    - 3
+    - 50
+    - 140
+    dist2R: 0.5
+    param1:
+    - 220
+    - 270
+    param2:
+    - 14
+    - 24
+    additional_info: null
+  images:
+    D7-017: *default_img
+  exclude_images:
+    - D7-017
+    - D7-021
+analysis:
+  PSD_space:
+  - 0
+  - 10
+  - step
+  - auto
+  PSD_space_log: false
+  collector_threshold: 0.5
+export:
+  draw_particles:
+    labels: true
+    alpha: 0.2
