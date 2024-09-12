@@ -9,7 +9,7 @@ from agglpy.tests.fixtures import (
 )
 
 
-def test_manager_constr_wo_init(input_multi_raw_wdir):
+def test_manager_constr_wo_init(input_multi_raw_wdir: Path):
     """Test checks Manager object without initialization"""
     M = Manager(working_dir=input_multi_raw_wdir, initialize=False)
     # Check attributes
@@ -20,7 +20,7 @@ def test_manager_constr_wo_init(input_multi_raw_wdir):
     ]
 
 
-def test_find_dataset_paths(input_multi_wdir):
+def test_find_dataset_paths(input_multi_wdir: Path):
     M = Manager(working_dir=input_multi_wdir, initialize=False)
     paths = M._find_datasets_paths(ignore=True)
 
@@ -30,6 +30,6 @@ def test_find_dataset_paths(input_multi_wdir):
     ]
     assert paths == expected
 
-def test_manager_constr(input_multi_wdir):
+def test_manager_constr(input_multi_wdir: Path):
     M = Manager(working_dir=input_multi_wdir, initialize=True)
     assert False 

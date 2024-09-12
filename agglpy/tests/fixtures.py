@@ -1,7 +1,6 @@
 import pathlib
 
 import pytest
-import yaml
 
 from agglpy.aggl import ImgAgl
 from agglpy.manager import Manager
@@ -53,9 +52,22 @@ def expected_valid_config():
             },
             "images": {
                 "D7-017": {
-                    "img_file": "D7-017",
+                    "img_file": "D7-017.tif",
                     "HCT_file": "D7-017_HCT.csv",
                     "correction_file": "D7-017_HCT.csv",
+                    "magnification": "auto",
+                    "Dmin": None,
+                    "Dmax": None,
+                    "Dspace": [3, 50, 140],
+                    "dist2R": 0.5,
+                    "param1": [220, 270],
+                    "param2": [14, 24],
+                    "additional_info": None,
+                },
+                "D7-019": {
+                    "img_file": "D7-019-modified.tif",
+                    "HCT_file": "D7-019_HCT.csv",
+                    "correction_file": "D7-019_HCT.csv",
                     "magnification": "auto",
                     "Dmin": None,
                     "Dmax": None,
@@ -92,6 +104,7 @@ def expected_valid_config_processed(expected_valid_config):
     """
     config = expected_valid_config
     config["data"]["images"]["D7-017"]["magnification"] = None
+    config["data"]["images"]["D7-019"]["magnification"] = None
     config["analysis"]["PSD_space"][-1] = None
     return config
 

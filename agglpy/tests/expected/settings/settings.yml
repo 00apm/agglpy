@@ -23,8 +23,15 @@ data:
     - 24
     additional_info: null
   images:
-    D7-017: *default_img
-    D7-021: *default_img
+    D7-017:
+      <<: *default_img
+      img_file: D7-017.tif
+    D7-019:
+      <<: *default_img
+      img_file: D7-019.tif
+    D7-021:
+      <<: *default_img
+      img_file: D7-021.tif
   exclude_images: []
 analysis:
   PSD_space:
