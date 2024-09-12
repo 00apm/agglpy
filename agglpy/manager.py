@@ -2,7 +2,6 @@ import os
 from pathlib import Path
 from typing import (
     List,
-    Union,
 )
 
 import matplotlib as mpl
@@ -10,14 +9,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
-import yaml
 
 from agglpy.aggl import ImgAgl
 from agglpy.cfg import (
     load_manager_settings,
     SUPPORTED_IMG_FORMATS,
 )
-from agglpy.errors import MultipleFilesFoundError
+from agglpy.dir_structure import validate_mgr_dirstruct, find_datasets_paths
+from agglpy.errors import MultipleFilesFoundError, DirectoryStructureError
 
 
 class Manager:
@@ -39,23 +38,29 @@ class Manager:
         initialize: bool = True,
     ):
 
-        self._workdir = Path(working_dir) # Working directory
+        self._workdir: Path = Path(working_dir)  # Working directory
 
-        if not settings_filepath.is_absolute(): # Settings path
-            self._settings_path = self._workdir / settings_filepath
+        if not settings_filepath.is_absolute():  # Settings path
+            self._settings_path: Path = self._workdir / settings_filepath
         else:
-            self._settings_path = settings_filepath
-
+            self._settings_path: Path = settings_filepath
+        validate_mgr_dirstruct(self._workdir)
         # Loading settings file
         self._settings = load_manager_settings(path=self._settings_path)
+        self.collector_threshold: float = self._settings["analysis"][
+            "collector_threshold"
+        ]
 
         if initialize:
-            self._init_DFs()
 
             # Defining directories to work with
             # TO DO: first check directory structure
             # and then iterate over datsets
-            self._DS_paths = self._find_datasets_paths()
+            self._DS_paths = find_datasets_paths(
+                path=self._workdir,
+                settings=self._settings,
+                ignore=True,
+            )
 
             # Constructing DataSets (ImgAgl objects) for analysis
             # and creating IMG_INFO table
@@ -98,8 +103,6 @@ class Manager:
             Path: Working directory path
         """
         return self._workdir
-
-    
 
     def batch_analysis(self, export_img=True):
         """
@@ -718,7 +721,6 @@ class Manager:
         self._PSD_space = space
         return space
 
-
     # ----------- Manager internal methods
 
     def _find_datasets_paths(self, ignore: bool = True):
@@ -759,8 +761,8 @@ class Manager:
                             )
                         if len(img_list) > 1:
                             raise MultipleFilesFoundError(
-                                img_file.name,
-                                img_list,
+                                filename=img_file.name,
+                                matches=img_list,
                             )
                         elif len(img_list) == 0:
                             raise FileNotFoundError(

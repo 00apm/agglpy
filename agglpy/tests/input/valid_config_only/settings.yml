@@ -26,6 +26,9 @@ data:
     additional_info: null
   images:
     D7-017: *default_img
+    D7-019:
+      <<: *default_img
+      img_file: D7-019-modified.tif
   exclude_images:
     - D7-017
     - D7-021
