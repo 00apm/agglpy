@@ -19,5 +19,5 @@ venv/
 .vscode/
 .pylint.d/
 
-# ignore testers folder
-testers
+# ignore tests output folder 
+agglpy/tests/output/

@@ -5,11 +5,12 @@ Created on Sun Mar 22 00:07:19 2020
 @author: Artur
 """
 
-import subprocess
 import os
+import subprocess
+import warnings
+
 import pandas as pd
 from tqdm import tqdm
-import warnings
 
 cfg_file = "names.csv"
 
@@ -56,7 +57,7 @@ def create_settings_file(imgpath):
 def prepare_imgset_struc(path):
     """
     Function converts folder containing several SEM image files to
-    Image Set structure for Particle detection and agglomerates analysis.
+    Image Data Set structure for Particle detection and agglomerates analysis.
     It creates folder for each SEM image and creates necessary setting file
     for each image. 
     When SEM images are already in seperate folders named exactly like 
