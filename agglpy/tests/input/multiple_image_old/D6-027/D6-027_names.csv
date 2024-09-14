@@ -1,0 +1,10 @@
+img_name;D6-027-raw.tif
+fitting_file_name;D6-027_fitting.csv
+magnification;auto
+Dmin;None
+Dmax;None
+Dspace; [3,50,140]
+dist2R;0.4
+param1;[220,270]
+param2;[14, 24]
+additional_info;-
