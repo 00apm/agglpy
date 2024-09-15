@@ -2,7 +2,7 @@ import pathlib
 
 import pytest
 
-from agglpy.aggl import ImgAgl
+from agglpy.img_ds import ImgDataSet
 from agglpy.manager import Manager
 
 
@@ -111,7 +111,7 @@ def expected_valid_config_processed(expected_valid_config):
 
 @pytest.fixture
 def model_IA(case_dir):
-    return ImgAgl(str(case_dir))
+    return ImgDataSet(str(case_dir))
 
 
 @pytest.fixture
