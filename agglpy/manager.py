@@ -10,13 +10,17 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from agglpy.aggl import ImgAgl
+from agglpy.img_ds import ImgDataSet
 from agglpy.cfg import (
     load_manager_settings,
     SUPPORTED_IMG_FORMATS,
 )
 from agglpy.dir_structure import validate_mgr_dirstruct, find_datasets_paths
 from agglpy.errors import MultipleFilesFoundError, DirectoryStructureError
+from agglpy.img_process import (
+    HCTcv,
+    HCTcv_multi,
+)
 
 
 class Manager:
@@ -68,7 +72,7 @@ class Manager:
             self.img_info = pd.DataFrame()
             for i, path in enumerate(self._DS_paths):
                 self._DS.append(
-                    ImgAgl(
+                    ImgDataSet(
                         path.parent,
                         settings=self._settings["data"]["images"][path.stem],
                     )
@@ -103,6 +107,10 @@ class Manager:
             Path: Working directory path
         """
         return self._workdir
+
+    def batch_detect_circles(self, export_img):
+
+        pass
 
     def batch_analysis(self, export_img=True):
         """
