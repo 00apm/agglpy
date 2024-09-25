@@ -66,7 +66,7 @@ class ImgDataSet:
         self._img = cv2.imread(str(self._img_path))
         self._img = cv2.cvtColor(self._img, cv2.COLOR_BGR2RGB)
 
-        self.mag = self.set_magnification()
+        self.set_magnification(self._settings["magnification"])
 
         # Setting scale factor (pixel size in um)
         width_const = 300000  # image width (in um) for magnification 1X
@@ -90,8 +90,6 @@ class ImgDataSet:
         self._all_AGL_DF = pd.DataFrame()
         self._corrected_results = pd.DataFrame()
         self._KDTree = None
-        
-        
 
         # Initializing results attributes
         self.res_particleDF = pd.DataFrame()
@@ -102,8 +100,6 @@ class ImgDataSet:
         # Running constructor methods
         self.load_corrected_particles()
 
-
-
     # ------------------ API methods --------------------------
 
     def clasify_all_AGL(self, threshold=0):
@@ -113,13 +109,11 @@ class ImgDataSet:
     # TODO: Name of this function have changed and is still to be changed
     # Integrate this function with the DF operations function
     def load_corrected_particles(self):
-        
+
         # self._init_p_coor_data()
 
         for i, row in self._initDF.iterrows():
-            o = Particle(
-                row["ID imageJ"].astype("int64"), row.X, row.Y, row.D
-            )
+            o = Particle(row["ID imageJ"].astype("int64"), row.X, row.Y, row.D)
 
             self._all_P_DF.loc[i, "P ID"] = o.ID
             self._all_P_DF.loc[i, "name"] = o.name
@@ -133,21 +127,18 @@ class ImgDataSet:
 
         j = 0
         while not DF.empty:
+            agl_obj = Agglomerate([])
             particle = DF.iloc[0, DF.columns.get_loc("OBJ")]
-            self._all_AGL_DF.loc[j, "OBJ"] = Agglomerate([])
-            self._all_AGL_DF.loc[j, "ID"] = self._all_AGL_DF.loc[j, "OBJ"].ID
-            self._all_AGL_DF.loc[j, "name"] = self._all_AGL_DF.loc[
-                j, "OBJ"
-            ].name
+            self._all_AGL_DF.loc[j, "OBJ"] = agl_obj
+            self._all_AGL_DF.loc[j, "ID"] = agl_obj.ID
+            self._all_AGL_DF.loc[j, "name"] = agl_obj.name
             iFamily = self._find_intersecting_family(particle)
-            self._all_AGL_DF.loc[j, "OBJ"].append_particles(
-                self.get_particles(iFamily)
-            )
+            agl_obj.append_particles(self.get_particles(iFamily))
             for i in iFamily:
                 DF.drop(DF.loc[DF["P ID"] == i].index, inplace=True)
             iFamily.clear()
-            self._all_AGL_DF.loc[j, "OBJ"]._calc_member_param()
-            self._all_AGL_DF.loc[j, "OBJ"]._calc_agl_param()
+            agl_obj.calc_member_param()
+            agl_obj.calc_agl_param(include_dsom=True)
 
             # self._all_AGL_DF.loc[j,"members"] = str(self._all_AGL_DF.loc[j,"OBJ"].members)
             # self._all_AGL_DF.loc[j,"member count"] = self._all_AGL_DF.loc[j,"OBJ"].members_count
@@ -247,31 +238,53 @@ class ImgDataSet:
         # print(self.res_summary)
         if len(self.res_aglDF.index) == 0:
             self.get_results_aglTable()
-        self.res_summary.loc[0, "particle_count"] = len(self._all_P_DF.index)
-        self.res_summary.loc[0, "agl_count"] = len(self._all_AGL_DF.index)
+        self.res_summary.loc[0, "N_primary_particle"] = len(
+            self._all_P_DF.index
+        )
+        self.res_summary.loc[0, "N_aerosol_particle"] = len(
+            self._all_AGL_DF.index
+        )
+        pp1_mask = self.res_aglDF.loc[:, "members_count"] == 1
+        self.res_summary.loc[0, "N_pp1"] = pp1_mask.sum()
+        self.res_summary.loc[0, "N_ppA"] = (
+            self.res_summary.loc[0, "N_primary_particle"]
+            - self.res_summary.loc[0, "N_pp1"]
+        )
+        self.res_summary.loc[0, "N_agl"] = (
+            self.res_summary.loc[0, "N_aerosol_particle"]
+            - self.res_summary.loc[0, "N_pp1"]
+        )
 
-        self.res_summary.loc[0, "collector_agl_count"] = len(
+        self.res_summary.loc[0, "N_collector_agl"] = len(
             self.res_aglDF[self.res_aglDF["type"] == "collector"].index
         )
-        self.res_summary.loc[0, "similar_agl_count"] = len(
+        self.res_summary.loc[0, "N_similar_agl"] = len(
             self.res_aglDF[self.res_aglDF["type"] == "similar"].index
         )
-        self.res_summary.loc[0, "separate_count"] = len(
+        self.res_summary.loc[0, "N_pp1_separate"] = len(
             self.res_aglDF[self.res_aglDF["type"] == "separate"].index
         )
+
         self.res_summary.loc[0, "ER"] = 1 - (
-            self.res_summary.loc[0, "separate_count"]
-            / self.res_summary.loc[0, "particle_count"]
+            self.res_summary.loc[0, "N_pp1_separate"]
+            / self.res_summary.loc[0, "N_primary_particle"]
         )
         self.res_summary.loc[0, "Ra"] = (
-            self.res_summary.loc[0, "agl_count"]
-            / self.res_summary.loc[0, "particle_count"]
+            self.res_summary.loc[0, "N_agl"]
+            / self.res_summary.loc[0, "N_primary_particle"]
         )
         self.res_summary.loc[0, "sep2agl"] = self.res_summary.loc[
-            0, "separate_count"
+            0, "N_pp1_separate"
         ] / (
-            self.res_summary.loc[0, "collector_agl_count"]
-            + self.res_summary.loc[0, "similar_agl_count"]
+            self.res_summary.loc[0, "N_collector_agl"]
+            + self.res_summary.loc[0, "N_similar_agl"]
+        )
+        self.res_summary.loc[0, "n_ppA"] = (
+            self.res_summary.loc[0, "N_ppA"] / self.res_summary.loc[0, "N_agl"]
+        )
+        self.res_summary.loc[0, "n_ppP"] = (
+            self.res_summary.loc[0, "N_primary_particle"]
+            / self.res_summary.loc[0, "N_aerosol_particle"]
         )
         self.res_summary.loc[0, "particle_Dmean"] = self.res_particleDF[
             "D"
@@ -288,6 +301,11 @@ class ImgDataSet:
         self.res_summary.loc[0, "particle_D90"] = self.res_particleDF[
             "D"
         ].quantile(q=0.9)
+        # Sauter Mean Diameter
+        self.res_summary.loc[0, "particle_SMD"] = (
+            (self.res_particleDF.loc[:, "D"] ** 3).sum()
+            / (self.res_particleDF.loc[:, "D"] ** 2).sum()
+        )
         self.res_summary.loc[0, "agl_member_count_mean"] = self.res_aglDF[
             "members_count"
         ].mean()
@@ -355,7 +373,9 @@ class ImgDataSet:
                     norm = bnorm
                     ticks = bounds
 
-                cbax = fig.add_axes([0.87, 0.25, 0.015, 0.6])
+                cbax = fig.add_axes(
+                    [0.9, 0.25, 0.015, 0.6]
+                )  # [0.87, 0.25, 0.015, 0.6])
                 cb1 = fig.colorbar(
                     mpl.cm.ScalarMappable(norm=norm, cmap=cmap),
                     cax=cbax,
@@ -386,20 +406,20 @@ class ImgDataSet:
         )
 
         if export == True:
-
+            fname = self.name + "_circles.png"
             if dirpath is not None:
-                fname = dirpath / self.name.join("_circles.png")
+                fpth = dirpath / fname
             else:
-                fname = self._path / self.name.join("_circles.png")
+                fpth = self._path / fname
             fig.savefig(
-                fname,
+                fpth,
                 facecolor="w",
                 edgecolor="w",
                 dpi=export_dpi,
                 bbox_inches="tight",
                 pad_inches=0,
             )
-            print("IMAGE EXPORTED TO: ", fname)
+            print("IMAGE EXPORTED TO: ", fpth)
         return fig
 
     # =============================================================================
@@ -863,23 +883,26 @@ class ImgDataSet:
             # print("Program hasn\'t found KDTree structure. Initializing KDTree ...")
             self._construct_KDTree()
         KD = self._KDTree
-        P_workDF = self._all_P_DF.OBJ
+        P_workDF = self._all_P_DF.loc[:, "OBJ"]
         D_MAX = self.get_largest_particle().D
 
         for P in P_workDF:
             nbrs = KD.query_ball_point([P.X, P.Y], D_MAX)
-            # P.intersecting = []
+
             intersecting = []
             for i in nbrs:
-                dist = 0
-                contact = 0
-                if P.ID != P_workDF[i].ID:
-                    dist = (
-                        (P_workDF[i].X - P.X) ** 2 + (P_workDF[i].Y - P.Y) ** 2
-                    ) ** 0.5
-                    contact = P.D / 2 + P_workDF[i].D / 2
-                    if dist <= contact:
-                        intersecting.append(P_workDF[i].ID)
+                P_i: Particle = P_workDF[i]
+                if P.ID == P_i.ID:
+                    continue
+                # dist = 0
+                # contact = 0
+                R_p = P.D / 2
+                R_pi = P_i.D / 2
+                dist = ((P_i.X - P.X) ** 2 + (P_i.Y - P.Y) ** 2) ** 0.5
+                if dist <= (R_p + R_pi):
+                    intersecting.append(P_i.ID)
+                    if dist <= (R_p - R_pi):
+                        P_i.set_idj(True)
             P.set_interIDs(intersecting)
 
     def _find_intersecting(self, particle, d):
@@ -926,21 +949,3 @@ class ImgDataSet:
 #
 #         # s = DF[DF["P ID"] == i].OBJ.values[0]
 # =============================================================================
-
-
-class nlcmap:
-    def __init__(self, cmap, levels):
-        self.name = cmap.name
-        self.cmap = cmap
-        self.N = cmap.N
-        self.monochrome = self.cmap.monochrome
-        self.levels = np.asarray(levels, dtype="float64")
-        self._x = self.levels
-        self.levmax = self.levels.max()
-        self.transformed_levels = np.linspace(
-            0.0, self.levmax, len(self.levels)
-        )
-
-    def __call__(self, xi, alpha=1.0, **kw):
-        yi = np.interp(xi, self._x, self.transformed_levels)
-        return self.cmap(yi / self.levmax, alpha)

@@ -131,8 +131,8 @@ class Manager:
             pbar1.update(0)
             pbar1.set_description(desc0 + "- finding agglomerates...")
             i.find_agglomerates()
-            pbar1.update()
-            pbar1.set_description(desc0 + "- clasifing agglomerates...")
+            pbar1.update(0)
+            pbar1.set_description(desc0 + "- classifying agglomerates...")
             i.clasify_all_AGL(self.collector_threshold)
             pbar1.update(0)
             if export_img == True:
@@ -149,7 +149,7 @@ class Manager:
         self.batch_res_pDF = pd.DataFrame()
         for i, ds in enumerate(self._DS):
             temp = ds.get_results_pTable()
-            print(temp)
+            # print(temp)
             temp.drop(["X", "Y"], axis=1, inplace=True)
             temp["DS ID"] = ds.name
             cols = temp.columns.tolist()
@@ -242,17 +242,23 @@ class Manager:
             self.plot_PSD(norm=False, cummul=True, export=True)
         # return self.batch_res_PSD
 
-    def generate_aglPSD(self, PSD_space=None, plot=True):
+    def generate_aglPSD(
+        self,
+        PSD_space=None,
+        plot=True,
+        include_dsom=False,
+    ):
         if self.batch_res_aglDF.empty:
             self.generate_aglTable()
         if PSD_space is None:
             if self._PSD_space.size == 0:
                 self.set_PSD_space()
             PSD_space = self._PSD_space
-
-        cut = pd.cut(
-            self.batch_res_aglDF.D, bins=PSD_space, include_lowest=True
-        )
+        if include_dsom:
+            diameters = self.batch_res_aglDF.loc[:, "D_dsom"]
+        else:
+            diameters = self.batch_res_aglDF.loc[:, "D"]
+        cut = pd.cut(diameters, bins=PSD_space, include_lowest=True)
         self.batch_res_aglPSD = pd.value_counts(cut, sort=False)
 
         lefts = []
@@ -311,15 +317,19 @@ class Manager:
         if plot == True:
             self.plot_aglPSD(norm=False, cummul=True, export=True)
 
-    def generate_aglPCD(self, PCD_space, plot=False):
+    def generate_aglPCD(
+        self,
+        PCD_space,
+        plot=False,
+        include_dsom=False,
+    ):
         if self.batch_res_aglDF.empty:
             self.generate_aglTable()
-
-        cut = pd.cut(
-            self.batch_res_aglDF.members_count,
-            bins=PCD_space,
-            include_lowest=True,
-        )
+        if include_dsom:
+            counts = self.batch_res_aglDF.loc[:, "members_count_dsom"]
+        else:
+            counts = self.batch_res_aglDF.loc[:, "members_count"]
+        cut = pd.cut(counts, bins=PCD_space, include_lowest=True)
         self.batch_res_aglPCD = pd.value_counts(cut, sort=False)
 
         lefts = []
@@ -390,19 +400,28 @@ class Manager:
         summ = summ.reindex_like(DSsumm)
         summ.drop("DS ID", axis=1, inplace=True)
         summ = summ.head(1)
-        summ["particle_count"] = DSsumm["particle_count"].sum()
-        summ["agl_count"] = DSsumm["agl_count"].sum()
-        summ["collector_agl_count"] = DSsumm["collector_agl_count"].sum()
-        summ["similar_agl_count"] = DSsumm["similar_agl_count"].sum()
-        summ["separate_count"] = DSsumm["separate_count"].sum()
-        summ["ER"] = 1 - (summ["separate_count"] / summ["particle_count"])
-        summ["Ra"] = summ["agl_count"] / summ["particle_count"]
-        summ["sep2agl"] = summ["separate_count"] / summ["agl_count"]
+        summ["N_primary_particle"] = DSsumm["N_primary_particle"].sum()
+        summ["N_aerosol_particle"] = DSsumm["N_aerosol_particle"].sum()
+        summ["N_pp1"] = DSsumm["N_pp1"].sum()
+        summ["N_ppA"] = DSsumm["N_ppA"].sum()
+        summ["N_agl"] = DSsumm["N_agl"].sum()
+        summ["N_collector_agl"] = DSsumm["N_collector_agl"].sum()
+        summ["N_similar_agl"] = DSsumm["N_similar_agl"].sum()
+        summ["N_pp1_separate"] = DSsumm["N_pp1_separate"].sum()
+        summ["ER"] = 1 - (summ["N_pp1_separate"] / summ["N_primary_particle"])
+        summ["Ra"] = summ["N_agl"] / summ["N_primary_particle"]
+        summ["sep2agl"] = summ["N_pp1_separate"] / summ["N_agl"]
+        summ["n_ppA"] = summ["N_ppA"] / summ["N_agl"] 
+        summ["n_ppP"] = summ["N_primary_particle"] / summ["N_aerosol_particle"] 
         summ["particle_Dmean"] = self.batch_res_pDF["D"].mean()
         summ["particle_Dstd"] = self.batch_res_pDF["D"].std()
         summ["particle_D10"] = self.batch_res_pDF["D"].quantile(q=0.1)
         summ["particle_D50"] = self.batch_res_pDF["D"].quantile(q=0.5)
         summ["particle_D90"] = self.batch_res_pDF["D"].quantile(q=0.9)
+        summ["particle_SMD"] = (
+            (self.batch_res_pDF.loc[:, "D"]**3).sum() 
+            / (self.batch_res_pDF.loc[:,"D"]**2).sum()
+        )
         summ["agl_Dmean"] = self.batch_res_aglDF["D"].mean()
         summ["agl_Dstd"] = self.batch_res_aglDF["D"].std()
         summ["agl_D10"] = self.batch_res_aglDF["D"].quantile(q=0.1)
@@ -653,13 +672,12 @@ class Manager:
             plt.savefig(PSDimg, dpi=300)
 
     def export_all_results(self):
-        xls_file = (
-            self._workdir
-            / os.path.basename(self._workdir)
-            / "_agl_analysis.xlsx"
-        )
+        xls_file = self._workdir / (self._workdir.name + "_agl_analysis.xlsx")
         with pd.ExcelWriter(xls_file) as writer:
-            self.exp_conditions.to_excel(writer, sheet_name="conditions")
+            exp_conditions = pd.DataFrame.from_dict(
+                self._settings["metadata"]["conditions"]
+                )
+            exp_conditions.to_excel(writer, sheet_name="conditions")
             self.img_info.to_excel(writer, sheet_name="img_info")
             self.batch_res_summary.to_excel(writer, sheet_name="summary")
             self.batch_res_DSsummary.to_excel(

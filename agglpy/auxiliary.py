@@ -91,3 +91,21 @@ def data_switcher(list_of_paths, ON=True):
             os.replace(i + os.sep + "OFF_names.csv", i + os.sep + "names.csv")
         else:
             os.replace(i + os.sep + "names.csv", i + os.sep + "OFF_names.csv")
+
+
+class nlcmap:
+    def __init__(self, cmap, levels):
+        self.name = cmap.name
+        self.cmap = cmap
+        self.N = cmap.N
+        self.monochrome = self.cmap.monochrome
+        self.levels = np.asarray(levels, dtype="float64")
+        self._x = self.levels
+        self.levmax = self.levels.max()
+        self.transformed_levels = np.linspace(
+            0.0, self.levmax, len(self.levels)
+        )
+
+    def __call__(self, xi, alpha=1.0, **kw):
+        yi = np.interp(xi, self._x, self.transformed_levels)
+        return self.cmap(yi / self.levmax, alpha)

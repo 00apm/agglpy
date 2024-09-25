@@ -1,4 +1,8 @@
+from typing import List, Tuple
+
 import pandas as pd
+import numpy as np
+from numpy.typing import ArrayLike
 from scipy import constants
 
 
@@ -14,12 +18,25 @@ class Agglomerate:
         self.ID = Agglomerate.AGL_ID
         self.members = member_list
         self.member_IDs = []
-        self.members_count = 0
+
         self.name = "AGL" + str(Agglomerate.AGL_ID)
         self._members_DF = pd.DataFrame()
         self.type = "not_defined"
-        self.Xc = None
-        self.Yc = None
+
+        # Calculated attributes
+        self.volume: float = 0
+        self.volume_dsom: float = 0
+        self.D: float = 0
+        self.D_dsom: float = 0
+        self.members_count: float = 0
+        self.idj_members_count: float = 0
+        self.members_count_dsom: float = 0
+        self.members_Dmean: float = 0
+        self.members_Dstdev: float = 0
+        self.X_com: float = 0
+        self.Y_com: float = 0
+        self.Rg: float = 0
+        self.Dg: float = 0
 
         Agglomerate.AGL_ID = Agglomerate.AGL_ID + 1
 
@@ -70,9 +87,17 @@ class Agglomerate:
             "ID": self.ID,
             "name": self.name,
             "volume": self.volume,
+            "volume_dsom": self.volume_dsom,
             "D": self.D,
+            "D_dsom": self.D_dsom,
+            "X_com": self.X_com,
+            "Y_com": self.Y_com,
+            "Rg": self.Rg,
+            "Dg": self.Dg,
             "type": self.type,
             "members_count": self.members_count,
+            "idj_members_count": self.idj_members_count,
+            "members_count_dsom": self.members_count_dsom,
             "members_Dmean": self.members_Dmean,
             "members_Dstdev": self.members_Dstdev,
         }
@@ -127,29 +152,87 @@ class Agglomerate:
             self.type = type_sw_AGL.get(1)
             self._members_DF.iloc[0].membersOBJ.type = type_sw_P.get(2)
 
-    def _calc_agl_param(self):
+    def center_of_mass(
+        self,
+    ) -> Tuple[int]:
+        """Calculate coordinates for center of mass of the agglomerate
+
+        Takes particle members size and coordinates data and calculates
+        the center of mass of the agglomerate.
+
+        Returns:
+            (int, int): tuple with agglomerate CoM coordinates (x_com, y_com)
+                in pixels
+        """
+        DF = self._members_DF.loc[:, ["area", "X", "Y"]]
+        X_num = (DF.loc[:, "area"] * DF.loc[:, "X"]).sum()
+        area_sum = DF.loc[:, "area"].sum()
+        Y_num = (DF.loc[:, "area"] * DF.loc[:, "Y"]).sum()
+        return (X_num / area_sum, Y_num / area_sum)
+
+    def radius_of_gyration(self) -> float:
+        """Calculate radius of gyration
+
+        Calculate radius of gyration based on agglomerate center of mass
+        and member particle coordinates
+
+        Returns:
+            (float): radius of gyration for the agglomerate
+
+        """
+        DF = self._members_DF.loc[:, ["X", "Y", "area"]]
+
+        # Calculate distance between each member particle center
+        # and center of mass
+        r_x_diff = (DF.loc[:, "X"] - self.X_com) ** 2
+        r_y_diff = (DF.loc[:, "Y"] - self.Y_com) ** 2
+        distance_squared = r_x_diff + r_y_diff
+
+        # Calculate weighted sum of distances: sum(m_i * r_i^2)
+        # mass is calculated from area sinve this is 2D approach
+        wght_distance_sum = (DF.loc[:, "area"] * distance_squared).sum()
+
+        total_area = DF.loc[:, "area"].sum()
+
+        Rg = np.sqrt(wght_distance_sum / total_area)
+        return Rg
+
+    def count_idj_members(self):
+        """Counts internally disjoint primary particles in this agglomerate"""
+        return self._members_DF.loc[:, "idj"].sum()
+
+    def calc_agl_param(self, include_dsom: bool = False):
         # print(self.members)
         for i in self.members:
             self.member_IDs.append(i.ID)
         self._members_DF["membersOBJ"] = self.get_members()
         self.members_count = len(self.members)
         Ds = self._members_DF.loc[:, "D"]  # pd.Series(self.get_members_Ds())
-        # Vols = 4/3*constants.pi*(Ds/2)**3
         self.members_Dmean = Ds.mean()
         self.members_Dstdev = Ds.std()
-        self.volume = self._members_DF["Vol"].sum()  # Vols.sum()
-        # self.D = (self.volume)**(1/3) / (constants.pi/8)
+        self.volume = self._members_DF["volume"].sum()  
         self.D = (6 * self.volume / constants.pi) ** (1 / 3)
+        self.X_com, self.Y_com = self.center_of_mass()
+        self.Rg = self.radius_of_gyration()
+        self.Dg = 2 * self.Rg
+        if include_dsom:
+            # Include 'dark side of the moon (dsom)' primary particles
+            idj_map = self._members_DF.loc[:, "idj"] == True
+            self.volume_dsom = (
+                self.volume + self._members_DF.loc[idj_map, "volume"].sum()
+            )
+            self.D_dsom = (6 * self.volume_dsom / constants.pi) ** (1 / 3)
+            self.idj_members_count = self.count_idj_members()
+            self.members_count_dsom = (
+                self.members_count + self.idj_members_count
+            )
 
-        #
-
-    def _calc_member_param(self):
+    def calc_member_param(self):
+        m_rows = []
+        for m in self.members:
+            m_rows.append(m.get_properties(form="dict"))
+        self._members_DF = pd.DataFrame.from_dict(m_rows, orient="columns")
         self._members_DF["membersOBJ"] = self.get_members()
-        self._members_DF["ID"] = self.get_members_IDs()
-        self._members_DF["D"] = self.get_members_Ds()
-        self._members_DF["Vol"] = (
-            4 / 3 * constants.pi * (self._members_DF["D"] / 2) ** 3
-        )
         self._members_DF["D-ratios"] = (
             self._members_DF["D"] / self._members_DF["D"].max()
         )
@@ -164,15 +247,17 @@ class Particle:
 
     def __init__(self, ID, X, Y, D):
 
-        self.ID = ID
-        self.name = "P" + str(int(self.ID))
-        self.X = X
-        self.Y = Y
-        self.D = D
-        self.Vol = 4 / 3 * constants.pi * ((self.D) / 2) ** 3
-        self.interIDs = None
-        self.type = "not_defined"
-        self.affil = "not_defined"
+        self.ID: int = ID
+        self.name: str = "P" + str(int(self.ID))
+        self.X: float = X
+        self.Y: float = Y
+        self.D: float = D
+        self.area: float = constants.pi * ((self.D) / 2) ** 2
+        self.volume: float = 4 / 3 * constants.pi * ((self.D) / 2) ** 3
+        self.interIDs: List[str] = None
+        self.type: str = "not_defined"
+        self.affil: str = "not_defined"
+        self.idj: bool = False  # bool
 
     def __repr__(self):
         return self.name
@@ -190,15 +275,6 @@ class Particle:
         return self.affil
 
     def get_interIDs(self):
-        """
-
-
-        Returns
-        -------
-
-
-
-        """
         return self.interIDs
 
     def get_properties(self, form="dict"):
@@ -208,9 +284,11 @@ class Particle:
             "D": self.D,
             "X": self.X,
             "Y": self.Y,
-            "Vol": self.Vol,
+            "area": self.area,
+            "volume": self.volume,
             "type": self.type,
             "affiliation": self.affil,
+            "idj": self.idj,
         }
         if form == "dict":
             return dict_prop
@@ -237,5 +315,8 @@ class Particle:
         )
         self.affil = affil.name
 
-    def set_interIDs(self, list_=[]):
-        self.interIDs = list_
+    def set_interIDs(self, ID_list=[]):
+        self.interIDs = ID_list
+
+    def set_idj(self, idj_bool: bool):
+        self.idj = idj_bool
