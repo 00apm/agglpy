@@ -2,6 +2,7 @@
 __pycache__
 *.py[cod]
 
+
 # ignore logs
 **/logs
 *.log
@@ -19,5 +20,9 @@ venv/
 .vscode/
 .pylint.d/
 
+
 # ignore tests output folder 
 agglpy/tests/output/
+
+# ignore pytest cache
+.pytest_cache/

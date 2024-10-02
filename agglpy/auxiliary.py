@@ -1,6 +1,6 @@
-from typing import Any, List
 import os
 from pathlib import Path
+from typing import Any, List
 
 import numpy as np
 
