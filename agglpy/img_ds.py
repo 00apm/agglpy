@@ -19,8 +19,9 @@ from scipy import constants
 from scipy import spatial as spsp
 from tqdm import tqdm
 
-from agglpy.auxiliary import RGB_convert_to256, RGB_shader
 from agglpy.aggl import Agglomerate, Particle
+from agglpy.auxiliary import RGB_convert_to256, RGB_shader
+from agglpy.logger import logger
 
 
 class ImgDataSet:
@@ -42,11 +43,11 @@ class ImgDataSet:
 
     def __init__(
         self,
-        working_folder,
+        working_dir,
         settings,
     ):
-        self._path: Path = working_folder  # os.path.abspath(file)
-        self.name = os.path.basename(self._path)
+        self._path: Path = working_dir  # os.path.abspath(file)
+        self.name: str = self._path.name
 
         self._settings = settings
         self._img_filename = self._settings["img_file"]
@@ -76,12 +77,17 @@ class ImgDataSet:
             self.scf = width_const / (self.mag * self._img.shape[1])
         else:
             self.scf = 1
+        logger.debug(f"{str(self)} Pixel size set to scf={self.scf:.4f}")
 
         # Loading circle fitting file
         self._corrected_result = pd.read_csv(
             self._corrected_path,
             sep=",",
             encoding="ansi",
+        )
+        logger.debug(
+            f"{str(self)} Corrected Primary Particles data loaded from: "
+            f"{self._corrected_path}"
         )
 
         # Initializing internal attributes
@@ -105,6 +111,9 @@ class ImgDataSet:
     def clasify_all_AGL(self, threshold=0):
         for i in self._all_AGL_DF.OBJ:
             i.clasify(threshold)
+        logger.debug(
+            f"{str(self)} Agglomerates classified for threshold= {threshold}"
+        )
 
     # TODO: Name of this function have changed and is still to be changed
     # Integrate this function with the DF operations function
@@ -119,6 +128,10 @@ class ImgDataSet:
             self._all_P_DF.loc[i, "name"] = o.name
             self._all_P_DF.loc[i, "D"] = o.D
             self._all_P_DF.loc[i, "OBJ"] = o
+        logger.debug(
+            f"{str(self)} load_corrected_particles() loaded: "
+            f"{len(self._all_P_DF.index)} Primary Particles."
+        )
         return self._all_P_DF
 
     def find_agglomerates(self):
@@ -150,6 +163,10 @@ class ImgDataSet:
         #             self._all_AGL_DF.loc[i,"OBJ"]._update_param()
         #             print(self._all_AGL_DF.loc[i,"OBJ"].members_count)
         # =============================================================================
+        logger.debug(
+            f"{str(self)} find_agglomerates() resulted in: "
+            f"{len(self._all_AGL_DF.index)} Agglomerates detected."
+        )
         return self._all_AGL_DF
 
     def get_particles(self, IDlist=[]):
@@ -303,9 +320,8 @@ class ImgDataSet:
         ].quantile(q=0.9)
         # Sauter Mean Diameter
         self.res_summary.loc[0, "particle_SMD"] = (
-            (self.res_particleDF.loc[:, "D"] ** 3).sum()
-            / (self.res_particleDF.loc[:, "D"] ** 2).sum()
-        )
+            self.res_particleDF.loc[:, "D"] ** 3
+        ).sum() / (self.res_particleDF.loc[:, "D"] ** 2).sum()
         self.res_summary.loc[0, "agl_member_count_mean"] = self.res_aglDF[
             "members_count"
         ].mean()
@@ -325,6 +341,11 @@ class ImgDataSet:
 
     def set_magnification(self, mag: Optional[float] = None) -> None:
         if not mag:
+            logger.debug(
+                f"{str(self)} Attempting to find magnification in "
+                f"{self.get_img_filename()} tags."
+            )
+
             self._img_meta_dict = self._read_meta_tif(self._img_path)
             lmag = self._img_meta_dict["CZ_SEM"]["ap_mag"][1].split()
             if "K" in lmag:
@@ -333,6 +354,7 @@ class ImgDataSet:
                 self.mag = pd.to_numeric(lmag[0])
         else:
             self.mag = float(mag)
+        logger.debug(f"{str(self)} Magnification set to {self.mag}x.")
 
     def plot_img(
         self,
@@ -695,7 +717,7 @@ class ImgDataSet:
             prop_key = list(prop.keys())[0]
         else:
             assert isinstance(prop, str), (
-                "wron data input- only string and"
+                "wrong data input- only string and"
                 " dict of strings are accepted."
             )
         if (vmin is None) or (vmax is None):
@@ -939,6 +961,18 @@ class ImgDataSet:
                     )
 
         return list_
+
+    # -------------- dunder methods ---------------------------
+    def __repr__(self):
+        class_name = type(self).__name__
+        repr_str = (
+            f"{class_name}(working_dir={self._path!r}, "
+            f"settings= {self._settings!r})"
+        )
+        return repr_str
+
+    def __str__(self):
+        return f"<DS({self.name})>"
 
 
 # =============================================================================

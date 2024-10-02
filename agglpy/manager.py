@@ -1,8 +1,7 @@
 import os
+import uuid
 from pathlib import Path
-from typing import (
-    List,
-)
+from typing import List, Optional
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -10,17 +9,12 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
+from agglpy.cfg import SUPPORTED_IMG_FORMATS, load_manager_settings
+from agglpy.dir_structure import find_datasets_paths, validate_mgr_dirstruct
+from agglpy.errors import DirectoryStructureError, MultipleFilesFoundError
 from agglpy.img_ds import ImgDataSet
-from agglpy.cfg import (
-    load_manager_settings,
-    SUPPORTED_IMG_FORMATS,
-)
-from agglpy.dir_structure import validate_mgr_dirstruct, find_datasets_paths
-from agglpy.errors import MultipleFilesFoundError, DirectoryStructureError
-from agglpy.img_process import (
-    HCTcv,
-    HCTcv_multi,
-)
+from agglpy.img_process import HCTcv, HCTcv_multi
+from agglpy.logger import logger
 
 
 class Manager:
@@ -38,11 +32,19 @@ class Manager:
     def __init__(
         self,
         working_dir: Path,
+        name: Optional[str] = None,
         settings_filepath: Path = Path("settings.yml"),
         initialize: bool = True,
     ):
 
+        self._ID = uuid.uuid4()
+        self._shortID = str(self._ID).split("-")[0]
         self._workdir: Path = Path(working_dir)  # Working directory
+        if name is None:
+            self.name = self._workdir.name
+        else:
+            self.name = name
+        logger.info(f"Creating Manager object {str(self)} at: {working_dir}.")
 
         if not settings_filepath.is_absolute():  # Settings path
             self._settings_path: Path = self._workdir / settings_filepath
@@ -70,6 +72,7 @@ class Manager:
             # and creating IMG_INFO table
             self._DS = []
             self.img_info = pd.DataFrame()
+            logger.debug(f"{str(self)} Creating ImgDataSet objects.")
             for i, path in enumerate(self._DS_paths):
                 self._DS.append(
                     ImgDataSet(
@@ -88,6 +91,10 @@ class Manager:
                     + os.sep
                     + os.path.basename(path)
                 )
+            logger.info(
+                f"{str(self)} Succesfully appended DataSets: "
+                f"{str([str(i) for i in self._DS])}"
+            )
 
             self.batch_res_pDF = pd.DataFrame()
             self.batch_res_aglDF = pd.DataFrame()
@@ -95,6 +102,9 @@ class Manager:
             self.batch_res_DSsummary = pd.DataFrame()
             self.batch_res_summary = pd.DataFrame()
             self._PSD_space = np.array([])
+        logger.info(
+            f"{str(self)} Manager object was successfully created at {str(self.working_dir)}"
+        )
 
     # ----------- Manager Properties
     @property
@@ -123,6 +133,7 @@ class Manager:
         None.
 
         """
+        logger.debug(f"{str(self)} Beginning analysis for all DataSets")
         total1 = len(self._DS)
         pbar1 = tqdm(self._DS, total=total1, position=0, leave=True)
 
@@ -144,6 +155,7 @@ class Manager:
                 i.plot_img(img, show=True, export=True)
                 pbar1.update(0)
         pbar1.close()
+        logger.info(f"{str(self)} Analysis for all DataSets finished.")
 
     def generate_pTable(self):
         self.batch_res_pDF = pd.DataFrame()
@@ -158,7 +170,10 @@ class Manager:
             self.batch_res_pDF = pd.concat(
                 [self.batch_res_pDF, temp], axis=0, ignore_index=True
             )
-
+        logger.info(
+            f"{str(self)} Particle table for analyzed DataSets created. "
+            f"It contains: {len(self.batch_res_pDF.index)} primary particles."
+        )
         return self.batch_res_pDF
 
     def generate_aglTable(self):
@@ -172,7 +187,10 @@ class Manager:
             self.batch_res_aglDF = pd.concat(
                 [self.batch_res_aglDF, temp], axis=0, ignore_index=True
             )
-
+        logger.info(
+            f"{str(self)} Agglomerate table for analyzed DataSets created. "
+            f"It contains: {len(self.batch_res_aglDF.index)} agglomerates."
+        )
         return self.batch_res_aglDF
 
     def generate_PSD(self, PSD_space=None, plot=True):
@@ -240,6 +258,17 @@ class Manager:
 
         if plot == True:
             self.plot_PSD(norm=False, cummul=True, export=True)
+        PSD_space_str = np.array2string(
+            PSD_space,
+            precision=2,
+            threshold=50,  # maximum of 50 elements fully printed
+            edgeitems=5,  # number of edge items printed if array is too long
+            max_line_width=np.inf,  # no limit on line width
+        )
+        logger.info(
+            f"{str(self)} Primary Particle size distribution table created. "
+            f"PSD_space used: {PSD_space_str}"
+        )
         # return self.batch_res_PSD
 
     def generate_aglPSD(
@@ -317,6 +346,18 @@ class Manager:
         if plot == True:
             self.plot_aglPSD(norm=False, cummul=True, export=True)
 
+        PSD_space_str = np.array2string(
+            PSD_space,
+            precision=2,
+            threshold=50,  # maximum of 50 elements fully printed
+            edgeitems=5,  # number of edge items printed if array is too long
+            max_line_width=np.inf,  # no limit on line width
+        )
+        logger.info(
+            f"{str(self)} Agglomerate size distribution table created. "
+            f"PSD_space used: {PSD_space_str}"
+        )
+
     def generate_aglPCD(
         self,
         PCD_space,
@@ -371,15 +412,17 @@ class Manager:
         if plot == True:
             self.plot_aglPCD(norm=False, cummul=True, export=True)
 
-    # def generate_fluidsPSD(self):
-    #     self.batch_res_fpPSD = fPSD.ParticleSizeDistribution(
-    #         ds=self._PSD_space, fractions=self.batch_res_PSD["counts"], order=0
-    #     )
-    #     self.batch_res_faglPSD = fPSD.ParticleSizeDistribution(
-    #         ds=self._PSD_space,
-    #         fractions=self.batch_res_aglPSD["counts"],
-    #         order=0,
-    #     )
+        PCD_space_str = np.array2string(
+            PCD_space,
+            precision=2,
+            threshold=50,  # maximum of 50 elements fully printed
+            edgeitems=5,  # number of edge items printed if array is too long
+            max_line_width=np.inf,  # no limit on line width
+        )
+        logger.info(
+            f"{str(self)} Primary Particle count distribution table created. "
+            f"PCD_space used: {PCD_space_str}"
+        )
 
     def generate_DSsummary(self):
         for i, ds in enumerate(self._DS):
@@ -391,6 +434,7 @@ class Manager:
             self.batch_res_DSsummary = pd.concat(
                 [self.batch_res_DSsummary, temp], axis=0, ignore_index=True
             )
+        logger.info(f"{str(self)} DataSets summary table created.")
 
     def generate_summary(self):
         DSsumm = self.batch_res_DSsummary
@@ -411,17 +455,16 @@ class Manager:
         summ["ER"] = 1 - (summ["N_pp1_separate"] / summ["N_primary_particle"])
         summ["Ra"] = summ["N_agl"] / summ["N_primary_particle"]
         summ["sep2agl"] = summ["N_pp1_separate"] / summ["N_agl"]
-        summ["n_ppA"] = summ["N_ppA"] / summ["N_agl"] 
-        summ["n_ppP"] = summ["N_primary_particle"] / summ["N_aerosol_particle"] 
+        summ["n_ppA"] = summ["N_ppA"] / summ["N_agl"]
+        summ["n_ppP"] = summ["N_primary_particle"] / summ["N_aerosol_particle"]
         summ["particle_Dmean"] = self.batch_res_pDF["D"].mean()
         summ["particle_Dstd"] = self.batch_res_pDF["D"].std()
         summ["particle_D10"] = self.batch_res_pDF["D"].quantile(q=0.1)
         summ["particle_D50"] = self.batch_res_pDF["D"].quantile(q=0.5)
         summ["particle_D90"] = self.batch_res_pDF["D"].quantile(q=0.9)
-        summ["particle_SMD"] = (
-            (self.batch_res_pDF.loc[:, "D"]**3).sum() 
-            / (self.batch_res_pDF.loc[:,"D"]**2).sum()
-        )
+        summ["particle_SMD"] = (self.batch_res_pDF.loc[:, "D"] ** 3).sum() / (
+            self.batch_res_pDF.loc[:, "D"] ** 2
+        ).sum()
         summ["agl_Dmean"] = self.batch_res_aglDF["D"].mean()
         summ["agl_Dstd"] = self.batch_res_aglDF["D"].std()
         summ["agl_D10"] = self.batch_res_aglDF["D"].quantile(q=0.1)
@@ -443,6 +486,12 @@ class Manager:
             "members_count"
         ].quantile(q=0.9)
         self.batch_res_summary = summ.T
+
+        logger.info(
+            f"{str(self)} Results summary table created. "
+            f"Mean Aerosol Particle Primary Particle Count: "
+            f"{self.batch_res_summary.loc['n_ppP', 0]:.3f}"
+        )
 
     def get_path(self):
         return self._workdir
@@ -676,7 +725,7 @@ class Manager:
         with pd.ExcelWriter(xls_file) as writer:
             exp_conditions = pd.DataFrame.from_dict(
                 self._settings["metadata"]["conditions"]
-                )
+            )
             exp_conditions.to_excel(writer, sheet_name="conditions")
             self.img_info.to_excel(writer, sheet_name="img_info")
             self.batch_res_summary.to_excel(writer, sheet_name="summary")
@@ -688,6 +737,7 @@ class Manager:
             self.batch_res_aglPCD.to_excel(writer, sheet_name="aglPCD")
             self.batch_res_pDF.to_excel(writer, sheet_name="particle_data")
             self.batch_res_aglDF.to_excel(writer, sheet_name="agl_data")
+        logger.info(f"{str(self)} Results exported to excel file: {xls_file}.")
 
     def set_PSD_space(self):
         s = self._settings["analysis"]["PSD_space"]
@@ -807,6 +857,18 @@ class Manager:
                 else:
                     raise FileNotFoundError(f"Directory {img_dir} not found")
         return DSpaths
+
+    # ----------- dunder methods
+    def __repr__(self):
+        class_name = type(self).__name__
+        repr_str = (
+            f"{class_name}(working_dir={self.working_dir!r}, "
+            f"name= {self.name!r}, settings_filepath= {self._settings_path})"
+        )
+        return repr_str
+
+    def __str__(self):
+        return f"<M({self.name})#{self._shortID}>"
 
 
 def PSD_space(start=0, end=10, periods=20, log=False, step=False):

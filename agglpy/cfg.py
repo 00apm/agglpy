@@ -9,6 +9,7 @@ import yaml
 
 from agglpy.auxiliary import isdefault
 from agglpy.errors import SettingsStructureError
+from agglpy.logger import logger
 
 YamlDataType = Union[
     Dict[str, Any], List[Any], Tuple[Any], str, int, float, None
@@ -24,7 +25,9 @@ STR_TRUE = {"true", "t", "y", "yes", "yeah", "yup"}
 
 DEFAULT_SETTINGS_FILENAME: str = "settings.yml"
 DEFAULT_SETTINGS = {
-    "general": {"working_dir": "."},
+    "general": {
+        "working_dir": ".",
+    },
     "metadata": {"conditions": {}},
     "data": {
         "default": {
@@ -383,6 +386,7 @@ def handle_defaults(
     elif isinstance(config, str) and config.lower() in valid_default:
         return None
     # If it's any other type, return it as is
+    
     return config
 
 
@@ -407,12 +411,13 @@ def handle_img_names(
         if isdefault(processed_config["img_file"]):
             # Needs change: for now .tif is hardcoded; warning is displayed
             processed_config["img_file"] = image_name + ".tif"
-            warnings.warn(
+            warning_msg = (
                 "img_file for image: image_name was set to default. File "
                 "extension is assumed to be .tif; if it needs to be change "
-                "please specify file name with extension in yaml settings",
-                RuntimeWarning,
+                "please specify file name with extension in yaml settings"
             )
+            warnings.warn(warning_msg, RuntimeWarning)
+            logger.warning(warning_msg)
         if isdefault(processed_config["HCT_file"]):
             processed_config["HCT_file"] = image_name + "_HCT.csv"
         if isdefault(processed_config["correction_file"]):
@@ -510,8 +515,10 @@ def load_manager_settings(path: Path, handle_def: bool = True) -> dict:
             is_valid_settings(config=settings)
         except SettingsStructureError:
             raise
+    logger.debug(f"Agglpy analysis settings loaded from: {str(path)}")
     if handle_def:
         settings = handle_defaults(config=settings)
+        logger.debug("Default values in settings dict handled.")
     return settings
 
 
@@ -547,4 +554,5 @@ def find_valid_settings(path: str) -> Tuple[Path, dict]:
             else:
                 # if settings are valid append
                 valid_files.append(p_valid)
+    logger.debug(f"Valid settings found: {valid_files}")
     return valid_files

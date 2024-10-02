@@ -3,17 +3,11 @@ import shutil
 from pathlib import Path
 from typing import List, Optional
 
-from agglpy.cfg import (
-    SUPPORTED_IMG_FORMATS,
-    DEFAULT_SETTINGS_FILENAME,
-    create_settings,
-    find_valid_settings,
-    load_manager_settings,
-)
-from agglpy.errors import (
-    SettingsStructureError,
-    DirectoryStructureError,
-)
+from agglpy.cfg import (DEFAULT_SETTINGS_FILENAME, SUPPORTED_IMG_FORMATS,
+                        create_settings, find_valid_settings,
+                        load_manager_settings)
+from agglpy.errors import DirectoryStructureError, SettingsStructureError
+from agglpy.logger import logger
 
 
 def init_mgr_dirstruct(
@@ -45,15 +39,20 @@ def init_mgr_dirstruct(
             directories instead of copying. Defaults to False.
     """
     wdir = Path(path)
+    logger.debug(f"Initializing Manager directory structure at: {wdir}")
     if is_mgr_dirstruct(wdir):
-        print("Manager directory structure is already prepared for analysis.")
+        logger.debug(
+            f"Manager directory structure is already prepared for analysis."
+        )
         return
     if settings_path is None:
 
         # find valid settings path, settings conte
+
         sett_paths = find_valid_settings(wdir)
 
         if len(sett_paths) == 0:
+            logger.debug(f"Creating settings yaml file at: {wdir}")
             create_settings(wdir)
             settings_path = wdir / DEFAULT_SETTINGS_FILENAME
         elif len(sett_paths) > 1:
@@ -80,15 +79,17 @@ def init_mgr_dirstruct(
             raise DirectoryStructureError(
                 f"Image file: {img_file} declared in .data.images settings "
                 f"for {img} was not found in directory: {wdir}"
-                ) from FileNotFoundError
+            ) from FileNotFoundError
     for img in images:
         img_src = wdir / img_file
         img_dst = images_dir / str(img) / str(images[img]["img_file"])
         img_dst.parent.mkdir(parents=True, exist_ok=True)
         if move:
             shutil.move(img_src, img_dst)
+            logger.debug(f"Image file: {img_file} moved to {img_dst.parent}")
         else:
             shutil.copy2(img_src, img_dst)
+            logger.debug(f"Image file: {img_file} copied to {img_dst.parent}")
 
 
 def is_mgr_dirstruct(path: str) -> bool:
@@ -147,7 +148,7 @@ def validate_mgr_dirstruct(path: str):
         )
     else:
         valid_path = valid_files[0]
-    
+
     settings = load_manager_settings(valid_path)
 
     # Check if image for each Image Data Set exists
@@ -156,6 +157,7 @@ def validate_mgr_dirstruct(path: str):
         settings=settings,
         ignore=True,
     )
+    logger.debug(f"Manager directory structure positively validated.")
 
 
 def find_datasets_paths(
@@ -225,4 +227,5 @@ def find_datasets_paths(
                             "img_file"
                         ] = img_file.name
                 DSpaths.append(img_file)
+
     return DSpaths
