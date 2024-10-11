@@ -3,121 +3,31 @@ import re
 import warnings
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Mapping, Tuple, Union, cast
 
 import yaml
 
 from agglpy.auxiliary import isdefault
+from agglpy.defaults import (
+    DEFAULT_IMAGE_SETTINGS_SCHEMA,
+    DEFAULT_IMAGE_SETTINGS_VALUES,
+    DEFAULT_SETTINGS,
+    DEFAULT_SETTINGS_FILENAME,
+    DEFAULT_SETTINGS_SCHEMA,
+    STR_DEFAULT,
+    STR_NONE,
+    SUPPORTED_IMG_FORMATS,
+)
 from agglpy.errors import SettingsStructureError
 from agglpy.logger import logger
-
-YamlDataType = Union[
-    Dict[str, Any], List[Any], Tuple[Any], str, int, float, None
-]
-
-SUPPORTED_IMG_FORMATS = [
-    "tif",
-]
-
-STR_DEFAULT = {"default", "auto", "normal"}
-STR_NONE = {"none", "null", "nan"}
-STR_TRUE = {"true", "t", "y", "yes", "yeah", "yup"}
-
-DEFAULT_SETTINGS_FILENAME: str = "settings.yml"
-DEFAULT_SETTINGS = {
-    "general": {
-        "working_dir": ".",
-    },
-    "metadata": {"conditions": {}},
-    "data": {
-        "default": {
-            "img_file": "auto",
-            "HCT_file": "auto",
-            "correction_file": "auto",
-            "magnification": "auto",
-            "Dmin": 3,
-            "Dmax": 250,
-            "Dspace": [3, 50, 140],
-            "dist2R": 0.5,
-            "param1": [220, 270],
-            "param2": [14, 24],
-            "additional_info": None,
-        },
-        "images": {},
-        "exclude_images": [],
-    },
-    "analysis": {
-        "PSD_space": [0, 10, "step", "auto"],
-        "PSD_space_log": False,
-        "collector_threshold": 0.5,
-    },
-    "export": {
-        "draw_particles": {
-            "labels": True,
-            "alpha": 0.2,
-        },
-    },
-}
+from agglpy.typing import (
+    ImageSettingsTypedDict,
+    YamlSettingsTypedDict,
+    YamlRawSettingsTypedDict,
+)
 
 
-DEFAULT_IMAGE_SETTINGS_VALUES = {
-    "img_file": "",
-    "HCT_file": "",
-    "correction_file": "",
-    "magnification": "auto",
-    "Dmin": None,
-    "Dmax": None,
-    "Dspace": [3, 50, 140],
-    "dist2R": 0.5,
-    "param1": [220, 270],
-    "param2": [14, 24],
-    "additional_info": None,
-}
-
-
-DEFAULT_IMAGE_SETTINGS_SCHEMA = {
-    "img_file": (str, type(None)),
-    "HCT_file": (str, type(None)),
-    "correction_file": (str, type(None)),
-    "magnification": (str, int, float),
-    "Dmin": (int, float, type(None)),
-    "Dmax": (int, float, type(None)),
-    "Dspace": list,
-    "dist2R": (int, float),
-    "param1": list,
-    "param2": list,
-    "additional_info": (str, type(None)),
-}
-
-
-# Define the manager settings schema for validation
-DEFAULT_SETTINGS_SCHEMA = {
-    "general": {
-        "working_dir": str,
-    },
-    "metadata": {
-        "conditions": dict,
-    },
-    "data": {
-        "default": DEFAULT_IMAGE_SETTINGS_SCHEMA,
-        "images": dict,  # Dictionary with dynamic keys, each containing data like `default`
-        "exclude_images": list,
-    },
-    "analysis": {
-        "PSD_space": list,
-        "PSD_space_log": bool,
-        "collector_threshold": (int, float),
-    },
-    "export": {
-        "draw_particles": {
-            "labels": bool,
-            "alpha": (int, float),
-        },
-    },
-}
-
-
-def create_settings_dict(images: List[os.PathLike]) -> dict:
+def create_settings_dict(images: List[Path]) -> YamlRawSettingsTypedDict:
     """Create settings dictionary
 
     Create settings dict and fill default image settings based on
@@ -129,7 +39,7 @@ def create_settings_dict(images: List[os.PathLike]) -> dict:
     Returns:
         dict: settings dictionary with a structure of YAML config
     """
-    settings = DEFAULT_SETTINGS
+    settings: YamlRawSettingsTypedDict = DEFAULT_SETTINGS
     for i in images:
         img = Path(i)
         settings["data"]["images"][img.stem] = {
@@ -142,7 +52,7 @@ def create_settings_dict(images: List[os.PathLike]) -> dict:
 def create_settings(
     dir_path: Path,
     output_path: Path = Path(DEFAULT_SETTINGS_FILENAME),
-    images: Optional[List[os.PathLike]] = None,
+    images: List[Path] | None = None,
 ):
     """Create settings YAML file
 
@@ -202,7 +112,7 @@ def create_settings(
         )
 
     with open(file_path, "r+") as file:
-        content = file.read()
+        content: str = file.read()
 
         # Add the anchor `&default_img` to the 'default' key
         content = content.replace("default:", "default: &default_img")
@@ -219,7 +129,7 @@ def create_settings(
     print(f"Configuration saved to '{file_path}'.")
 
 
-def find_all_images(dir_path: Path) -> List[Path]:
+def find_all_images(dir_path: os.PathLike) -> List[Path]:
     """Finds all the images of supported formats in a directory
 
     Args:
@@ -229,7 +139,8 @@ def find_all_images(dir_path: Path) -> List[Path]:
     Returns:
         List[Path]: list of image file paths
     """
-    images = []
+    images: List[Path] = []
+    dir_path = Path(dir_path)
     for f in SUPPORTED_IMG_FORMATS:
         images += list(dir_path.glob("*." + f))
     return images
@@ -258,34 +169,31 @@ def validate_conditions(
 
 
 def validate_settings(
-    config: YamlDataType,
-    schema: YamlDataType,
+    config: Mapping[str, Any],
+    schema: Union[Mapping[str, Any], Tuple[type, ...], type],
     route: str = "",
 ) -> None:
     """Recursively validate that config matches schema.
 
-    If <config> does not match the <schema> raise ValueError
-
     Args:
-        config (YamlDataType): Dictionary created by pyyaml lib for validation
-        schema (YamlDataType): Schema dictionary comprising settings
-            structure and its data types
+        config (Mapping[str, Any]): Dictionary created by pyyaml lib
+            for validation
+        schema (Union[Mapping[str, Any], Tuple[type, ...], type]): Schema dict,
+            tuple of types, or a single type.
         route (str, optional): Route in settings dict. Used for debugging.
             Defaults to "".
 
     Raises:
-        ValueError: Raised when <config> structure does not match the
-            supported settings structure.
-
+        SettingsStructureError: Raised when config structure does not match schema.
     """
-
-    if isinstance(schema, dict):
-        # Ensure that config is also a dict
-        if not isinstance(config, dict):
+    if isinstance(schema, Mapping):
+        # If schema is a dictionary, config must also be a dictionary
+        if not isinstance(config, Mapping):
             raise SettingsStructureError(
-                f"Expected a dictionary at {route}, but got {type(config).__name__}"
+                f"Expected a dictionary at {route}, but got "
+                f"{type(config).__name__}"
             )
-        # Check each key in the schema
+        # Validate each key in the schema
         for key, subschema in schema.items():
             if key not in config:
                 raise SettingsStructureError(
@@ -293,11 +201,8 @@ def validate_settings(
                 )
             if key == "conditions":  # Special handling for 'conditions'
                 validate_conditions(config[key], route + f".{key}")
-            if key == "images":  # Special handling for image settings
+            elif key == "images":  # Special handling for image settings
                 for im in config[key]:
-                    # Handle image settings (fill auto, empty values, etc)
-                    # config[key][im] = handle_img_names(im, config[key][im])
-                    # Validate dict structure of image settings
                     if config[key][im] is None:
                         config[key][im] = deepcopy(
                             DEFAULT_IMAGE_SETTINGS_VALUES
@@ -313,32 +218,35 @@ def validate_settings(
                     subschema,
                     route + f".{key}",
                 )
-
         # Check for extra keys
         for key in config:
             if key not in schema:
                 raise SettingsStructureError(
                     f"Extra key '{key}' found at {route}"
                 )
-
     elif isinstance(schema, tuple):
         # Ensure that config value matches one of the allowed types
         if not isinstance(config, schema):
             raise SettingsStructureError(
-                f"Expected one of {schema} at {route}, but got {type(config).__name__}"
+                f"Expected one of {schema} at {route}, but got "
+                f"{type(config).__name__}"
             )
-    else:
-        # Ensure that config value matches schema value
+    elif isinstance(schema, type):
+        # Ensure that config value matches the specific type
         if not isinstance(config, schema):
             raise SettingsStructureError(
                 f"Expected {schema} at {route}, but got {type(config).__name__}"
             )
+    else:
+        raise TypeError(
+            f"Invalid schema type at {route}: {type(schema).__name__}"
+        )
 
 
 def handle_defaults(
-    config: YamlDataType,
+    config: Mapping[str, Any],
     route: str = "",
-) -> YamlDataType:
+) -> Mapping[str, Any]:
     """Recursively handle default values in settings retrieved from YAML
 
     1.  Changes str values like: 'auto', 'default', 'null'
@@ -386,14 +294,14 @@ def handle_defaults(
     elif isinstance(config, str) and config.lower() in valid_default:
         return None
     # If it's any other type, return it as is
-    
+
     return config
 
 
 def handle_img_names(
     image_name: str,
-    image_config: Any,
-) -> dict:
+    image_config: ImageSettingsTypedDict,
+) -> ImageSettingsTypedDict:
     """Handle image names
 
     Handle image names in settings for defaults, non-recognized types
@@ -420,8 +328,8 @@ def handle_img_names(
             logger.warning(warning_msg)
         if isdefault(processed_config["HCT_file"]):
             processed_config["HCT_file"] = image_name + "_HCT.csv"
-        if isdefault(processed_config["correction_file"]):
-            processed_config["correction_file"] = image_name + "_HCT.csv"
+        # if isdefault(processed_config["correction_file"]):
+        #     processed_config["correction_file"] = image_name + "_HCT.csv"
     else:
         raise SettingsStructureError(
             f"Image settings for {image_name} are not recognized."
@@ -430,7 +338,7 @@ def handle_img_names(
     return processed_config
 
 
-def is_valid_settings(config: YamlDataType) -> bool:
+def is_valid_settings(config: Mapping[str, Any]) -> bool:
     """Check if settings are valid for analysis
 
     Check if settings loaded via pyyaml are valid for Agglomerate analysis
@@ -452,32 +360,32 @@ def is_valid_settings(config: YamlDataType) -> bool:
         return True
 
 
-def is_valid_settings_err(
-    config: YamlDataType,
-) -> Tuple[bool, Union[None, ValueError]]:
-    """Check if settings are valid settings for analysis
+# def is_valid_settings_err(
+#     config: YamlSettingsTypedDict,
+# ) -> Tuple[bool, Union[None, ValueError]]:
+#     """Check if settings are valid settings for analysis
 
-    Check if settings loaded via pyyaml are valid for Agglomerate analysis
+#     Check if settings loaded via pyyaml are valid for Agglomerate analysis
 
-    Args:
-        settings (YamlDataType): dict containing settings. Loaded via pyyaml
+#     Args:
+#         settings (YamlDataType): dict containing settings. Loaded via pyyaml
 
-    Returns:
-        (bool, ValueError|None): Tuple comprising bool and error. If
-            settings are valid (True, None) are passed.
-    """
-    try:
-        validate_settings(
-            config=config,
-            schema=DEFAULT_SETTINGS_SCHEMA,
-        )
-    except SettingsStructureError as err:
-        return (False, err)
-    else:
-        return (True, None)
+#     Returns:
+#         (bool, ValueError|None): Tuple comprising bool and error. If
+#             settings are valid (True, None) are passed.
+#     """
+#     try:
+#         validate_settings(
+#             config=config,
+#             schema=DEFAULT_SETTINGS_SCHEMA,
+#         )
+#     except SettingsStructureError as err:
+#         return (False, err)
+#     else:
+#         return (True, None)
 
 
-def is_valid_settings_file(path: str) -> bool:
+def is_valid_settings_file(path: os.PathLike) -> bool:
     """Load a settings file at <path> and check its content
 
     Args:
@@ -486,8 +394,8 @@ def is_valid_settings_file(path: str) -> bool:
     Returns:
         bool: True if settings are valid
     """
-    fpath = Path(path)
-    with open(path, mode="rt", encoding="utf-8") as settings_file:
+    fpath: Path = Path(path)
+    with open(fpath, mode="rt", encoding="utf-8") as settings_file:
         settings = yaml.safe_load(settings_file)
         if is_valid_settings(config=settings):
             return True
@@ -495,7 +403,10 @@ def is_valid_settings_file(path: str) -> bool:
             return False
 
 
-def load_manager_settings(path: Path, handle_def: bool = True) -> dict:
+def load_manager_settings(
+    path: os.PathLike,
+    handle_def: bool = True,
+) -> YamlSettingsTypedDict:
     """Loads settings for agglpy.Manager objects and validate them
 
     1. Load settings at given <path>
@@ -509,40 +420,44 @@ def load_manager_settings(path: Path, handle_def: bool = True) -> dict:
     Returns:
         dict: loaded settings dict
     """
+    fpath: Path = Path(path)
     with open(path, mode="rt", encoding="utf-8") as settings_file:
-        settings = yaml.safe_load(settings_file)
+        settings: Mapping[str, Any] = yaml.safe_load(settings_file)
         try:
-            is_valid_settings(config=settings)
+            validate_settings(
+                config=settings,
+                schema=DEFAULT_SETTINGS_SCHEMA,
+            )
         except SettingsStructureError:
             raise
     logger.debug(f"Agglpy analysis settings loaded from: {str(path)}")
     if handle_def:
         settings = handle_defaults(config=settings)
         logger.debug("Default values in settings dict handled.")
+    # Casting to YamlSettingsTypedDict as settings structure were validated
+    settings = cast(YamlSettingsTypedDict, settings)
     return settings
 
 
-def find_valid_settings(path: str) -> Tuple[Path, dict]:
+def find_valid_settings(path: os.PathLike) -> List[Path]:
     """Detect valid settings in directory <path>
 
     Args:
         path (str): Directory path for Agglmerate analysis
 
     Returns:
-        Tuple[Path, dict]: First element is valid settings path. Second is
-            yaml settings dict retrieved from agglpy.cfg.load_manager_settings
+        List[Path]: List of valid settings paths.
     """
     # Check if settings file is in directory
-    wdir = Path(path)
-    valid_files = []
-    sett_list = []
+    wdir: Path = Path(path)
+    valid_files: List[Path] = []
     for p in wdir.iterdir():
         a = re.search(".*\.(ya?ml)", str(p))  # match .yml and .yaml files
         if a is not None:
             p_valid = Path(a.group())
             try:
                 # load and validate settings
-                sett = load_manager_settings(
+                _ = load_manager_settings(
                     path=p_valid,
                     handle_def=False,
                 )

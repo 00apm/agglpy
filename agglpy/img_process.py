@@ -7,7 +7,7 @@ Created on Thu Feb 27 09:04:44 2020
 
 import os
 
-import cv2
+import cv2 # type: ignore
 
 # import skimage as ski
 # import skimage.io

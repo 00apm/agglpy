@@ -8,8 +8,8 @@ data:
   default: &default_img
     img_file: auto
     HCT_file: auto
-    correction_file: auto
     magnification: auto
+    pixel_size: auto
     Dmin: null
     Dmax: null
     Dspace:
