@@ -40,8 +40,9 @@ def expected_valid_config():
             "default": {
                 "img_file": "auto",
                 "HCT_file": "auto",
-                "correction_file": "auto",
+                # "correction_file": "auto",
                 "magnification": "auto",
+                "pixel_size": "auto",
                 "Dmin": None,
                 "Dmax": None,
                 "Dspace": [3, 50, 140],
@@ -54,8 +55,9 @@ def expected_valid_config():
                 "D7-017": {
                     "img_file": "D7-017.tif",
                     "HCT_file": "D7-017_HCT.csv",
-                    "correction_file": "D7-017_HCT.csv",
+                    # "correction_file": "D7-017_HCT.csv",
                     "magnification": "auto",
+                    "pixel_size": "auto",
                     "Dmin": None,
                     "Dmax": None,
                     "Dspace": [3, 50, 140],
@@ -67,8 +69,9 @@ def expected_valid_config():
                 "D7-019": {
                     "img_file": "D7-019-modified.tif",
                     "HCT_file": "D7-019_HCT.csv",
-                    "correction_file": "D7-019_HCT.csv",
+                    # "correction_file": "D7-019_HCT.csv",
                     "magnification": "auto",
+                    "pixel_size": "auto",
                     "Dmin": None,
                     "Dmax": None,
                     "Dspace": [3, 50, 140],
@@ -105,6 +108,9 @@ def expected_valid_config_processed(expected_valid_config):
     config = expected_valid_config
     config["data"]["images"]["D7-017"]["magnification"] = None
     config["data"]["images"]["D7-019"]["magnification"] = None
+    config["data"]["images"]["D7-017"]["pixel_size"] = None
+    config["data"]["images"]["D7-019"]["pixel_size"] = None
+
     config["analysis"]["PSD_space"][-1] = None
     return config
 
@@ -116,7 +122,7 @@ def model_IA(case_dir):
 
 @pytest.fixture
 def manager_obj_not_init(input_multi_raw_wdir):
-    return Manager(input_multi_raw_wdir, initialize=False)
+    return Manager(input_multi_raw_wdir, init_data_sets=False)
 
 @pytest.fixture
 def manager_obj(input_multi_raw_wdir):

@@ -8,9 +8,10 @@ from typing import Any
 
 import pytest
 
-from agglpy.cfg import (DEFAULT_SETTINGS_SCHEMA, create_settings,
+from agglpy.cfg import (create_settings,
                         create_settings_dict, find_all_images,
                         load_manager_settings, validate_settings)
+from agglpy.defaults import DEFAULT_SETTINGS_SCHEMA
 from agglpy.errors import SettingsStructureError
 from agglpy.tests.fixtures import (expected_valid_config,
                                    expected_valid_config_processed,
@@ -172,8 +173,9 @@ def test_create_settings_dict(input_multi_raw_wdir):
             "default": {
                 "img_file": "auto",
                 "HCT_file": "auto",
-                "correction_file": "auto",
+                # "correction_file": "auto",
                 "magnification": "auto",
+                "pixel_size": "auto",
                 "Dmin": 3,
                 "Dmax": 250,
                 "Dspace": [3, 50, 140],
