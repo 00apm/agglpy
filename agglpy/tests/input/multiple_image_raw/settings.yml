@@ -8,28 +8,32 @@ data:
   default: &default_img
     img_file: auto
     HCT_file: auto
-    correction_file: auto
     magnification: auto
     pixel_size: auto
-    Dmin: 3
-    Dmax: 250
-    Dspace:  [3,50,140]
+    crop_ratio: 0.1
+    median_blur: 3
+    d_min: [3, 50]
+    d_max: [50, 140]
     dist2R: 0.5
-    param1: [220,270]
-    param2: [14, 24]
+    param1: 200
+    param2: 15
     additional_info: null
   images:
     D7-017: *default_img
     D7-019:
     D7-021: 
       <<: *default_img
-      Dmin: 201
+      d_min: 201
   exclude_images:
     - D7-017
     - D7-021
 analysis:
-  PSD_space: [0, 10, step, auto]
-  PSD_space_log: false
+  PSD_space:
+    start: 0
+    end: 10
+    periods: 20
+    log: false
+    step: false
   collector_threshold: 0.5
 export:
   draw_particles:

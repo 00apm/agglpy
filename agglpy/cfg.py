@@ -7,7 +7,11 @@ from typing import Any, Dict, List, Mapping, Tuple, Union, cast
 
 import yaml
 
-from agglpy.auxiliary import isdefault
+from agglpy.auxiliary import (
+    txt_is_default_or_none,
+    txt_is_none_plus,
+    txt_is_default,
+)
 from agglpy.defaults import (
     DEFAULT_IMAGE_SETTINGS_SCHEMA,
     DEFAULT_IMAGE_SETTINGS_VALUES,
@@ -129,6 +133,24 @@ def create_settings(
     print(f"Configuration saved to '{file_path}'.")
 
 
+# Function may be used after future implementation of pydantic validation
+def fill_empty_image_settings(
+    settings: YamlSettingsTypedDict,
+) -> None:
+    default = settings["data"]["default"]
+    def_str = "yaml file"
+    if default is None:
+        default = DEFAULT_IMAGE_SETTINGS_VALUES
+        def_str = "agglpy lib"
+    for key, val in settings["data"]["images"].items():
+        if val is None: # finds defined images without settings dict
+            val = default
+            logger.debug(
+                f"Settings for image: {key} were empty. Filling with "
+                f"{def_str} defaults."
+            )
+
+
 def find_all_images(dir_path: os.PathLike) -> List[Path]:
     """Finds all the images of supported formats in a directory
 
@@ -204,6 +226,9 @@ def validate_settings(
             elif key == "images":  # Special handling for image settings
                 for im in config[key]:
                     if config[key][im] is None:
+                        # filling image settings if it was not provided
+                        # TODO: this should not be there, deprecete when 
+                        # updating to pydantic
                         config[key][im] = deepcopy(
                             DEFAULT_IMAGE_SETTINGS_VALUES
                         )
@@ -316,7 +341,7 @@ def handle_img_names(
     processed_config = deepcopy(image_config)
 
     if isinstance(processed_config, dict):
-        if isdefault(processed_config["img_file"]):
+        if txt_is_default_or_none(processed_config["img_file"]):
             # Needs change: for now .tif is hardcoded; warning is displayed
             processed_config["img_file"] = image_name + ".tif"
             warning_msg = (
@@ -326,10 +351,13 @@ def handle_img_names(
             )
             warnings.warn(warning_msg, RuntimeWarning)
             logger.warning(warning_msg)
-        if isdefault(processed_config["HCT_file"]):
-            processed_config["HCT_file"] = image_name + "_HCT.csv"
-        # if isdefault(processed_config["correction_file"]):
-        #     processed_config["correction_file"] = image_name + "_HCT.csv"
+        if isinstance(processed_config["HCT_file"], str):
+            if txt_is_default(processed_config["HCT_file"]):
+                processed_config["HCT_file"] = image_name + "_HCT.csv"
+            elif txt_is_none_plus(processed_config["HCT_file"]):
+                processed_config["HCT_file"] = None
+            else:
+                pass
     else:
         raise SettingsStructureError(
             f"Image settings for {image_name} are not recognized."
@@ -358,31 +386,6 @@ def is_valid_settings(config: Mapping[str, Any]) -> bool:
         return False
     else:
         return True
-
-
-# def is_valid_settings_err(
-#     config: YamlSettingsTypedDict,
-# ) -> Tuple[bool, Union[None, ValueError]]:
-#     """Check if settings are valid settings for analysis
-
-#     Check if settings loaded via pyyaml are valid for Agglomerate analysis
-
-#     Args:
-#         settings (YamlDataType): dict containing settings. Loaded via pyyaml
-
-#     Returns:
-#         (bool, ValueError|None): Tuple comprising bool and error. If
-#             settings are valid (True, None) are passed.
-#     """
-#     try:
-#         validate_settings(
-#             config=config,
-#             schema=DEFAULT_SETTINGS_SCHEMA,
-#         )
-#     except SettingsStructureError as err:
-#         return (False, err)
-#     else:
-#         return (True, None)
 
 
 def is_valid_settings_file(path: os.PathLike) -> bool:
@@ -471,3 +474,4 @@ def find_valid_settings(path: os.PathLike) -> List[Path]:
                 valid_files.append(p_valid)
     logger.debug(f"Valid settings found: {valid_files}")
     return valid_files
+

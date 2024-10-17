@@ -14,15 +14,15 @@ from typing import (
 class ImageSettingsTypedDict(TypedDict, total=False):
     img_file: str
     HCT_file: Optional[str]
-    # correction_file: Optional[str]
     magnification: Optional[Union[int, float]]
     pixel_size: Optional[Union[int, float]]
-    Dmin: Optional[Union[int, float]]
-    Dmax: Optional[Union[int, float]]
-    Dspace: List[int]
-    dist2R: float
-    param1: List[int]
-    param2: List[int]
+    crop_ratio: float
+    median_blur: Optional[int]
+    d_min: Union[List[int], int]
+    d_max: Union[List[int], int]
+    dist2R: Union[List[float], float]
+    param1: Union[List[float | int], float, int]
+    param2: Union[List[float | int], float, int]
     additional_info: Optional[str]
 
 
@@ -34,15 +34,15 @@ ImageRawSettingsTypedDict = TypedDict(
         "<<": str,  # Special key for YAML merging
         "img_file": Optional[str],
         "HCT_file": Optional[str],
-        # "correction_file": Optional[str],
         "magnification": Union[int, float, str],
         "pixel_size": Union[int, float, str],
-        "Dmin": Optional[Union[int, float]],
-        "Dmax": Optional[Union[int, float]],
-        "Dspace": List[int],
-        "dist2R": float,
-        "param1": List[int],
-        "param2": List[int],
+        "crop_ratio": float,
+        "median_blur": Optional[int],
+        "d_min": Union[List[int], int],
+        "d_max": Union[List[int], int],
+        "dist2R": Union[List[float], float],
+        "param1": Union[List[float | int], float, int],
+        "param2": Union[List[float | int], float, int],
         "additional_info": Optional[str],
     },
     total = False
@@ -67,10 +67,15 @@ class GeneralSettingsTypedDict(TypedDict):
 class MetadataSettingsTypedDict(TypedDict):
     conditions: Dict[str, Union[int, float]]
 
+class PsdSpaceSettingsTypedDict(TypedDict):
+    start: float
+    end: float
+    periods: int | float
+    log: bool
+    step: bool
 
 class AnalysisSettingsTypedDict(TypedDict):
-    PSD_space: List[Union[int, str]]
-    PSD_space_log: bool
+    PSD_space: PsdSpaceSettingsTypedDict | None
     collector_threshold: float
 
 
@@ -93,3 +98,5 @@ class YamlRawSettingsTypedDict(TypedDict):
     export: ExportSettingsTypedDict
 
 PPSouceCsvType = Literal["agglpy", "ImageJ", "agglpy_old"]
+PreprocessFunction = Literal["median_blur",]
+HctParameter = Literal["d_min", "d_max", "dist2R", "param1", "param2"]

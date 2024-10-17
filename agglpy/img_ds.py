@@ -27,9 +27,14 @@ from tqdm import tqdm
 
 from agglpy.aggl import Agglomerate, Particle
 from agglpy.auxiliary import read_tiff_tags, RGB_convert_to256, RGB_shader
+from agglpy.img_process import HCT, HCT_multi, crop_img, preprocess_img
 from agglpy.logger import logger
 from agglpy.typing import ImageSettingsTypedDict, PPSouceCsvType
-from agglpy.defaults import VALID_PARTICLE_CSV_DATA
+from agglpy.defaults import (
+    HCT_PARAMETERS,
+    VALID_PARTICLE_CSV_DATA,
+    PREPROCESS_FUNCTIONS,
+)
 from agglpy.errors import (
     DirectoryStructureError,
     ImgDataSetBufferError,
@@ -39,20 +44,6 @@ from agglpy.errors import (
 
 
 class ImgDataSet:
-    """A class used for analyzis of primary particles and their agglomerates
-
-    This class is used to obtain data about particles and its agglomerates
-    on single image. It allows:
-    - detection od primary particles
-    - detection of their agglomerates
-    - calculating primary particles statistical and morphological parameters
-    - calculating agglomerate statistical and morphological parameters
-
-    The ImgDataSet objects are constructed based on directory path (working_dir)
-    and settings dict (which is a part of main .yaml settings file).
-    The directory must contain an image to be analyzed.
-
-    """
 
     # Public attributes
     name: str
@@ -70,7 +61,10 @@ class ImgDataSet:
     _settings: ImageSettingsTypedDict
     _img_filename: str | None
     _img_path: Path | None
-    _img: npt.NDArray | None
+    _img_rgb: (
+        npt.NDArray | None
+    )  # image w/o processing (in RGB opencv color format)
+    _img: npt.NDArray | None  # image processed (in grayscale)
     _img_meta_dict: dict | None
 
     _PPsource_filename: str | None
@@ -80,8 +74,10 @@ class ImgDataSet:
 
     _PPsource_bufferDF: pd.DataFrame | None
     _PP_dict: Dict[int, Particle] | None
+    _PP_flag: bool
     _all_PP_DF: pd.DataFrame | None
     _all_AGL_DF: pd.DataFrame | None
+    _AGGL_flag: bool
     _KDTree: spsp.KDTree | None
 
     def __init__(
@@ -90,7 +86,18 @@ class ImgDataSet:
         settings: ImageSettingsTypedDict,
         auto_load: bool = False,
     ):
-        """ImgDataSet constructor
+        """Class used for analyzis of primary particles and their agglomerates
+
+        This class is used to obtain data about particles and its agglomerates
+        on single image. It allows:
+        - detection od primary particles
+        - detection of their agglomerates
+        - calculating primary particles statistical and morphological parameters
+        - calculating agglomerate statistical and morphological parameters
+
+        The ImgDataSet objects are constructed based on directory path (working_dir)
+        and settings dict (which is a part of main .yaml settings file).
+        The directory must contain an image to be analyzed.
 
         Args:
             working_dir (os.PathLike): directory containing image and input
@@ -119,6 +126,7 @@ class ImgDataSet:
         # Initialize private attributes
         self._img_filename = self._settings["img_file"]
         self._img_path = self._path / self._img_filename
+        self._img_rgb = None
         self._img = None
         self._img_meta_dict = None
         self._PPsource_filename = self._settings["HCT_file"]
@@ -129,8 +137,10 @@ class ImgDataSet:
         # Initialize internal data structure attributes
         self._PPsource_bufferDF = None
         self._PP_dict = None
+        self._PP_flag = False
         self._all_PP_DF = None
         self._all_AGL_DF = pd.DataFrame()
+        self._AGGL_flag = False
         # TODO: change _all_agl_DF creation. It should be seperated from
         # data structure containing Agglomerate objects
         self._KDTree = None
@@ -143,8 +153,9 @@ class ImgDataSet:
             )
 
         # Loading SEM image file and tags
-        self._img = cv2.imread(str(self._img_path))
-        self._img = cv2.cvtColor(self._img, cv2.COLOR_BGR2RGB)
+        self._img_rgb = cv2.imread(str(self._img_path))
+        self._img = cv2.cvtColor(self._img_rgb, cv2.COLOR_BGR2GRAY)
+        self._img_rgb = cv2.cvtColor(self._img_rgb, cv2.COLOR_BGR2RGB)
         if self._img_path.suffix == ".tif":
             self._img_meta_dict = read_tiff_tags(self._img_path)
 
@@ -161,7 +172,7 @@ class ImgDataSet:
                 self.px_size = 1.0
 
         logger.debug(f"{str(self)} Magnification set to: {self.mag:.1f}x.")
-        logger.debug(f"{str(self)} Pixel size set to: {self.px_size:.4f}")
+        logger.debug(f"{str(self)} Pixel size set to: {self.px_size:.2e}")
         # Define HCT related attributes and check if HCT .csv file exists
         if self._PPsource_filename:
             self._PPsource_path = self._path / self._PPsource_filename
@@ -174,9 +185,11 @@ class ImgDataSet:
                 )
 
         if auto_load:
-            if self._PPsource_flag:
+            if not self._PPsource_flag:  # PP csv does not exist, HCT is needed
+                self.detect_primary_particles()
+            else:
                 self.load_PPsource_csv()
-                self.create_primary_particles(multiprocessing=False)
+            self.create_primary_particles(multiprocessing=False)
 
     @property
     def path(self) -> Path:
@@ -189,6 +202,13 @@ class ImgDataSet:
         """
         return self._path
 
+    @property
+    def has_PPsource(self) -> bool:
+        return self._PPsource_flag
+    
+    @property
+    def has_PP(self) -> bool:
+        return self._PP_flag
     # ------------------ API methods --------------------------
 
     def classify_all_AGL(self, threshold=0):
@@ -197,6 +217,68 @@ class ImgDataSet:
         logger.debug(
             f"{str(self)} Agglomerates classified for threshold= {threshold}"
         )
+
+    def detect_primary_particles(
+        self,
+        export_csv: bool = True,
+        export_img: bool = True,
+        export_edges: bool = True,
+    ) -> pd.DataFrame:
+        logger.info(
+            f"Starting primary particle detection for ImgDataSet {str(self)}"
+        )
+        crop_ratio = self._settings["crop_ratio"]
+        assert (
+            self._img is not None
+        ), f"Image was not loaded properly for ImgDataSet: {str(self)}."
+        if crop_ratio > 0:
+            self._img = crop_img(self._img, ratio=crop_ratio)
+            logger.debug(
+                f"Image cropped with ratio {crop_ratio} for primary particle "
+                f"detection in {str(self)}"
+            )
+        # from yaml settings register all not None preprocess parameters
+        preprocess_dict = {
+            str(pf): self._settings[pf]
+            for pf in PREPROCESS_FUNCTIONS
+            if self._settings[pf] is not None
+        }
+        if preprocess_dict:
+            # if any preprocess settings were registeres use them as kwargs
+            self._img = preprocess_img(
+                image=self._img,
+                **preprocess_dict,  # type: ignore
+                # kwargs unpacking supported from python 3.12
+            )
+        HCT_kwargs = {str(an): self._settings[an] for an in HCT_PARAMETERS}
+        for key, val in HCT_kwargs.items():
+            if val is None:
+                raise ValueError(
+                    f"One of the HCT parameters ({key}) is None for ImgDataSet:"
+                    f" {str(self)}. All of the HCT parameters {HCT_PARAMETERS} "
+                    f"must be defined in analysis yaml settings."
+                )
+
+        df = HCT_multi(
+            self._img,
+            export_img=export_img,
+            export_edges=export_edges,
+            export_csv=export_csv,
+            export_namebase=self.name,
+            export_dir=self.path,
+            **HCT_kwargs,  # type: ignore
+            # kwargs unpacking supported from python 3.12
+        )
+        logger.info(
+            f"Primary particle detection complete for ImgDataSet {str(self)}. "
+            f"Number of detected primary particles detected: {len(df.index)}"
+        )
+        # save to  buffer 
+        # and reset ID index for compatibility with load_PPsource_csv
+        self._PPsource_bufferDF = df.reset_index()
+        self._prepare_PPsource_buffer()
+        self._PPsource_flag = True
+        return self._PPsource_bufferDF
 
     def load_PPsource_csv(self) -> None:
         """Load Hough Circle Transform data from input file
@@ -224,29 +306,11 @@ class ImgDataSet:
                 f"Primary particle csv data file type ({self._PPsource_type}) was"
                 f" not recognized."
             )
-        if not ("D" in self._PPsource_bufferDF.columns):
-            self._PPsource_bufferDF.loc[:, "D"] = (
-                2 * self._PPsource_bufferDF.loc[:, "R"]
-            )
-        self._PPsource_bufferDF = self._PPsource_bufferDF.astype(
-            {
-                "ID": int,
-                "X": np.float64,
-                "Y": np.float64,
-                "D": np.float64,
-                "R": np.float64,
-            },
-        )
-        self._scale_HCT_data()
-
-        # sort particles by size (descending) to assure proper order in
-        # finding agglomerates
-        self._PPsource_bufferDF = self._PPsource_bufferDF.sort_values(
-            by=["R"],
-            ascending=False,
-        )
+        
+        self._prepare_PPsource_buffer()
+        
         logger.debug(
-            f"{str(self)} Corrected Primary Particles data loaded from: "
+            f"{str(self)} Primary Particles data loaded from: "
             f"{self._PPsource_path}"
         )
 
@@ -277,12 +341,13 @@ class ImgDataSet:
                     f"{str(self)} create_primary_particles() constructed: "
                     f"{len(self._all_PP_DF.index)} Primary Particles."
                 )
+            self._PP_flag = True
         else:
             raise ImgDataSetStructureError(
                 f"Primary Particles were already created for {str(self)}."
             )
 
-    def find_agglomerates(self):
+    def detect_agglomerates(self):
         self._find_all_intersecting()
         DF = self._all_PP_DF.copy()
         # TODO: _all_AGL_DF must be created first
@@ -298,6 +363,7 @@ class ImgDataSet:
             for i in iFamily:
                 DF.drop(DF.loc[DF["ID"] == i].index, inplace=True)
             iFamily.clear()
+            # TODO: Separate calculation from agglomerate creation
             agl_obj.calc_member_param()
             agl_obj.calc_agl_param(include_dsom=True)
 
@@ -315,6 +381,7 @@ class ImgDataSet:
             f"{str(self)} find_agglomerates() resulted in: "
             f"{len(self._all_AGL_DF.index)} Agglomerates detected."
         )
+        self._AGGL_flag = True
         return self._all_AGL_DF
 
     def get_particles(self, IDlist=[]):
@@ -484,7 +551,7 @@ class ImgDataSet:
         return self.res_summary
 
     def get_img(self):
-        return self._img
+        return self._img_rgb
 
     def get_img_filename(self):
         return self._img_filename
@@ -659,7 +726,7 @@ class ImgDataSet:
         shade_factor=0.4,
         thickness=1,
     ):
-        shape = self._img.shape
+        shape = self._img_rgb.shape
         im1 = np.zeros((shape[0], shape[1], 4), dtype=np.uint8)
         im2 = np.zeros((shape[0], shape[1], 4), dtype=np.uint8)
 
@@ -790,10 +857,10 @@ class ImgDataSet:
         for i in colors.values():
             i = i.astype(np.uint8)
 
-        img = self._img
+        img = self._img_rgb
         img = cv2.cvtColor(img, cv2.COLOR_RGB2RGBA)
 
-        shape = self._img.shape
+        shape = self._img_rgb.shape
 
         res1 = np.zeros((shape[0], shape[1], 4), dtype=np.uint8)
         res2 = np.zeros((shape[0], shape[1], 4), dtype=np.uint8)
@@ -847,9 +914,9 @@ class ImgDataSet:
             vmax = self.res_agglDF.loc[:, prop_key].max()
         norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
 
-        img = self._img
+        img = self._img_rgb
         img = cv2.cvtColor(img, cv2.COLOR_RGB2RGBA)
-        shape = self._img.shape
+        shape = self._img_rgb.shape
 
         res1 = np.zeros((shape[0], shape[1], 4), dtype=np.uint8)
         res2 = np.zeros((shape[0], shape[1], 4), dtype=np.uint8)
@@ -915,9 +982,9 @@ class ImgDataSet:
             vmax = self.res_particleDF.loc[:, prop_key].max()
         norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
 
-        img = self._img
+        img = self._img_rgb
         img = cv2.cvtColor(img, cv2.COLOR_RGB2RGBA)
-        shape = self._img.shape
+        shape = self._img_rgb.shape
 
         res1 = np.full(
             (shape[0], shape[1], 4),
@@ -964,6 +1031,44 @@ class ImgDataSet:
                 return res1
             else:
                 return img
+
+    def _prepare_PPsource_buffer(self) -> None:
+        """Prepares PP source buffer for Particle object creation
+
+        Modifies _PPsource_bufferDF from loaded state to state ready for 
+        Particle object creation.
+        1. Calculate primary particle diameter if needed
+        2. Ensure uniform dtype
+        3. Scale pixel data to meters according to pixel_size
+        4. Sort particles descending by diameter
+        """
+        if self._PPsource_bufferDF is None:
+            raise ImgDataSetBufferError(
+                f"PP source buffer is empty. Primary particles were not "
+                f"properly loaded for ImgDataSet: {str(self)}."
+            )
+        if not ("D" in self._PPsource_bufferDF.columns):
+            self._PPsource_bufferDF.loc[:, "D"] = (
+                2 * self._PPsource_bufferDF.loc[:, "R"]
+            )
+        self._PPsource_bufferDF = self._PPsource_bufferDF.astype(
+            {
+                "ID": int,
+                "X": np.float64,
+                "Y": np.float64,
+                "D": np.float64,
+                "R": np.float64,
+            },
+        )
+        self._scale_HCT_data()
+
+        # sort particles by size (descending) to assure proper order in
+        # finding agglomerates
+        self._PPsource_bufferDF = self._PPsource_bufferDF.sort_values(
+            by=["R"],
+            ascending=False,
+        )
+
 
     def _scale_HCT_data(self) -> None:
         # applying scale to R (converting to µm)

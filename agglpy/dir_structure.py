@@ -196,7 +196,7 @@ def find_datasets_paths(
     images = settings["data"]["images"]
     for i in images:
         if i not in ignore_list:
-            img_dir = DS_main_dir / Path(images[i]["img_file"]).stem
+            img_dir = DS_main_dir / i #Path(images[i]["img_file"]).stem
             if not img_dir.exists():
                 raise DirectoryStructureError(
                     f"Image Data Set directory {repr(img_dir)} not found"

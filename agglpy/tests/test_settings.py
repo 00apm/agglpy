@@ -92,10 +92,10 @@ def test_wrong_condition_structure(expected_valid_config: dict[str, Any]):
 def test_wrong_value_type(expected_valid_config: dict[str, Any]):
     # Case 1- wrong multiple type (tuple)
     config = expected_valid_config
-    config["data"]["default"]["Dmin"] = "should_be_int"
+    config["data"]["default"]["d_min"] = "should_be_int"
     expected_error_message = (
-        f"Expected one of (<class 'int'>, <class 'float'>, <class 'NoneType'>) "
-        f"at .data.default.Dmin, but got str"
+        f"Expected one of (<class 'list'>, <class 'int'>) "
+        f"at .data.default.d_min, but got str"
     )
     with pytest.raises(SettingsStructureError, match=re.escape(expected_error_message)):
         validate_settings(config, DEFAULT_SETTINGS_SCHEMA)
@@ -173,15 +173,15 @@ def test_create_settings_dict(input_multi_raw_wdir):
             "default": {
                 "img_file": "auto",
                 "HCT_file": "auto",
-                # "correction_file": "auto",
                 "magnification": "auto",
                 "pixel_size": "auto",
-                "Dmin": 3,
-                "Dmax": 250,
-                "Dspace": [3, 50, 140],
+                "crop_ratio": 0.0,
+                "median_blur": 3,
+                "d_min": [3, 50],
+                "d_max": [50, 140],
                 "dist2R": 0.5,
-                "param1": [220, 270],
-                "param2": [14, 24],
+                "param1": 200,
+                "param2": 15,
                 "additional_info": None,
             },
             "images": {
@@ -201,8 +201,7 @@ def test_create_settings_dict(input_multi_raw_wdir):
             "exclude_images": [],
         },
         "analysis": {
-            "PSD_space": [0, 10, "step", "auto"],
-            "PSD_space_log": False,
+            "PSD_space": None,
             "collector_threshold": 0.5,
         },
         "export": {

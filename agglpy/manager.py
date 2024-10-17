@@ -2,6 +2,7 @@ import os
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+import warnings
 
 import matplotlib as mpl  # type: ignore
 import matplotlib.pyplot as plt  # type: ignore
@@ -10,6 +11,10 @@ import numpy.typing as npt
 import pandas as pd
 from tqdm import tqdm
 
+from agglpy.auxiliary import (
+    get_ceil,
+    get_floor,
+)
 from agglpy.cfg import load_manager_settings
 from agglpy.defaults import SUPPORTED_IMG_FORMATS
 from agglpy.dir_structure import find_datasets_paths, validate_mgr_dirstruct
@@ -118,11 +123,38 @@ class Manager:
         """
         return self._workdir
 
-    def batch_detect_circles(self, export_img):
+    def batch_detect_primary_particles(self, force: bool = False):
+        if force:
+            # process all ImgDataSets and overwrite the results
+            ds_process = self._DS
+        else:
+            # process only ImgDataSets without available particle csv data
+            ds_process = [ds for ds in self._DS if not ds._PPsource_flag]
+        if len(ds_process) == 0:
+            wmsg = (
+                f"All of the ImgDataSets already have loaded primary particles "
+                f"source file. Detection is not needed. Check the 'HCT_file' "
+                f"key in settings.data.images if some of the data sets still "
+                f"need detection. Otherwise you may want to force "
+                f"the detection using force=True, but this will overwrite "
+                f"the existing results."
+            )
+            warnings.warn(wmsg)
+            logger.warning(wmsg)
+        else:
+            for ds in ds_process:
+                ds.detect_primary_particles(
+                    export_img=True,
+                    export_csv=True,
+                    export_edges=True,
+                )
+            logger.info(
+                f"Primary particles detected for ImgDataSets: "
+                f"{[str(ds) for ds in ds_process]}. CSV file and images were "
+                f"exported to respective ImgDataSet directory"
+            )
 
-        pass
-
-    def batch_analysis(self, export_img=True):
+    def batch_detect_agglomerates(self, export_img=True):
         """
         Method for batch analysis of SEM photo and circle fitting data
         from folder structure
@@ -141,7 +173,7 @@ class Manager:
             desc0 = "Processing DataSet|" + i.name + "| "
             pbar1.update(0)
             pbar1.set_description(desc0 + "- finding agglomerates...")
-            i.find_agglomerates()
+            i.detect_agglomerates()
             pbar1.update(0)
             pbar1.set_description(desc0 + "- classifying agglomerates...")
             i.classify_all_AGL(self.collector_threshold)
@@ -157,7 +189,7 @@ class Manager:
         pbar1.close()
         logger.info(f"{str(self)} Analysis for all DataSets finished.")
 
-    def create_image_data_sets(self) -> None:
+    def create_image_data_sets(self, auto_load: bool = True) -> None:
         self._DS_paths = find_datasets_paths(
             path=self._workdir,
             settings=self._settings,
@@ -171,21 +203,25 @@ class Manager:
             "img_name": [],
             "magnification": [],
             "pixel_size": [],
-            "subdir": [], 
+            "subdir": [],
         }
         for i, path in enumerate(self._DS_paths):
             self._DS.append(
                 ImgDataSet(
                     path.parent,
-                    settings=self._settings["data"]["images"][path.stem],
-                    auto_load=True,
+                    settings=self._settings["data"]["images"][
+                        path.parent.stem
+                    ],
+                    auto_load=auto_load,
                 )
             )
             info_dict["img_name"].append(self._DS[i].get_img_filename())
             info_dict["magnification"].append(self._DS[i].mag)
             info_dict["pixel_size"].append(self._DS[i].px_size)
             info_dict["subdir"].append(self._DS[i].path)
-        self.img_info = pd.DataFrame.from_dict(data=info_dict, orient="columns")
+        self.img_info = pd.DataFrame.from_dict(
+            data=info_dict, orient="columns"
+        )
         logger.info(
             f"{str(self)} Succesfully appended DataSets: "
             f"{str([str(i) for i in self._DS])}"
@@ -231,14 +267,13 @@ class Manager:
         if self.batch_res_pDF.empty:
             self.generate_pTable()
         if PSD_space is None:
-            if self._PSD_space.size == 0:
+            if self._PSD_space is None:
                 self.set_PSD_space()
             PSD_space = self._PSD_space
         # print(self.batch_res_pDF.D)
         # print(self._PSD_space)
         cut = pd.cut(self.batch_res_pDF.D, bins=PSD_space, include_lowest=True)
         self.batch_res_PSD = pd.value_counts(cut, sort=False)
-
         lefts = []
         mids = []
         rights = []
@@ -475,7 +510,7 @@ class Manager:
         # TODO: batch_res_<specifier> logic needs to be reordered / redesigned
         # self.batch_res_DSsummary may be None at this point
         DSsumm = self.batch_res_DSsummary
-        summ = pd.DataFrame()# self.batch_res_summary
+        summ = pd.DataFrame()  # self.batch_res_summary
         if len(DSsumm.index) == 0:
             self.generate_DSsummary()
         summ = summ.reindex_like(DSsumm)
@@ -778,6 +813,28 @@ class Manager:
 
     def set_PSD_space(self):
         s = self._settings["analysis"]["PSD_space"]
+
+        space = []
+
+        if s is None:
+            # set PSD space automatically
+            dmin = self.get_min_pD()
+            dmax = self.get_max_pD()
+            start = get_floor(dmin)
+            end = get_ceil(dmax)
+            space = PSD_space(
+                start=start,
+                end=end,
+                periods=20,
+                log=False,
+                step=False,
+            )
+        else:
+            space = PSD_space(**s)
+        return space
+
+    def set_PSD_space_old(self):
+        s = self._settings["analysis"]["PSD_space"]
         log = self._settings["analysis"]["PSD_space_log"]
 
         space = []
@@ -834,8 +891,13 @@ class Manager:
         self._PSD_space = space
         return space
 
-
     # ----------- dunder methods
+    def __getitem__(self, key):
+        return self._DS[key]
+
+    def __iter__(self):
+        yield from self._DS
+
     def __repr__(self):
         class_name = type(self).__name__
         repr_str = (
@@ -848,17 +910,39 @@ class Manager:
         return f"<M({self.name})#{self._shortID}>"
 
 
-def PSD_space(start=0, end=10, periods=20, log=False, step=False):
-    if log == True:
-        bins_arr = np.logspace(
-            int(np.floor(np.log10(start))),
-            int(np.ceil(np.log10(end))),
-            periods + 1,
-        )
-    elif step == True:
-        bins_arr = np.arange(start, end + periods, periods)
+def PSD_space(
+    start: float = 0.0,
+    end: float = 10e-6,
+    periods: int | float = 20,
+    log: bool = False,
+    step: bool = False,
+):
+    if log:
+        # Ensure that start and end are positive for logarithmic space
+        if start <= 0 or end <= 0:
+            raise ValueError(
+                "Start and end must be positive for logarithmic scaling."
+            )
+
+        # Convert start and end to logarithmic space
+        log_start = np.log10(start)
+        log_end = np.log10(end)
+
+        if step:
+            # Generate bins in logarithmic space using the given step
+            bins_arr = 10 ** np.arange(log_start, log_end + periods, periods)
+        else:
+            # Generate bins with equal number of divisions in logarithmic space
+            periods = int(periods)
+            bins_arr = np.logspace(log_start, log_end, num=periods + 1)
     else:
-        bins_arr = np.linspace(start, end, periods + 1)
+        if step:
+            # Divide the diameter space by defined step size
+            bins_arr = np.arange(start, end + periods, periods, dtype=float)
+        else:
+            # Divide the diameter space by the number of steps, infer step size
+            periods = int(periods)
+            bins_arr = np.linspace(
+                start=start, stop=end, num=periods + 1, dtype=float
+            )
     return bins_arr
-
-
