@@ -8,19 +8,17 @@ data:
     HCT_file: auto
     magnification: auto
     pixel_size: auto
-    Dmin: 3
-    Dmax: 250
-    Dspace:
+    crop_ratio: 0.0
+    median_blur: 3
+    d_min:
     - 3
+    - 50
+    d_max:
     - 50
     - 140
     dist2R: 0.5
-    param1:
-    - 220
-    - 270
-    param2:
-    - 14
-    - 24
+    param1: 200
+    param2: 15
     additional_info: null
   images:
     D7-017:
@@ -34,12 +32,7 @@ data:
       img_file: D7-021.tif
   exclude_images: []
 analysis:
-  PSD_space:
-  - 0
-  - 10
-  - step
-  - auto
-  PSD_space_log: false
+  PSD_space: null
   collector_threshold: 0.5
 export:
   draw_particles:

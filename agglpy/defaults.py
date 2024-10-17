@@ -1,5 +1,5 @@
 # Type definitions for type checking
-from typing import Any, Literal, Tuple, Mapping, Union
+from typing import Any, List, Literal, Tuple, Mapping, Union
 
 import numpy as np
 
@@ -7,13 +7,22 @@ from agglpy.typing import (
     ImageSettingsTypedDict,
     ImageRawSettingsTypedDict,
     YamlRawSettingsTypedDict,
-    PPSouceCsvType
+    PPSouceCsvType,
+    PreprocessFunction,
+    HctParameter,
 )
 
 # General defaults
 SUPPORTED_IMG_FORMATS: set[str] = {"tif"}
 DEFAULT_SETTINGS_FILENAME: str = "settings.yml"
-
+PREPROCESS_FUNCTIONS: Tuple[PreprocessFunction] = ("median_blur",)
+HCT_PARAMETERS: List[HctParameter] = [
+    "d_min",
+    "d_max",
+    "dist2R",
+    "param1",
+    "param2",
+]
 
 # Settings defaults
 DEFAULT_SETTINGS: YamlRawSettingsTypedDict = {
@@ -25,23 +34,22 @@ DEFAULT_SETTINGS: YamlRawSettingsTypedDict = {
         "default": {
             "img_file": "auto",
             "HCT_file": "auto",
-            # "correction_file": "auto",
             "magnification": "auto",
-            "pixel_size": "auto", 
-            "Dmin": 3,
-            "Dmax": 250,
-            "Dspace": [3, 50, 140],
+            "pixel_size": "auto",
+            "crop_ratio": 0.0,
+            "median_blur": 3,
+            "d_min": [3, 50],
+            "d_max": [50, 140],
             "dist2R": 0.5,
-            "param1": [220, 270],
-            "param2": [14, 24],
+            "param1": 200,
+            "param2": 15,
             "additional_info": None,
         },
         "images": {},
         "exclude_images": [],
     },
     "analysis": {
-        "PSD_space": [0, 10, "step", "auto"],
-        "PSD_space_log": False,
+        "PSD_space": None,
         "collector_threshold": 0.5,
     },
     "export": {
@@ -54,15 +62,15 @@ DEFAULT_SETTINGS: YamlRawSettingsTypedDict = {
 DEFAULT_IMAGE_SETTINGS_VALUES: ImageRawSettingsTypedDict = {
     "img_file": "",
     "HCT_file": "",
-    # "correction_file": "",
     "magnification": "auto",
-    "pixel_size": "auto", 
-    "Dmin": None,
-    "Dmax": None,
-    "Dspace": [3, 50, 140],
+    "pixel_size": "auto",
+    "crop_ratio": 0.0,
+    "median_blur": 3,
+    "d_min": [3, 50],
+    "d_max": [50, 140],
     "dist2R": 0.5,
-    "param1": [220, 270],
-    "param2": [14, 24],
+    "param1": 200,
+    "param2": 15,
     "additional_info": None,
 }
 
@@ -71,19 +79,31 @@ DEFAULT_IMAGE_SETTINGS_VALUES: ImageRawSettingsTypedDict = {
 DEFAULT_IMAGE_SETTINGS_SCHEMA: Mapping[str, Any] = {
     "img_file": (str, type(None)),
     "HCT_file": (str, type(None)),
-    # "correction_file": (str, type(None)),
     "magnification": (int, float, str),
-    "pixel_size": (int, float, str), 
-    "Dmin": (int, float, type(None)),
-    "Dmax": (int, float, type(None)),
-    "Dspace": list,
-    "dist2R": (int, float),
-    "param1": list,
-    "param2": list,
+    "pixel_size": (int, float, str),
+    "crop_ratio": float,
+    "median_blur": (int, type(None)),
+    "d_min": (list, int),
+    "d_max": (list, int),
+    "dist2R": (list, float),
+    "param1": (list, float, int),
+    "param2": (list, float, int),
     "additional_info": (str, type(None)),
 }
 
+PSD_SPACE_SCHEMA: Mapping[str, Any] = {
+    "start": float,
+    "end": float,
+    "periods": (int, float),
+    "log": bool,
+    "step": bool,
+}
+
+
+# Main settings schema used for validation
 DEFAULT_SETTINGS_SCHEMA: Mapping[str, Any] = {
+    # TODO: change validation system, using this schema does not check 
+    #       internal dicts
     "general": {
         "working_dir": str,
     },
@@ -96,8 +116,7 @@ DEFAULT_SETTINGS_SCHEMA: Mapping[str, Any] = {
         "exclude_images": list,
     },
     "analysis": {
-        "PSD_space": list,
-        "PSD_space_log": bool,
+        "PSD_space": (type(None), dict),
         "collector_threshold": (int, float),
     },
     "export": {
@@ -108,36 +127,37 @@ DEFAULT_SETTINGS_SCHEMA: Mapping[str, Any] = {
     },
 }
 
-# Valid Particle data CSV files structure 
+
+# Valid Particle data CSV files structure
 ValidParticleCsvType = Mapping[
     PPSouceCsvType,
     # Mapping[
     #     str,
     #     Union[Tuple[type, ...], type],
     # ],
-    Tuple[str, ...]
+    Tuple[str, ...],
 ]
 # VALID_PARTICLE_CSV_TYPE: set[str] = {"agglpy", "ImageJ"}
 VALID_PARTICLE_CSV_DATA: ValidParticleCsvType = {
     "agglpy": (
         "ID",
-        "X",#: (np.int_, np.float_),
-        "Y",#: (np.int_, np.float_),
-        "R",#: (np.int_, np.float_),
+        "X",  #: (np.int_, np.float_),
+        "Y",  #: (np.int_, np.float_),
+        "R",  #: (np.int_, np.float_),
     ),
     "ImageJ": (
-        "Index",#: np.int_,
-        "Type",#: str,
-        "X",#: (np.int_, np.float_),
-        "Y",#: (np.int_, np.float_),
-        "Width",#: (np.int_, np.float_),
-        "Height",#: (np.int_, np.float_),
+        "Index",  #: np.int_,
+        "Type",  #: str,
+        "X",  #: (np.int_, np.float_),
+        "Y",  #: (np.int_, np.float_),
+        "Width",  #: (np.int_, np.float_),
+        "Height",  #: (np.int_, np.float_),
     ),
     "agglpy_old": (
         "ID",
-        "X (pixels)",#: (np.int_, np.float_),
-        "Y (pixels)",#: (np.int_, np.float_),
-        "Radius (pixels)",#: (np.int_, np.float_),
+        "X (pixels)",  #: (np.int_, np.float_),
+        "Y (pixels)",  #: (np.int_, np.float_),
+        "Radius (pixels)",  #: (np.int_, np.float_),
     ),
 }
 

@@ -36,34 +36,39 @@ def RGB_shader(
     return wcol
 
 
-def isdefault(input: Any) -> bool:
-    c1: bool = input is None
-    c2: bool = txt_isdefault(input)
-    c3: bool = txt_isnone(input)
-    c4: bool = txt_isempty(input)
+def txt_is_default_or_none(txt: str) -> bool:
+    c1: bool = txt is None
+    c2: bool = txt_is_default(txt)
+    c3: bool = txt_is_none(txt)
+    c4: bool = txt_is_empty(txt)
     return c1 or c2 or c3 or c4
 
+def txt_is_none_plus(txt: str) -> bool:
+    c1: bool = txt is None
+    c2: bool = txt_is_none(txt)
+    c3: bool = txt_is_empty(txt)
+    return c1 or c2 or c3
 
-def txt_istrue(txt: str) -> bool:
-    accepted_strings = ["true", "1", "t", "y", "yes", "yeah", "yup"]
+def txt_is_true(txt: str) -> bool:
+    accepted_strings = {"true", "1", "t", "y", "yes", "yeah", "yup"}
     return txt in accepted_strings
 
 
-def txt_isdefault(txt: str) -> bool:
-    accepted_strings = ["default", "auto", "normal"]
+def txt_is_default(txt: str) -> bool:
+    accepted_strings = {"default", "auto", "normal"}
     return txt in accepted_strings
 
 
-def txt_isnone(txt: str) -> bool:
-    accepted_strings = ["none", "null", "nan"]
+def txt_is_none(txt: str) -> bool:
+    accepted_strings = {"none", "null", "nan"}
     return txt in accepted_strings
 
 
-def txt_isempty(txt: str) -> bool:
+def txt_is_empty(txt: str) -> bool:
     return txt == ""
 
 
-def txt_isnumber(string: str) -> bool:
+def txt_is_number(string: str) -> bool:
     try:
         float(string)
         return True
@@ -109,3 +114,70 @@ def read_tiff_tags(file: os.PathLike) -> dict:
             name, value = tag.name, tag.value
             tif_tags[name] = value
     return tif_tags
+
+
+
+def get_floor(val: float, order: bool = True) -> float:
+    """Get the floor value of a number based on order of magnitude.
+
+    When `order` is True, the function returns the floor of the closest order 
+    of magnitude.
+    When `order` is False, the function rounds down to the closest value in the
+      same order of magnitude.
+
+    Args:
+        val (float): The input value to compute the floor for.
+        order (bool, optional): If True, computes based on order of magnitude. 
+            If False, rounds down to the nearest number in the same magnitude. 
+            Defaults to True.
+
+    Raises:
+        ValueError: If the input value is zero.
+
+    Returns:
+        float: The computed floor value based on the input and order.
+    """
+    if val == 0:
+        raise ValueError("Value must be non-zero.")
+    if order:
+        # Compute the log10 of the absolute value to handle both positive 
+        # and negative numbers
+        log_val: float = np.log10(abs(val))
+        log_floor: float = np.floor(log_val)
+        return 10 ** log_floor
+    else:
+        # Get the order of magnitude (e.g., for 512 it will be 100)
+        magnitude: float = 10 ** np.floor(np.log10(abs(val)))
+        return np.floor(val / magnitude) * magnitude
+
+
+def get_ceil(val: float, order: bool = True) -> float:
+    """Get the ceiling value of a number based on order of magnitude
+
+    When `order` is True, the function returns the ceiling of the closest order
+    of magnitude.
+    When `order` is False, the function rounds up to the closest value in the 
+    same order of magnitude.
+
+    Args:
+        val (float): The input value to compute the ceiling for.
+        order (bool, optional): If True, computes based on order of magnitude. 
+            If False, rounds up to the nearest number in the same magnitude. 
+            Defaults to True.
+
+    Raises:
+        ValueError: If the input value is zero.
+
+    Returns:
+        float: The computed ceiling value based on the input and order.
+    """
+    if val == 0:
+        raise ValueError("Value must be non-zero.")
+    if order:
+
+        log_val: float = np.log10(abs(val))
+        log_ceil: float = np.ceil(log_val)
+        return 10 ** log_ceil
+    else:
+        magnitude: float = 10 ** np.floor(np.log10(abs(val)))
+        return np.ceil(val / magnitude) * magnitude
