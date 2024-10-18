@@ -3,11 +3,15 @@ import shutil
 from pathlib import Path
 from typing import List, Optional
 
-from agglpy.cfg import (DEFAULT_SETTINGS_FILENAME, SUPPORTED_IMG_FORMATS,
-                        create_settings, find_valid_settings,
-                        load_manager_settings)
+from agglpy.cfg import (
+    create_settings,
+    find_valid_settings,
+    load_manager_settings,
+)
+from agglpy.defaults import DEFAULT_SETTINGS_FILENAME, SUPPORTED_IMG_FORMATS
 from agglpy.errors import DirectoryStructureError, SettingsStructureError
 from agglpy.logger import logger
+from agglpy.typing import YamlSettingsTypedDict
 
 
 def init_mgr_dirstruct(
@@ -68,8 +72,6 @@ def init_mgr_dirstruct(
         raise DirectoryStructureError(
             "Settings structure incorrect. Initialization failed."
         ) from err
-    # TODO: add logic to check if every image specified in settings is ready to
-    # be placed in images directory
     images = settings["data"]["images"]
     images_dir = wdir / "images"
     # ensure that source image exists
@@ -92,7 +94,7 @@ def init_mgr_dirstruct(
             logger.debug(f"Image file: {img_file} copied to {img_dst.parent}")
 
 
-def is_mgr_dirstruct(path: str) -> bool:
+def is_mgr_dirstruct(path: os.PathLike) -> bool:
     """Check if <path> has valid directory structure
 
     Valid directory structure comprise:
@@ -116,7 +118,7 @@ def is_mgr_dirstruct(path: str) -> bool:
         return True
 
 
-def validate_mgr_dirstruct(path: str):
+def validate_mgr_dirstruct(path: os.PathLike):
     """Check if <path> has valid directory structure
 
     Valid directory structure comprise:
@@ -133,13 +135,13 @@ def validate_mgr_dirstruct(path: str):
         bool: True if directory structure is correct.
     """
     # Check if settings file is in directory
-    wdir = Path(path)
-    valid_files = find_valid_settings(wdir)
+    wdir: Path = Path(path)
+    valid_files: List[Path] = find_valid_settings(wdir)
     if len(valid_files) == 0:
         raise DirectoryStructureError(
             f"Valid settings file was not fount at {path}. To check "
-            f"if settings are valid use: agglpy.cfg.is_valid_settings_err "
-            f"and check the error message."
+            f"if settings are valid try to load it manually using: "
+            f"agglpy.cfg.load_manager_settings() and check the error message."
         ) from FileNotFoundError
     elif len(valid_files) > 1:
         raise DirectoryStructureError(
@@ -161,8 +163,8 @@ def validate_mgr_dirstruct(path: str):
 
 
 def find_datasets_paths(
-    path: str,
-    settings: dict,
+    path: os.PathLike,
+    settings: YamlSettingsTypedDict,
     ignore: bool = True,
 ) -> List[Path]:
     """Detect Image Data Sets in directory structure
@@ -183,8 +185,8 @@ def find_datasets_paths(
             structure.
     """
 
-    wdir = Path(path)
-    DSpaths = []
+    wdir: Path = Path(path)
+    DSpaths: List[Path] = []
     ignore_list = []
     if ignore:
         ignore_list = settings["data"]["exclude_images"]
@@ -194,7 +196,7 @@ def find_datasets_paths(
     images = settings["data"]["images"]
     for i in images:
         if i not in ignore_list:
-            img_dir = DS_main_dir / Path(images[i]["img_file"]).stem
+            img_dir = DS_main_dir / i #Path(images[i]["img_file"]).stem
             if not img_dir.exists():
                 raise DirectoryStructureError(
                     f"Image Data Set directory {repr(img_dir)} not found"
@@ -205,7 +207,7 @@ def find_datasets_paths(
                 # If img_file in settings is without extension
                 # find images with supported extensions
                 if img_file.suffix == "":
-                    img_list = []
+                    img_list: List[Path] = []
                     # Iterate over the supported extensions
                     for ext in SUPPORTED_IMG_FORMATS:
                         # Search for files with the specified name and extension

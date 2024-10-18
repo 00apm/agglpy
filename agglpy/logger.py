@@ -55,7 +55,7 @@ ENDPOINT_DEFAULT_LOGGER_CONFIG = {
 
 def setup_notebook_logger(
     log_cfg_path: Path = Path("./.agglpy/log/logger_config.yml"),
-    logs_path: Path = Path("./.agglpy/log/agglpy.log"),
+    log_path: Path = Path("./.agglpy/log/agglpy.log"),
 ) -> None:
     """
     Setup a logger for the jupyter notebook environment.
@@ -83,10 +83,10 @@ def setup_notebook_logger(
         config = ENDPOINT_DEFAULT_LOGGER_CONFIG
 
         # Set the log filename
-        if logs_path.is_dir():
-            logs_path = logs_path / "agglpy.log"
+        if log_path.is_dir():
+            log_path = log_path / "agglpy.log"
            
-        config["handlers"]["file"]["filename"] = str(logs_path)
+        config["handlers"]["file"]["filename"] = str(log_path)
 
         with open(log_cfg_path, "w") as file:
             yaml.dump(
@@ -97,7 +97,7 @@ def setup_notebook_logger(
                 allow_unicode=True,
             )       
 
-    logs_path.parent.mkdir(parents=True, exist_ok=True) 
+    log_path.parent.mkdir(parents=True, exist_ok=True) 
     # Apply the configuration
     try:
         logging.config.dictConfig(config)

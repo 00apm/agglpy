@@ -40,41 +40,44 @@ def expected_valid_config():
             "default": {
                 "img_file": "auto",
                 "HCT_file": "auto",
-                "correction_file": "auto",
                 "magnification": "auto",
-                "Dmin": None,
-                "Dmax": None,
-                "Dspace": [3, 50, 140],
+                "pixel_size": "auto",
+                "crop_ratio": 0.0,
+                "median_blur": 3,
+                "d_min": [3, 50],
+                "d_max": [50, 140],
                 "dist2R": 0.5,
-                "param1": [220, 270],
-                "param2": [14, 24],
+                "param1": 200,
+                "param2": 15,
                 "additional_info": None,
             },
             "images": {
                 "D7-017": {
                     "img_file": "D7-017.tif",
                     "HCT_file": "D7-017_HCT.csv",
-                    "correction_file": "D7-017_HCT.csv",
                     "magnification": "auto",
-                    "Dmin": None,
-                    "Dmax": None,
-                    "Dspace": [3, 50, 140],
+                    "pixel_size": "auto",
+                    "crop_ratio": 0.0,
+                    "median_blur": 3,
+                    "d_min": [3, 50],
+                    "d_max": [50, 140],
                     "dist2R": 0.5,
-                    "param1": [220, 270],
-                    "param2": [14, 24],
+                    "param1": 200,
+                    "param2": 15,
                     "additional_info": None,
                 },
                 "D7-019": {
                     "img_file": "D7-019-modified.tif",
                     "HCT_file": "D7-019_HCT.csv",
-                    "correction_file": "D7-019_HCT.csv",
                     "magnification": "auto",
-                    "Dmin": None,
-                    "Dmax": None,
-                    "Dspace": [3, 50, 140],
+                    "pixel_size": "auto",
+                    "crop_ratio": 0.0,
+                    "median_blur": 3,
+                    "d_min": [3, 50],
+                    "d_max": [50, 140],
                     "dist2R": 0.5,
-                    "param1": [220, 270],
-                    "param2": [14, 24],
+                    "param1": 200,
+                    "param2": 15,
                     "additional_info": None,
                 },
             },
@@ -84,8 +87,13 @@ def expected_valid_config():
             ],
        },
         "analysis": {
-            "PSD_space": [0, 10, "step", "auto"],
-            "PSD_space_log": False,
+            "PSD_space": {
+                "start": 0.0,
+                "end": 20.0,
+                "periods": 20,
+                "log": True,
+                "step": False,
+            },
             "collector_threshold": 0.5,
         },
         "export": {
@@ -105,7 +113,9 @@ def expected_valid_config_processed(expected_valid_config):
     config = expected_valid_config
     config["data"]["images"]["D7-017"]["magnification"] = None
     config["data"]["images"]["D7-019"]["magnification"] = None
-    config["analysis"]["PSD_space"][-1] = None
+    config["data"]["images"]["D7-017"]["pixel_size"] = None
+    config["data"]["images"]["D7-019"]["pixel_size"] = None
+
     return config
 
 
@@ -116,7 +126,7 @@ def model_IA(case_dir):
 
 @pytest.fixture
 def manager_obj_not_init(input_multi_raw_wdir):
-    return Manager(input_multi_raw_wdir, initialize=False)
+    return Manager(input_multi_raw_wdir, init_data_sets=False)
 
 @pytest.fixture
 def manager_obj(input_multi_raw_wdir):

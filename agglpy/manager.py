@@ -1,107 +1,112 @@
 import os
 import uuid
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
+import warnings
 
-import matplotlib as mpl
-import matplotlib.pyplot as plt
+import matplotlib as mpl  # type: ignore
+import matplotlib.pyplot as plt  # type: ignore
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 from tqdm import tqdm
 
-from agglpy.cfg import SUPPORTED_IMG_FORMATS, load_manager_settings
+from agglpy.auxiliary import (
+    get_ceil,
+    get_floor,
+)
+from agglpy.cfg import load_manager_settings
+from agglpy.defaults import SUPPORTED_IMG_FORMATS
 from agglpy.dir_structure import find_datasets_paths, validate_mgr_dirstruct
 from agglpy.errors import DirectoryStructureError, MultipleFilesFoundError
 from agglpy.img_ds import ImgDataSet
-from agglpy.img_process import HCTcv, HCTcv_multi
 from agglpy.logger import logger
+from agglpy.typing import YamlSettingsTypedDict
 
 
 class Manager:
     """
     description
 
-    Parameters
-    ----------
-    param1 :
-        desc
-    param2 : int, optional
+
 
     """
 
+    # Public attributes
+    name: str
+    collector_threshold: float | None
+
+    img_info: pd.DataFrame | None
+    batch_res_pDF: pd.DataFrame | None
+    batch_res_aglDF: pd.DataFrame | None
+    batch_res_PSD: pd.DataFrame | None
+    batch_res_DSsummary: pd.DataFrame | None
+    batch_res_summary: pd.DataFrame | None
+
+    # Private attributes
+    _ID: uuid.UUID
+    _shortID: str
+    _workdir: Path
+    _settings_path: Path
+    _settings: YamlSettingsTypedDict
+    _DS_paths: List[Path]
+    _DS: List[ImgDataSet]  # Used to store ImgDataSet opjects
+    _PSD_space: npt.NDArray | None
+
     def __init__(
         self,
-        working_dir: Path,
-        name: Optional[str] = None,
+        working_dir: os.PathLike,
+        name: str | None = None,
         settings_filepath: Path = Path("settings.yml"),
-        initialize: bool = True,
+        init_data_sets: bool = True,
     ):
-
-        self._ID = uuid.uuid4()
-        self._shortID = str(self._ID).split("-")[0]
-        self._workdir: Path = Path(working_dir)  # Working directory
-        if name is None:
+        # Initialize attributes directly related to constructor arguments
+        self._workdir = Path(
+            working_dir
+        )  # used for immutable @property working_dir
+        if not name:
             self.name = self._workdir.name
         else:
             self.name = name
+        self._ID = uuid.uuid4()
+        self._shortID = str(self._ID).split("-")[0]
+        if not settings_filepath.is_absolute():  # Settings path
+            self._settings_path = self._workdir / settings_filepath
+        else:
+            self._settings_path = settings_filepath
+
+        # Initialize public attributes
+        self.collector_threshold = None
+
+        # Initialize public result DataFrames
+        self.img_info = None
+        self.batch_res_pDF = None
+        self.batch_res_aglDF = None
+        self.batch_res_PSD = None
+        self.batch_res_DSsummary = None
+        self.batch_res_summary = None
+
+        # Initialize private attributes
+        self._DS_paths = []
+        self._DS = []
+        self._PSD_space = None
+
         logger.info(f"Creating Manager object {str(self)} at: {working_dir}.")
 
-        if not settings_filepath.is_absolute():  # Settings path
-            self._settings_path: Path = self._workdir / settings_filepath
-        else:
-            self._settings_path: Path = settings_filepath
-        validate_mgr_dirstruct(self._workdir)
-        # Loading settings file
+        try:
+            validate_mgr_dirstruct(self._workdir)
+        except DirectoryStructureError as err:
+            logger.error(msg=err.args[0])
+            raise err
+
+        # Load settings file
         self._settings = load_manager_settings(path=self._settings_path)
-        self.collector_threshold: float = self._settings["analysis"][
+        self.collector_threshold = self._settings["analysis"][
             "collector_threshold"
         ]
 
-        if initialize:
-
-            # Defining directories to work with
-            # TO DO: first check directory structure
-            # and then iterate over datsets
-            self._DS_paths = find_datasets_paths(
-                path=self._workdir,
-                settings=self._settings,
-                ignore=True,
-            )
-
-            # Constructing DataSets (ImgAgl objects) for analysis
-            # and creating IMG_INFO table
-            self._DS = []
-            self.img_info = pd.DataFrame()
-            logger.debug(f"{str(self)} Creating ImgDataSet objects.")
-            for i, path in enumerate(self._DS_paths):
-                self._DS.append(
-                    ImgDataSet(
-                        path.parent,
-                        settings=self._settings["data"]["images"][path.stem],
-                    )
-                )
-
-                self.img_info.loc[i, "img_name"] = self._DS[
-                    i
-                ].get_img_filename()
-                self.img_info.loc[i, "magnification"] = self._DS[i].mag
-                self.img_info.loc[i, "pixel size [um]"] = self._DS[i].scf
-                self.img_info.loc[i, "subdir"] = (
-                    os.path.basename(self._workdir)
-                    + os.sep
-                    + os.path.basename(path)
-                )
-            logger.info(
-                f"{str(self)} Succesfully appended DataSets: "
-                f"{str([str(i) for i in self._DS])}"
-            )
-
-            self.batch_res_pDF = pd.DataFrame()
-            self.batch_res_aglDF = pd.DataFrame()
-            self.batch_res_PSD = pd.DataFrame()
-            self.batch_res_DSsummary = pd.DataFrame()
-            self.batch_res_summary = pd.DataFrame()
-            self._PSD_space = np.array([])
+        if init_data_sets:
+            self.create_image_data_sets()
         logger.info(
             f"{str(self)} Manager object was successfully created at {str(self.working_dir)}"
         )
@@ -118,11 +123,38 @@ class Manager:
         """
         return self._workdir
 
-    def batch_detect_circles(self, export_img):
+    def batch_detect_primary_particles(self, force: bool = False):
+        if force:
+            # process all ImgDataSets and overwrite the results
+            ds_process = self._DS
+        else:
+            # process only ImgDataSets without available particle csv data
+            ds_process = [ds for ds in self._DS if not ds._PPsource_flag]
+        if len(ds_process) == 0:
+            wmsg = (
+                f"All of the ImgDataSets already have loaded primary particles "
+                f"source file. Detection is not needed. Check the 'HCT_file' "
+                f"key in settings.data.images if some of the data sets still "
+                f"need detection. Otherwise you may want to force "
+                f"the detection using force=True, but this will overwrite "
+                f"the existing results."
+            )
+            warnings.warn(wmsg)
+            logger.warning(wmsg)
+        else:
+            for ds in ds_process:
+                ds.detect_primary_particles(
+                    export_img=True,
+                    export_csv=True,
+                    export_edges=True,
+                )
+            logger.info(
+                f"Primary particles detected for ImgDataSets: "
+                f"{[str(ds) for ds in ds_process]}. CSV file and images were "
+                f"exported to respective ImgDataSet directory"
+            )
 
-        pass
-
-    def batch_analysis(self, export_img=True):
+    def batch_detect_agglomerates(self, export_img=True):
         """
         Method for batch analysis of SEM photo and circle fitting data
         from folder structure
@@ -141,10 +173,10 @@ class Manager:
             desc0 = "Processing DataSet|" + i.name + "| "
             pbar1.update(0)
             pbar1.set_description(desc0 + "- finding agglomerates...")
-            i.find_agglomerates()
+            i.detect_agglomerates()
             pbar1.update(0)
             pbar1.set_description(desc0 + "- classifying agglomerates...")
-            i.clasify_all_AGL(self.collector_threshold)
+            i.classify_all_AGL(self.collector_threshold)
             pbar1.update(0)
             if export_img == True:
                 pbar1.set_description(desc0 + "- drawing agglomerates...")
@@ -156,6 +188,44 @@ class Manager:
                 pbar1.update(0)
         pbar1.close()
         logger.info(f"{str(self)} Analysis for all DataSets finished.")
+
+    def create_image_data_sets(self, auto_load: bool = True) -> None:
+        self._DS_paths = find_datasets_paths(
+            path=self._workdir,
+            settings=self._settings,
+            ignore=True,
+        )
+
+        # Constructing DataSets (ImgAgl objects) for analysis
+        # and filling IMG_INFO table
+        logger.debug(f"{str(self)} Creating ImgDataSet objects.")
+        info_dict: Dict[str, List[Any]] = {
+            "img_name": [],
+            "magnification": [],
+            "pixel_size": [],
+            "subdir": [],
+        }
+        for i, path in enumerate(self._DS_paths):
+            self._DS.append(
+                ImgDataSet(
+                    path.parent,
+                    settings=self._settings["data"]["images"][
+                        path.parent.stem
+                    ],
+                    auto_load=auto_load,
+                )
+            )
+            info_dict["img_name"].append(self._DS[i].get_img_filename())
+            info_dict["magnification"].append(self._DS[i].mag)
+            info_dict["pixel_size"].append(self._DS[i].px_size)
+            info_dict["subdir"].append(self._DS[i].path)
+        self.img_info = pd.DataFrame.from_dict(
+            data=info_dict, orient="columns"
+        )
+        logger.info(
+            f"{str(self)} Succesfully appended DataSets: "
+            f"{str([str(i) for i in self._DS])}"
+        )
 
     def generate_pTable(self):
         self.batch_res_pDF = pd.DataFrame()
@@ -197,14 +267,13 @@ class Manager:
         if self.batch_res_pDF.empty:
             self.generate_pTable()
         if PSD_space is None:
-            if self._PSD_space.size == 0:
+            if self._PSD_space is None:
                 self.set_PSD_space()
             PSD_space = self._PSD_space
         # print(self.batch_res_pDF.D)
         # print(self._PSD_space)
         cut = pd.cut(self.batch_res_pDF.D, bins=PSD_space, include_lowest=True)
         self.batch_res_PSD = pd.value_counts(cut, sort=False)
-
         lefts = []
         mids = []
         rights = []
@@ -425,6 +494,7 @@ class Manager:
         )
 
     def generate_DSsummary(self):
+        self.batch_res_DSsummary = pd.DataFrame()
         for i, ds in enumerate(self._DS):
             temp = ds.get_summary()
             temp["DS ID"] = ds.name
@@ -437,8 +507,10 @@ class Manager:
         logger.info(f"{str(self)} DataSets summary table created.")
 
     def generate_summary(self):
+        # TODO: batch_res_<specifier> logic needs to be reordered / redesigned
+        # self.batch_res_DSsummary may be None at this point
         DSsumm = self.batch_res_DSsummary
-        summ = self.batch_res_summary
+        summ = pd.DataFrame()  # self.batch_res_summary
         if len(DSsumm.index) == 0:
             self.generate_DSsummary()
         summ = summ.reindex_like(DSsumm)
@@ -741,6 +813,28 @@ class Manager:
 
     def set_PSD_space(self):
         s = self._settings["analysis"]["PSD_space"]
+
+        space = []
+
+        if s is None:
+            # set PSD space automatically
+            dmin = self.get_min_pD()
+            dmax = self.get_max_pD()
+            start = get_floor(dmin)
+            end = get_ceil(dmax)
+            space = PSD_space(
+                start=start,
+                end=end,
+                periods=20,
+                log=False,
+                step=False,
+            )
+        else:
+            space = PSD_space(**s)
+        return space
+
+    def set_PSD_space_old(self):
+        s = self._settings["analysis"]["PSD_space"]
         log = self._settings["analysis"]["PSD_space_log"]
 
         space = []
@@ -797,68 +891,13 @@ class Manager:
         self._PSD_space = space
         return space
 
-    # ----------- Manager internal methods
-
-    def _find_datasets_paths(self, ignore: bool = True):
-        """Detect Data Sets directory structure
-
-        Detect Data Sets in working directory. Data Set is an image that:
-        1)  is included in settings yaml at `.data.images`
-        2)  is placed in a separate directory at
-            working_directory/images/<image_name>
-
-        Args:
-            ignore (bool, optional): If True images listed in settings
-                at `.data.exclude_images`. Defaults to True.
-        """
-        DSpaths = []
-        ignore_list = []
-        if ignore:
-            ignore_list = self._settings["data"]["exclude_images"]
-
-        DS_main_dir = self._workdir / "images"
-
-        images = self._settings["data"]["images"]
-        for i in images:
-            if i not in ignore_list:
-                img_dir = DS_main_dir / Path(images[i]["img_file"]).stem
-                if img_dir.exists():
-                    img_file = img_dir / Path(images[i]["img_file"])
-
-                    # If img_file in settings is without extension
-                    # find images with supported extensions
-                    if img_file.suffix == "":
-                        img_list = []
-                        # Iterate over the supported extensions
-                        for ext in SUPPORTED_IMG_FORMATS:
-                            # Search for files with the specified name and extension
-                            img_list.extend(
-                                img_dir.glob(f"{img_file.name}.{ext}")
-                            )
-                        if len(img_list) > 1:
-                            raise MultipleFilesFoundError(
-                                filename=img_file.name,
-                                matches=img_list,
-                            )
-                        elif len(img_list) == 0:
-                            raise FileNotFoundError(
-                                f"File {img_file} not ",
-                                f"found in {img_dir}",
-                            )
-                        else:
-                            img_file = img_list[0]
-                            # update img_file in settings
-                            self._settings["data"]["images"][i][
-                                "img_file"
-                            ] = img_file.name
-
-                    DSpaths.append(img_file)
-
-                else:
-                    raise FileNotFoundError(f"Directory {img_dir} not found")
-        return DSpaths
-
     # ----------- dunder methods
+    def __getitem__(self, key):
+        return self._DS[key]
+
+    def __iter__(self):
+        yield from self._DS
+
     def __repr__(self):
         class_name = type(self).__name__
         repr_str = (
@@ -871,25 +910,39 @@ class Manager:
         return f"<M({self.name})#{self._shortID}>"
 
 
-def PSD_space(start=0, end=10, periods=20, log=False, step=False):
-    if log == True:
-        bins_arr = np.logspace(
-            int(np.floor(np.log10(start))),
-            int(np.ceil(np.log10(end))),
-            periods + 1,
-        )
-    elif step == True:
-        bins_arr = np.arange(start, end + periods, periods)
+def PSD_space(
+    start: float = 0.0,
+    end: float = 10e-6,
+    periods: int | float = 20,
+    log: bool = False,
+    step: bool = False,
+):
+    if log:
+        # Ensure that start and end are positive for logarithmic space
+        if start <= 0 or end <= 0:
+            raise ValueError(
+                "Start and end must be positive for logarithmic scaling."
+            )
+
+        # Convert start and end to logarithmic space
+        log_start = np.log10(start)
+        log_end = np.log10(end)
+
+        if step:
+            # Generate bins in logarithmic space using the given step
+            bins_arr = 10 ** np.arange(log_start, log_end + periods, periods)
+        else:
+            # Generate bins with equal number of divisions in logarithmic space
+            periods = int(periods)
+            bins_arr = np.logspace(log_start, log_end, num=periods + 1)
     else:
-        bins_arr = np.linspace(start, end, periods + 1)
+        if step:
+            # Divide the diameter space by defined step size
+            bins_arr = np.arange(start, end + periods, periods, dtype=float)
+        else:
+            # Divide the diameter space by the number of steps, infer step size
+            periods = int(periods)
+            bins_arr = np.linspace(
+                start=start, stop=end, num=periods + 1, dtype=float
+            )
     return bins_arr
-
-
-def find_suported_images(img_name: str, supported_ext: List[str], dir: Path):
-    matching_files = []
-
-    # Iterate over the supported extensions
-    for ext in SUPPORTED_IMG_FORMATS:
-        # Use glob to search for files with the specified name and extension
-        matching_files.extend(dir.glob(f"{img_name}{ext}"))
-    return matching_files

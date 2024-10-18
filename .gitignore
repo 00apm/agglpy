@@ -23,6 +23,7 @@ venv/
 
 # ignore tests output folder 
 agglpy/tests/output/
+agglpy/tests/profiling/
 
 # ignore pytest cache
 .pytest_cache/
