@@ -69,8 +69,9 @@ def HCT(
 ) -> pd.DataFrame:
     """Detect primary particles using opencv Hough Circle Transform
 
-    Detect primary particles in the image numpy NDArray.
-    Assumes that np.NDArray is a Grayscale image loaded via cv2.imread
+    Detect primary particles in the image (in opencv format - numpy NDArray)
+    Assumes that np.NDArray is a Grayscale image loaded via cv2.imread.
+
 
     Args:
         img (npt.NDArray): 8-bit, single-channel, grayscale input opencv image
@@ -107,13 +108,11 @@ def HCT(
     input_params = {
         "d_min": d_min,
         "d_max": d_max,
-        "dist2R": dist2R, 
-        "param1": param1, 
+        "dist2R": dist2R,
+        "param1": param1,
         "param2": param2,
     }
-    logger.debug(
-        f"Performing HCT with parameters: {input_params} ..."
-    ) 
+    logger.debug(f"Performing HCT with parameters: {input_params} ...")
     work_image = img
     circles = cv2.HoughCircles(
         img,
@@ -137,9 +136,7 @@ def HCT(
         circlesDF = pd.DataFrame([], columns=["X", "Y", "R"])
     else:
         circlesDF = pd.DataFrame(circles[0], columns=["X", "Y", "R"])
-    logger.debug(
-        f"HCT detected: {len(circlesDF.index)} primary particles."
-    )
+    logger.debug(f"HCT detected: {len(circlesDF.index)} primary particles.")
     # Displaying and exporting images
     if display_img == True or export_img == True:
         imgC = draw_particles(work_image, circlesDF)
@@ -186,7 +183,7 @@ def HCT_multi(
     d_min: List[int] | int,
     d_max: List[int] | int,
     dist2R: List[float] | float = 0.4,
-    param1: List[float | int] | float | int= 200,
+    param1: List[float | int] | float | int = 200,
     param2: List[float | int] | float | int = 15,
     export_img: bool = False,
     export_csv: bool = False,
@@ -194,7 +191,63 @@ def HCT_multi(
     export_namebase: str | None = None,
     export_dir: os.PathLike | None = None,
 ) -> pd.DataFrame:
+    """
+    Detect primary particles in a grayscale image using multiple Hough Circle
+    Transform (HCT) iterations with varying parameters.
 
+    This function applies the OpenCV Hough Circle Transform iteratively,
+    adjusting the particle diameter (d_min to d_max) and other HCT parameters
+    in multiple steps. It allows detection of particles of various sizes
+    within the image by dividing the diameter range into intervals, applying
+    HCT progressively for better accuracy.
+
+    The function can export visualizations (detected particles, edges) and
+    results to CSV, if specified.
+
+    Args:
+        img (npt.NDArray): Grayscale input image (8-bit single-channel) loaded
+            by OpenCV.
+        d_min (List[int] | int): Minimum particle diameters or a single value
+            broadcast to the largest parameter list.
+        d_max (List[int] | int): Maximum particle diameters or a single value
+            broadcast to the largest parameter list.
+        dist2R (List[float] | float, optional): Minimum distance between
+            detected particle centers, relative to d_max. Defaults to 0.4.
+        param1 (List[float | int] | float | int, optional): Higher threshold 
+            of the two passed to the Canny edge detector (the lower one is 
+            twice smaller). Defaults to 200.
+        param2 (List[float | int] | float | int, optional): Accumulator
+            threshold for the HCT detection stage (lower value = more false
+            positives).  Circles, corresponding to the larger accumulator 
+            values, will be returned first. Defaults to 15.
+        export_img (bool, optional): Whether to export images of detected
+            particles. Defaults to False.
+        export_csv (bool, optional): Whether to export the results as a CSV
+            file. Defaults to False.
+        export_edges (bool, optional): Whether to export images showing
+            detected edges. Defaults to False.
+        export_namebase (str | None, optional): Base filename for export files.
+            Defaults to None.
+        export_dir (os.PathLike | None, optional): Directory path for saving
+            export files. Defaults to None.
+
+    Returns:
+        pd.DataFrame: DataFrame containing coordinates (X, Y) and radii (R) of
+        detected particles.
+
+    Raises:
+        ValueError: If exporting is enabled but `export_namebase` or `export_dir`
+        is not provided.
+
+    Notes:
+        - Single numeric values for `d_min`, `d_max`, `dist2R`, `param1`, and
+          `param2` are broadcast to the size of the largest list provided among
+          them.
+        - Iteratively processes the image from smallest to largest particle
+          sizes based on the diameter range, joining the results in a single
+          DataFrame.
+    """
+    
     # Convert single number inputs to lists
     if isinstance(d_min, int):
         d_min = [d_min]
@@ -295,7 +348,7 @@ def HCT_multi(
             export_edges_path=edgepath,
         )
         df_list.append(buffDF)
-        
+
     circlesDF = pd.concat(df_list, ignore_index=True)
     logger.debug(
         f"Multiple HCT in total detected: {len(circlesDF.index)} primary particles."
