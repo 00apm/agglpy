@@ -1,8 +1,8 @@
 import os
 import uuid
+import warnings
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-import warnings
 
 import matplotlib as mpl  # type: ignore
 import matplotlib.pyplot as plt  # type: ignore
@@ -195,6 +195,7 @@ class Manager:
         # and filling IMG_INFO table
         logger.debug(f"{str(self)} Creating ImgDataSet objects.")
         info_dict: Dict[str, List[Any]] = {
+            "name": [],
             "img_name": [],
             "magnification": [],
             "pixel_size": [],
@@ -208,6 +209,7 @@ class Manager:
                     auto_load=auto_load,
                 )
             )
+            info_dict["name"].append(self._DS[i].name)
             info_dict["img_name"].append(self._DS[i].get_img_filename())
             info_dict["magnification"].append(self._DS[i].mag)
             info_dict["pixel_size"].append(self._DS[i].px_size)
@@ -864,8 +866,36 @@ class Manager:
         return space
 
     # ----------- dunder methods
-    def __getitem__(self, key) -> ImgDataSet:
-        return self._DS[key]
+    def __getitem__(
+            self, 
+            key: str | int, 
+            ) -> ImgDataSet:
+        if isinstance(key, str):
+            idx_list: List = self.img_info.index[
+                self.img_info.loc[:,"name"] == key
+                ].to_list()
+            if len(idx_list) == 0:
+                raise IndexError(
+                    f"ImgDataSet with name: '{str(key)}'"
+                    f" was not found."
+                    )
+            elif len(idx_list) > 1:
+                raise IndexError(
+                    f"Multiple ImgDataSet with name: '{str(key)}'"
+                    f" was found."
+                    )
+            else:
+                idkey: int = idx_list[0] 
+        elif isinstance(key, int):
+            idkey = key
+        else:
+            raise ValueError(
+                f"Manager can be indexed only by ImgDataSet name or ID."
+                f" Key of type {type(key)} was given."
+                )
+        return self._DS[idkey]
+        
+
 
     def __iter__(self) -> ImgDataSet:
         yield from self._DS
