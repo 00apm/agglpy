@@ -83,6 +83,7 @@ def init_mgr_dirstruct(
                 f"for {img} was not found in directory: {wdir}"
             ) from FileNotFoundError
     for img in images:
+        img_file: str = images[img]["img_file"]
         img_src = wdir / img_file
         img_dst = images_dir / str(img) / str(images[img]["img_file"])
         img_dst.parent.mkdir(parents=True, exist_ok=True)
