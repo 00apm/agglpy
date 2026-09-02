@@ -27,3 +27,8 @@ agglpy/tests/profiling/
 
 # ignore pytest cache
 .pytest_cache/
+
+# ignore agents help files
+AGENTS.md
+CLAUDE.md
+CLAUDE.local.md
