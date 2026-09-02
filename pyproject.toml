@@ -1,0 +1,70 @@
+[project]
+name = "agglpy"
+description = "A tool for primary particle and agglomerate detection on digital images"
+requires-python = ">=3.10.0"
+version = "0.3.0"
+authors = [{ name = "Artur Marchewicz", email = "amarchewicz@gmail.com" }]
+license = { text = "BSD-3-Clause" }
+readme = "README.md"
+dependencies = [
+    "numpy == 1.24.4",
+    "pandas == 2.0.3",
+    "opencv-python == 4.8.1.78",
+    "scipy == 1.10.1",
+    "scikit-image == 0.21.0",
+    "tifffile == 2022.8.12",
+    "matplotlib == 3.6.3",
+    "openpyxl == 3.1.5",
+    "pyyaml == 6.0.2",
+    "tqdm == 4.66.5",
+]
+
+[project.optional-dependencies]
+notebook = [
+    "ipykernel == 6.29.5",
+    "ipywidgets == 8.1.5",
+    "plotly == 5.16.1",
+    "python-kaleido == 0.2.1",
+]
+test = ["pytest == 8.3.3"]
+typing = [
+    "mypy == 1.11.2",
+    "pandas-stubs == 2.1.1.230928",
+    "types-pyyaml == 6.0.12.20240917",
+    "types-tqdm == 4.66.0.20240417",
+]
+lint = ["ruff == 0.7.0"]
+dist = ["tox == 4.21.0"]
+dev = ["agglpy[test,typing,lint,dist,notebook]"]
+
+[tool.ruff]
+# Same as Black.
+line-length = 88
+indent-width = 4
+
+# Assume Python 3.8
+target-version = "py38"
+
+respect-gitignore = true
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+[tool.ruff.lint]
+select = ["F", "E", "I", "ANN", "RUF"]
+fixable = ["ALL"]
+ignore = ["ANN101"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+disallow_untyped_defs = true
+
+[build-system]
+requires = ["setuptools==69"]
+build-backend = "setuptools.build_meta"
