@@ -18,6 +18,7 @@ class ImageSettingsTypedDict(TypedDict, total=False):
     pixel_size: Optional[Union[int, float]]
     crop_ratio: float
     median_blur: Optional[int]
+    rolling_ball: Optional[List[float | bool]]
     d_min: Union[List[int], int]
     d_max: Union[List[int], int]
     dist2R: Union[List[float], float]
@@ -38,6 +39,7 @@ ImageRawSettingsTypedDict = TypedDict(
         "pixel_size": Union[int, float, str],
         "crop_ratio": float,
         "median_blur": Optional[int],
+        "rolling_ball": Optional[List[float | bool]],
         "d_min": Union[List[int], int],
         "d_max": Union[List[int], int],
         "dist2R": Union[List[float], float],
@@ -98,5 +100,5 @@ class YamlRawSettingsTypedDict(TypedDict):
     export: ExportSettingsTypedDict
 
 PPSouceCsvType = Literal["agglpy", "ImageJ", "agglpy_old"]
-PreprocessFunction = Literal["median_blur",]
+PreprocessFunction = Literal["median_blur", "clahe", "rolling_ball"]
 HctParameter = Literal["d_min", "d_max", "dist2R", "param1", "param2"]

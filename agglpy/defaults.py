@@ -1,21 +1,24 @@
 # Type definitions for type checking
-from typing import Any, List, Literal, Tuple, Mapping, Union
+from typing import Any, List, Literal, Mapping, Tuple, Union
 
 import numpy as np
 
 from agglpy.typing import (
-    ImageSettingsTypedDict,
+    HctParameter,
     ImageRawSettingsTypedDict,
-    YamlRawSettingsTypedDict,
+    ImageSettingsTypedDict,
     PPSouceCsvType,
     PreprocessFunction,
-    HctParameter,
+    YamlRawSettingsTypedDict,
 )
 
 # General defaults
 SUPPORTED_IMG_FORMATS: set[str] = {"tif"}
 DEFAULT_SETTINGS_FILENAME: str = "settings.yml"
-PREPROCESS_FUNCTIONS: Tuple[PreprocessFunction] = ("median_blur",)
+PREPROCESS_FUNCTIONS: Tuple[PreprocessFunction] = (
+    "median_blur",
+    "rolling_ball",
+)
 HCT_PARAMETERS: List[HctParameter] = [
     "d_min",
     "d_max",
@@ -38,6 +41,7 @@ DEFAULT_SETTINGS: YamlRawSettingsTypedDict = {
             "pixel_size": "auto",
             "crop_ratio": 0.0,
             "median_blur": 3,
+            "rolling_ball": [50, True, True],
             "d_min": [3, 50],
             "d_max": [50, 140],
             "dist2R": 0.5,
@@ -66,6 +70,7 @@ DEFAULT_IMAGE_SETTINGS_VALUES: ImageRawSettingsTypedDict = {
     "pixel_size": "auto",
     "crop_ratio": 0.0,
     "median_blur": 3,
+    "rolling_ball": [50, True, True],
     "d_min": [3, 50],
     "d_max": [50, 140],
     "dist2R": 0.5,
@@ -83,6 +88,7 @@ DEFAULT_IMAGE_SETTINGS_SCHEMA: Mapping[str, Any] = {
     "pixel_size": (int, float, str),
     "crop_ratio": float,
     "median_blur": (int, type(None)),
+    "rolling_ball": (list, type(None)),
     "d_min": (list, int),
     "d_max": (list, int),
     "dist2R": (list, float),
@@ -102,7 +108,7 @@ PSD_SPACE_SCHEMA: Mapping[str, Any] = {
 
 # Main settings schema used for validation
 DEFAULT_SETTINGS_SCHEMA: Mapping[str, Any] = {
-    # TODO: change validation system, using this schema does not check 
+    # TODO: change validation system, using this schema does not check
     #       internal dicts
     "general": {
         "working_dir": str,

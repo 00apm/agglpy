@@ -6,15 +6,15 @@ Created on Thu Feb 27 09:04:44 2020
 """
 
 import os
+import warnings
 from pathlib import Path
 from typing import List, Tuple, cast
-import warnings
 
 import cv2  # type: ignore
-
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
+from skimage.restoration import rolling_ball as skimage_rolling_ball
 
 from agglpy.errors import SettingsStructureError
 from agglpy.logger import logger
@@ -31,17 +31,102 @@ def crop_img(image: npt.NDArray, ratio: float) -> npt.NDArray:
     return work_image
 
 
+def rolling_ball_substraction(
+    image: npt.NDArray,
+    radius: float,
+    light_background: bool = True,
+    do_presmooth: bool = True,
+) -> npt.NDArray:
+    """Subtract a rolling-ball estimated background from a grayscale image.
+
+    Wraps `skimage.restoration.rolling_ball`, reproducing the pre-existing
+    settings semantics: the background is estimated on a (optionally
+    presmoothed) copy of the image and then subtracted from that same copy.
+
+    Args:
+        image (npt.NDArray): 8-bit, single-channel grayscale image.
+        radius (float): Radius of the rolling ball used to estimate the
+            background. Larger values estimate a smoother, more global
+            background; smaller values follow local intensity variations
+            more closely.
+        light_background (bool, optional): Whether the image has a light
+            (bright) background with darker particles. When True, the ball
+            is rolled under the inverted image so it follows the bright
+            background instead of the dark particles. Defaults to True.
+        do_presmooth (bool, optional): Whether to apply a 3x3 mean blur
+            before estimating the background, reducing sensitivity to
+            per-pixel noise. Defaults to True.
+
+    Returns:
+        npt.NDArray: 8-bit background-subtracted image, same shape as
+            `image`.
+    """
+    logger.debug(
+        f"Applying Rolling Ball Background Substraction with parameters: "
+        f"radius={radius}, light_background={light_background}, "
+        f"do_presmooth={do_presmooth}"
+    )
+    smoothed = cv2.blur(image, (3, 3)) if do_presmooth else image
+    if light_background:
+        # background is computed on the inverted image so the ball rolls
+        # under the (originally bright) background instead of the particles
+        background = 255 - skimage_rolling_ball(255 - smoothed, radius=radius)
+    else:
+        background = skimage_rolling_ball(smoothed, radius=radius)
+    subtracted = np.clip(
+        np.round(smoothed.astype(np.float64) - background.astype(np.float64)),
+        0,
+        255,
+    ).astype(np.uint8)
+    logger.debug("Finished Background Substraction")
+    return subtracted
+
+
 def preprocess_img(
     image: npt.NDArray,
     median_blur: int | None = None,
     clahe: Tuple[float, float] | None = None,
+    rolling_ball: List[float | bool] | None = None,
+    image_show: bool = False,
+    image_export: bool = False,
 ) -> npt.NDArray:
-    work_image: npt.NDArray = image
+    from datetime import datetime
+    from pathlib import Path
+    
+    # Create export directory if needed
+    if image_export:
+        export_dir = Path("preprocessed")
+        export_dir.mkdir(exist_ok=True)
+        # Generate a timestamp for unique filenames
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    
+    def show_and_save(img: npt.NDArray, title: str, filename: str) -> None:
+        """Helper function to show and/or save images"""
+        if image_show:
+            cv2.imshow(title, img)
+            k = cv2.waitKey(0) & 0xff
+            if k == 27:  # ESC key
+                cv2.destroyAllWindows()
+            elif k == ord(' '):  # Space key
+                cv2.destroyAllWindows()
+        
+        if image_export:
+            filepath = export_dir / f"{timestamp}_{filename}"
+            cv2.imwrite(str(filepath), img)
+            logger.debug(f"Saved image to: {filepath}")
+    
+    work_image: npt.NDArray = image.copy()
+    
+    # Show/save original image
+    show_and_save(work_image, "before preprocess", "01_original.png")
+    
+    # Apply median blur
     if median_blur:
         logger.debug(f"Applying median blur with kernel size: {median_blur}")
-        work_image = cv2.medianBlur(image, median_blur)
-    else:
-        work_image = image
+        work_image = cv2.medianBlur(work_image, median_blur)
+        show_and_save(work_image, "after median blur", "02_median_blur.png")
+    
+    # Apply CLAHE
     if clahe:
         logger.debug(
             f"Applying CLAHE- Contrast Limited Adaptive Histogram Equalization"
@@ -49,6 +134,23 @@ def preprocess_img(
         )
         clahe_obj = cv2.createCLAHE(clipLimit=clahe[0], tileGridSize=clahe[1])
         work_image = clahe_obj.apply(work_image)
+        show_and_save(work_image, "after CLAHE", "03_clahe.png")
+    
+    # Apply rolling ball background subtraction
+    if rolling_ball:
+        show_and_save(work_image, "before BG sub", "04_before_bg_sub.png")
+        radius, light_background, do_presmooth = rolling_ball
+        work_image = rolling_ball_substraction(
+            work_image,
+            radius=radius,
+            light_background=light_background,
+            do_presmooth=do_presmooth,
+        )
+        show_and_save(work_image, "after BG sub", "05_after_bg_sub.png")
+    
+    if image_show:
+        cv2.destroyAllWindows()
+    
     return work_image
 
 
@@ -213,12 +315,12 @@ def HCT_multi(
             broadcast to the largest parameter list.
         dist2R (List[float] | float, optional): Minimum distance between
             detected particle centers, relative to d_max. Defaults to 0.4.
-        param1 (List[float | int] | float | int, optional): Higher threshold 
-            of the two passed to the Canny edge detector (the lower one is 
+        param1 (List[float | int] | float | int, optional): Higher threshold
+            of the two passed to the Canny edge detector (the lower one is
             twice smaller). Defaults to 200.
         param2 (List[float | int] | float | int, optional): Accumulator
             threshold for the HCT detection stage (lower value = more false
-            positives).  Circles, corresponding to the larger accumulator 
+            positives).  Circles, corresponding to the larger accumulator
             values, will be returned first. Defaults to 15.
         export_img (bool, optional): Whether to export images of detected
             particles. Defaults to False.
@@ -247,7 +349,7 @@ def HCT_multi(
           sizes based on the diameter range, joining the results in a single
           DataFrame.
     """
-    
+
     # Convert single number inputs to lists
     if isinstance(d_min, int):
         d_min = [d_min]
@@ -315,7 +417,6 @@ def HCT_multi(
             param2_arr,
         )
     ):
-
         imname = (
             f"{str(i + 1)}_{export_namebase}_D({str(dmin)}-{str(dmax)})"
             f"_p1({str(p1)})_p2({str(p2)})"
@@ -422,7 +523,6 @@ def draw_particles(
     particles: pd.DataFrame,
     color: npt.NDArray = np.array([100, 255, 100], dtype=np.uint8),
 ) -> npt.NDArray:
-
     alpha: float = 0.2
     work_image = image.copy()
     overlay = image.copy()
@@ -433,17 +533,13 @@ def draw_particles(
             f"Expected color to be an array of shape (3,), but got shape {color.shape}"
         )
     if not np.all((0 <= color) & (color <= 255)):
-        raise ValueError(
-            f"Color values should be in the range 0-255, but got {color}"
-        )
+        raise ValueError(f"Color values should be in the range 0-255, but got {color}")
 
     for i, row in particles.iterrows():
         X = row.X
         Y = row.Y
         R = row.R
-        cv2.circle(
-            overlay, (int(X), int(Y)), int(R), tuple(color.tolist()), -1
-        )
+        cv2.circle(overlay, (int(X), int(Y)), int(R), tuple(color.tolist()), -1)
         cv2.circle(work_image, (int(X), int(Y)), int(R), (255, 255, 255), 1)
 
     cv2.addWeighted(overlay, alpha, work_image, 1 - alpha, 0, work_image)
