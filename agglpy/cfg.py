@@ -7,11 +7,7 @@ from typing import Any, Dict, List, Mapping, Tuple, Union, cast
 
 import yaml
 
-from agglpy.auxiliary import (
-    txt_is_default_or_none,
-    txt_is_none_plus,
-    txt_is_default,
-)
+from agglpy.auxiliary import txt_is_default, txt_is_default_or_none, txt_is_none_plus
 from agglpy.defaults import (
     DEFAULT_IMAGE_SETTINGS_SCHEMA,
     DEFAULT_IMAGE_SETTINGS_VALUES,
@@ -26,8 +22,8 @@ from agglpy.errors import SettingsStructureError
 from agglpy.logger import logger
 from agglpy.typing import (
     ImageSettingsTypedDict,
-    YamlSettingsTypedDict,
     YamlRawSettingsTypedDict,
+    YamlSettingsTypedDict,
 )
 
 
@@ -57,7 +53,7 @@ def create_settings(
     dir_path: Path,
     output_path: Path = Path(DEFAULT_SETTINGS_FILENAME),
     images: List[Path] | None = None,
-):
+) -> None:
     """Create settings YAML file
 
     Create settings YAML file and fill default image sattings. If image
@@ -169,8 +165,8 @@ def find_all_images(dir_path: os.PathLike) -> List[Path]:
 
 
 def validate_conditions(
-    conditions: Dict[str, Any], route="metadata.conditions"
-):
+    conditions: Dict[str, Any], route: str = "metadata.conditions"
+) -> None:
     """Validate the structure of the 'conditions' under 'metadata'."""
     for condition_name, value in conditions.items():
         if not isinstance(value, list) or len(value) != 2:
@@ -315,7 +311,8 @@ def handle_defaults(
         return tuple(
             handle_defaults(item, route + f".{item}") for item in config
         )
-    # If the data is a string and matches one of the default-like values, convert it to None
+    # If the data is a string and matches one of the default-like values, 
+    # convert it to None
     elif isinstance(config, str) and config.lower() in valid_default:
         return None
     # If it's any other type, return it as is
@@ -433,7 +430,7 @@ def load_manager_settings(
             )
         except SettingsStructureError:
             raise
-    logger.debug(f"Agglpy analysis settings loaded from: {str(path)}")
+    logger.debug(f"Agglpy analysis settings loaded from: {path!s}")
     if handle_def:
         settings = handle_defaults(config=settings)
         logger.debug("Default values in settings dict handled.")

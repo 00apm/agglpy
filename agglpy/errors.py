@@ -8,7 +8,7 @@ class MultipleFilesFoundError(Exception):
         self,
         matches: List[str],
         filename: str = "",
-    ):
+    ) -> None:
         self.filename = filename
         self.matches = matches
         if filename == "":
@@ -53,6 +53,12 @@ class ImgDataSetStructureError(Exception):
 
     pass
 
+class ImgDataSetStateError(Exception):
+    """
+    Raised when the state of ImgDataSet object is not correct for current operation.
+    """
+
+    pass
 
 class AgglomerateStructureError(Exception):
     """
@@ -60,3 +66,6 @@ class AgglomerateStructureError(Exception):
     """
 
     pass
+
+
+

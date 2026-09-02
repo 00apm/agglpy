@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from typing import Any, List, Literal, Tuple, Optional, ClassVar
+from typing import Any, ClassVar, List, Literal, Tuple
 
 import numpy as np
 import pandas as pd
-from numpy.typing import ArrayLike
-from scipy import constants # type: ignore
+from scipy import constants  # type: ignore
 
-from agglpy.errors import AgglomerateStructureError 
+from agglpy.errors import AgglomerateStructureError
 
 # Particle and agglomerate types- variables used for typechecking
 ParticleType = Literal["collector", "attached2coll", "separate", "similar"]
@@ -26,6 +25,7 @@ class Agglomerate:
     # Public
     ID: int
     name: str
+    DS_name: str | None
     members: List[Particle]
     member_IDs: List[int]
     type: AgglomerateType | None
@@ -48,9 +48,14 @@ class Agglomerate:
     # private
     _members_DF: pd.DataFrame | None
 
-    def __init__(self, member_list: List[Particle] | None = None) -> None:
+    def __init__(
+        self,
+        member_list: List[Particle] | None = None,
+        DS_name: str | None = None,
+    ) -> None:
         self.ID = Agglomerate.AGL_ID
         self.name = "AGL" + str(Agglomerate.AGL_ID)
+        self.DS_name = DS_name
         if member_list is None:
             self.members = []
         else:
@@ -77,16 +82,21 @@ class Agglomerate:
 
         Agglomerate.AGL_ID = Agglomerate.AGL_ID + 1
 
-    def append_particles(self, particle_list: List[Particle] = []) -> None:
+    def append_particles(
+        self,
+        particle_list: List[Particle] = [],
+        sort: bool = True,
+    ) -> None:
         """
         ImgAgl.Agglomerate method for appending particle objects
         to agglomerate members container
 
         Parameters
         ----------
-        particle_list : list of ImgAgl.Particle objects, optional
+        particle_list (List[Particle]) : list of ImgAgl.Particle objects, optional
             Provide list of particle objects (ImgAgl.Particle instances)
             to append to Agglomerate members container. The default is [].
+        sort (bool): if True
 
         Returns
         -------
@@ -110,19 +120,16 @@ class Agglomerate:
         self._members_DF.sort_values(by=["D"], ascending=False, inplace=True)
 
     def calc_agl_param(self, include_dsom: bool = False) -> None:
-
         if self._members_DF is None or self._members_DF.empty:
             raise AgglomerateStructureError(
-                f"Calculation of Agglomerate {str(self)} is not possible. "
+                f"Calculation of Agglomerate {self!s} is not possible. "
                 "Agglomerate member DataFrame is not initialized or is empty"
             )
         self.members_count = len(self.members)
         self.read_members_IDs()
         # self._members_DF["membersOBJ"] = self.get_members()
 
-        Ds = self._members_DF.loc[
-            :, "D"
-        ]  # pd.Series(self.get_members_Ds())
+        Ds = self._members_DF.loc[:, "D"]  # pd.Series(self.get_members_Ds())
         self.members_Dmean = Ds.mean()
         self.members_Dstdev = Ds.std()
         self.volume = self._members_DF.loc[:, "volume"].sum()
@@ -138,14 +145,12 @@ class Agglomerate:
             )
             self.D_dsom = (6 * self.volume_dsom / constants.pi) ** (1 / 3)
             self.idj_members_count = self.count_idj_members()
-            self.members_count_dsom = (
-                self.members_count + self.idj_members_count
-            )
+            self.members_count_dsom = self.members_count + self.idj_members_count
 
     def classify(self, threshold: float = 0) -> None:
         if self._members_DF is None or self._members_DF.empty:
             raise AgglomerateStructureError(
-                f"Classification of Agglomerate {str(self)} and its member "
+                f"Classification of Agglomerate {self!s} and its member "
                 f"particles is not possible. Agglomerate member DataFrame is "
                 f"not initialized or is empty."
             )
@@ -153,13 +158,11 @@ class Agglomerate:
 
         if self.members_count > 1:
             classif_condition = (
-                self._members_DF.iloc[1, self._members_DF.columns.get_loc("D")] 
+                self._members_DF.iloc[1, self._members_DF.columns.get_loc("D")]
                 / self._members_DF.iloc[0, self._members_DF.columns.get_loc("D")]
                 <= threshold
             )
-            sorted_members: List[Particle] = self._members_DF.loc[
-                :, "OBJ"
-            ].to_list()
+            sorted_members: List[Particle] = self._members_DF.loc[:, "OBJ"].to_list()
             if classif_condition:
                 # Collector type Agglomerate
                 self.set_type("collector")  # set Agglomerate type
@@ -195,7 +198,7 @@ class Agglomerate:
         """
         if self._members_DF is None or self._members_DF.empty:
             raise AgglomerateStructureError(
-                f"Calculation of Agglomerate {str(self)} center of mass is not "
+                f"Calculation of Agglomerate {self!s} center of mass is not "
                 f"possible. Agglomerate member DataFrame is not initialized or "
                 f"is empty"
             )
@@ -217,7 +220,7 @@ class Agglomerate:
         """
         if self._members_DF is None or self._members_DF.empty:
             raise AgglomerateStructureError(
-                f"Calculation of Agglomerate {str(self)} radius of gyration is "
+                f"Calculation of Agglomerate {self!s} radius of gyration is "
                 f"not possible. Agglomerate member DataFrame is not "
                 f"initialized or is empty"
             )
@@ -242,11 +245,12 @@ class Agglomerate:
         """Counts internally disjoint primary particles in this agglomerate"""
         if self._members_DF is None or self._members_DF.empty:
             raise AgglomerateStructureError(
-                f"Counting the Agglomerates {str(self)} internally disjoint "
+                f"Counting the Agglomerates {self!s} internally disjoint "
                 f"members is not possible. Agglomerate member DataFrame is not "
                 f"initialized or is empty"
             )
-        return self._members_DF.loc[:, "idj"].sum()
+        idj_count: int = self._members_DF.loc[:, "idj"].sum()
+        return idj_count
 
     def read_members_IDs(self) -> None:
         m_IDs: List[int] = []
@@ -293,18 +297,27 @@ class Agglomerate:
         }
         return dict_prop
 
+    def get_largest_particle(self) -> Particle:
+        if self._members_DF is None:
+            raise AgglomerateStructureError(
+                f"Member Particles DataFrame of Agglomerate {self!s} is "
+                "unavailable. Please ensure that parameters of this Agglomerate"
+                " were calculated via calc_member_param() method"
+            )
+        else:
+            particle: Particle = self._members_DF["OBJ"][0]
+            return particle
+
     def set_type(self, type_str: AgglomerateType) -> None:
         self.type = type_str
 
-    def set_affiliation_in_members(self):
+    def set_affiliation_in_members(self) -> None:
         for particle in self.members:
             particle.set_affiliation(self)
 
     def __repr__(self) -> str:
         class_name = type(self).__name__
-        repr_str = (
-            f"{class_name}(member_list= {[str(m) for m in self.members]})"
-        )
+        repr_str = f"{class_name}(member_list= {[str(m) for m in self.members]})"
         return repr_str
 
     def __str__(self) -> str:
@@ -312,7 +325,6 @@ class Agglomerate:
 
 
 class Particle:
-
     ID: int
     name: str
     X: float
@@ -326,8 +338,7 @@ class Particle:
     idj: bool  # (i)nternally (d)is(j)oined bool
 
     def __init__(self, ID: int, X: float, Y: float, D: float) -> None:
-
-        self.ID = ID
+        self.ID = int(ID)
         self.name = "P" + str(int(self.ID))
         self.X = X
         self.Y = Y
@@ -375,7 +386,7 @@ class Particle:
     def set_affiliation(self, dst_aggl: Agglomerate) -> None:
         self.affiliation = dst_aggl.name
 
-    def set_interIDs(self, ID_list: List[int] = []):
+    def set_interIDs(self, ID_list: List[int] = []) -> None:
         self.interIDs = ID_list
 
     def set_idj(self, idj_bool: bool) -> None:
@@ -384,8 +395,8 @@ class Particle:
     def __repr__(self) -> str:
         class_name = type(self).__name__
         repr_str = (
-            f"{class_name}(ID={self.ID}, X= {self.X}, Y= {self.Y}, "
-            f"D= {self.D})"
+            f"{class_name}(ID={self.ID:.0f}, X= {self.X:.2e}, Y= {self.Y:.2e}, "
+            f"D= {self.D:.2e})"
         )
         return repr_str
 

@@ -5,12 +5,12 @@ Created on Fri Feb  7 10:25:40 2020
 @author: Artur
 """
 
+import concurrent
 import os
+import warnings
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
-import warnings
 
-import concurrent
 import cv2  # type: ignore
 
 # cv2 .pyi packaging problem as of 2024-10-08
@@ -24,27 +24,26 @@ from scipy import constants  # type: ignore
 from scipy import spatial as spsp
 from tqdm import tqdm
 
-
 from agglpy.aggl import Agglomerate, Particle
-from agglpy.auxiliary import read_tiff_tags, RGB_convert_to256, RGB_shader
-from agglpy.img_process import HCT, HCT_multi, crop_img, preprocess_img
-from agglpy.logger import logger
-from agglpy.typing import ImageSettingsTypedDict, PPSouceCsvType
+from agglpy.auxiliary import RGB_convert_to256, RGB_shader, read_tiff_tags
 from agglpy.defaults import (
     HCT_PARAMETERS,
-    VALID_PARTICLE_CSV_DATA,
     PREPROCESS_FUNCTIONS,
+    VALID_PARTICLE_CSV_DATA,
 )
 from agglpy.errors import (
     DirectoryStructureError,
     ImgDataSetBufferError,
+    ImgDataSetStateError,
     ImgDataSetStructureError,
     ParticleCsvStructureError,
 )
+from agglpy.img_process import HCT, HCT_multi, crop_img, preprocess_img
+from agglpy.logger import logger
+from agglpy.typing import ImageSettingsTypedDict, PPSouceCsvType
 
 
 class ImgDataSet:
-
     # Public attributes
     name: str
     mag: float | None
@@ -55,15 +54,15 @@ class ImgDataSet:
     res_agglDF: pd.DataFrame | None
     res_PSD: pd.DataFrame | None
     res_summary: pd.DataFrame | None
+    all_PP_DF: pd.DataFrame
+    all_AGGL_DF: pd.DataFrame
 
     # Private attributes
     _path: Path
     _settings: ImageSettingsTypedDict
     _img_filename: str | None
     _img_path: Path | None
-    _img_rgb: (
-        npt.NDArray | None
-    )  # image w/o processing (in RGB opencv color format)
+    _img_rgb: npt.NDArray | None  # image w/o processing (in RGB opencv color format)
     _img: npt.NDArray | None  # image processed (in grayscale)
     _img_meta_dict: dict | None
 
@@ -76,7 +75,8 @@ class ImgDataSet:
     _PP_dict: Dict[int, Particle] | None
     _PP_flag: bool
     _all_PP_DF: pd.DataFrame | None
-    _all_AGL_DF: pd.DataFrame | None
+    _all_AGGL_DF: pd.DataFrame | None
+    
     _AGGL_flag: bool
     _KDTree: spsp.KDTree | None
 
@@ -85,7 +85,7 @@ class ImgDataSet:
         working_dir: os.PathLike,
         settings: ImageSettingsTypedDict,
         auto_load: bool = False,
-    ):
+    ) -> None:
         """Class used for analyzis of primary particles and their agglomerates
 
         This class is used to obtain data about particles and its agglomerates
@@ -139,7 +139,7 @@ class ImgDataSet:
         self._PP_dict = None
         self._PP_flag = False
         self._all_PP_DF = None
-        self._all_AGL_DF = pd.DataFrame()
+        self._all_AGGL_DF = pd.DataFrame()
         self._AGGL_flag = False
         # TODO: change _all_agl_DF creation. It should be seperated from
         # data structure containing Agglomerate objects
@@ -148,8 +148,7 @@ class ImgDataSet:
         # Check if image file exists
         if not self._img_path.exists():
             raise ImgDataSetStructureError(
-                f"Image file {self._img_path} not found for ImgDataSet: "
-                f"{str(self)}"
+                f"Image file {self._img_path} not found for ImgDataSet: " f"{self!s}"
             )
 
         # Loading SEM image file and tags
@@ -171,8 +170,8 @@ class ImgDataSet:
             if not self.px_size:
                 self.px_size = 1.0
 
-        logger.debug(f"{str(self)} Magnification set to: {self.mag:.1f}x.")
-        logger.debug(f"{str(self)} Pixel size set to: {self.px_size:.2e}")
+        logger.debug(f"{self!s} Magnification set to: {self.mag:.1f}x.")
+        logger.debug(f"{self!s} Pixel size set to: {self.px_size:.2e}")
         # Define HCT related attributes and check if HCT .csv file exists
         if self._PPsource_filename:
             self._PPsource_path = self._path / self._PPsource_filename
@@ -181,7 +180,8 @@ class ImgDataSet:
             else:  # self._HCT_flag = False was initialized
                 raise DirectoryStructureError(
                     f"HCT input file {self._PPsource_filename} declared in settings"
-                    f" for ImgDataSet: {str(self)} was not found at: {self._PPsource_path}."
+                    f" for ImgDataSet: {self!s} was not found at: "
+                    f"{self._PPsource_path}."
                 )
 
         if auto_load:
@@ -205,18 +205,37 @@ class ImgDataSet:
     @property
     def has_PPsource(self) -> bool:
         return self._PPsource_flag
-    
+
     @property
     def has_PP(self) -> bool:
         return self._PP_flag
+
+    @property
+    def has_AGGL(self) -> bool:
+        return self._AGGL_flag
+
+    @property
+    def all_PP_DF(self) -> pd.DataFrame:
+        if not self._PP_flag or self._all_PP_DF is None:
+            raise ImgDataSetStructureError(
+                "Particle objects were not properly created or are unavailable."
+            )
+        return self._all_PP_DF
+
+    @property
+    def all_AGGL_DF(self) -> pd.DataFrame:
+        if not self._AGGL_flag or self._all_AGGL_DF is None:
+            raise AttributeError(
+                "Agglomerate objects were not properly created or are unavailable."
+            )
+        return self._all_AGGL_DF
+
     # ------------------ API methods --------------------------
 
-    def classify_all_AGL(self, threshold=0):
-        for i in self._all_AGL_DF.OBJ:
+    def classify_all_AGL(self, threshold: float = 0) -> None:
+        for i in self.all_AGGL_DF.OBJ:
             i.classify(threshold)
-        logger.debug(
-            f"{str(self)} Agglomerates classified for threshold= {threshold}"
-        )
+        logger.debug(f"{self!s} Agglomerates classified for threshold= {threshold}")
 
     def detect_primary_particles(
         self,
@@ -224,18 +243,16 @@ class ImgDataSet:
         export_img: bool = True,
         export_edges: bool = True,
     ) -> pd.DataFrame:
-        logger.info(
-            f"Starting primary particle detection for ImgDataSet {str(self)}"
-        )
+        logger.info(f"Starting primary particle detection for ImgDataSet {self!s}")
         crop_ratio = self._settings["crop_ratio"]
         assert (
             self._img is not None
-        ), f"Image was not loaded properly for ImgDataSet: {str(self)}."
+        ), f"Image was not loaded properly for ImgDataSet: {self!s}."
         if crop_ratio > 0:
             self._img = crop_img(self._img, ratio=crop_ratio)
             logger.debug(
                 f"Image cropped with ratio {crop_ratio} for primary particle "
-                f"detection in {str(self)}"
+                f"detection in {self!s}"
             )
         # from yaml settings register all not None preprocess parameters
         preprocess_dict = {
@@ -255,7 +272,7 @@ class ImgDataSet:
             if val is None:
                 raise ValueError(
                     f"One of the HCT parameters ({key}) is None for ImgDataSet:"
-                    f" {str(self)}. All of the HCT parameters {HCT_PARAMETERS} "
+                    f" {self!s}. All of the HCT parameters {HCT_PARAMETERS} "
                     f"must be defined in analysis yaml settings."
                 )
 
@@ -273,7 +290,7 @@ class ImgDataSet:
             f"Primary particle detection complete for ImgDataSet {str(self)}. "
             f"Number of detected primary particles detected: {len(df.index)}"
         )
-        # save to  buffer 
+        # save to  buffer
         # and reset ID index for compatibility with load_PPsource_csv
         self._PPsource_bufferDF = df.reset_index()
         self._prepare_PPsource_buffer()
@@ -306,58 +323,51 @@ class ImgDataSet:
                 f"Primary particle csv data file type ({self._PPsource_type}) was"
                 f" not recognized."
             )
-        
+
         self._prepare_PPsource_buffer()
-        
+
         logger.debug(
-            f"{str(self)} Primary Particles data loaded from: "
-            f"{self._PPsource_path}"
+            f"{self!s} Primary Particles data loaded from: " f"{self._PPsource_path}"
         )
 
     def create_primary_particles(self, multiprocessing: bool = False) -> None:
         if self._PPsource_bufferDF is None or self._PPsource_bufferDF.empty:
             raise ImgDataSetBufferError(
                 f"Primary Parcicle source buffer is not initialized. Check if "
-                f".csv data was loaded properly for ImgDataSet: {str(self)}."
+                f".csv data was loaded properly for ImgDataSet: {self!s}."
             )
         if not self._PP_dict:
             if multiprocessing:
-                logger.debug(
-                    f"{str(self)} Creating particles with multiprocessing..."
-                )
+                logger.debug(f"{self!s} Creating particles with multiprocessing...")
                 self._PP_dict = self._create_PPobj_multiprocessing(
                     buffer=self._PPsource_bufferDF
                 )
             else:
-                logger.debug(
-                    f"{str(self)} Creating particles in single thread..."
-                )
-                self._PP_dict = self._create_PPobj(
-                    buffer=self._PPsource_bufferDF
-                )
+                logger.debug(f"{self!s} Creating particles in single thread...")
+                self._PP_dict = self._create_PPobj(buffer=self._PPsource_bufferDF)
             self._create_PP_DF(PP_dict=self._PP_dict)
             if not (self._all_PP_DF is None or self._all_PP_DF.empty):
                 logger.debug(
-                    f"{str(self)} create_primary_particles() constructed: "
+                    f"{self!s} create_primary_particles() constructed: "
                     f"{len(self._all_PP_DF.index)} Primary Particles."
                 )
             self._PP_flag = True
         else:
             raise ImgDataSetStructureError(
-                f"Primary Particles were already created for {str(self)}."
+                f"Primary Particles were already created for {self!s}."
             )
 
-    def detect_agglomerates(self):
+    def detect_agglomerates(self) -> pd.DataFrame:
         self._find_all_intersecting()
-        DF = self._all_PP_DF.copy()
+        DF = self.all_PP_DF.copy()
         # TODO: _all_AGL_DF must be created first
         j = 0
         while not DF.empty:
-            agl_obj = Agglomerate([])
+            agl_obj = Agglomerate(member_list=[], DS_name=self.name)
             particle = DF.iloc[0, DF.columns.get_loc("OBJ")]
-            self._all_AGL_DF.loc[j, "OBJ"] = agl_obj
-            self._all_AGL_DF.loc[j, "ID"] = agl_obj.ID
-            self._all_AGL_DF.loc[j, "name"] = agl_obj.name
+            self._all_AGGL_DF.loc[j, "OBJ"] = agl_obj
+            self._all_AGGL_DF.loc[j, "ID"] = agl_obj.ID
+            self._all_AGGL_DF.loc[j, "name"] = agl_obj.name
             iFamily = self._find_intersecting_family(particle)
             agl_obj.append_particles(self.get_particles(iFamily))
             for i in iFamily:
@@ -378,13 +388,13 @@ class ImgDataSet:
         #             print(self._all_AGL_DF.loc[i,"OBJ"].members_count)
         # =============================================================================
         logger.debug(
-            f"{str(self)} find_agglomerates() resulted in: "
-            f"{len(self._all_AGL_DF.index)} Agglomerates detected."
+            f"{self!s} find_agglomerates() resulted in: "
+            f"{len(self._all_AGGL_DF.index)} Agglomerates detected."
         )
         self._AGGL_flag = True
-        return self._all_AGL_DF
+        return self._all_AGGL_DF
 
-    def get_particles(self, IDlist=[]):
+    def get_particles(self, IDlist: List[int] = []) -> List[Particle]:
         """
         Returns list of particle objects provided by ID list
 
@@ -401,17 +411,27 @@ class ImgDataSet:
         """
 
         selected = []
-        DF = self._all_PP_DF
+        DF = self.all_PP_DF
+        for i in IDlist:
+            s = DF[DF["ID"] == i].OBJ.values[0]
+            selected.append(s)
+        return selected
+    
+    def get_agglomerates(self, IDlist: List[int] = []) -> List[Agglomerate]:
+        selected = []
+        DF = self.all_AGGL_DF
         for i in IDlist:
             s = DF[DF["ID"] == i].OBJ.values[0]
             selected.append(s)
         return selected
 
-    def get_largest_particle(self):
-        return self._all_PP_DF.OBJ[self._all_PP_DF.D.idxmax()]
+    def get_largest_particle(self) -> Particle:
+        p: Particle = self.all_PP_DF.OBJ[self.all_PP_DF.D.idxmax()]
+        return p
 
-    def get_smallest_particle(self):
-        return self._all_PP_DF.OBJ[self._all_PP_DF.D.idxmin()]
+    def get_smallest_particle(self) -> Particle:
+        p: Particle = self.all_PP_DF.OBJ[self.all_PP_DF.D.idxmin()]
+        return p
 
     # =============================================================================
     #     def get_PSD(self, start = 0, end = 10, periods = 20, log = False, cat=False):
@@ -430,7 +450,7 @@ class ImgDataSet:
     #             return pd.value_counts(self.res_PSD, sort = False)
     # =============================================================================
 
-    def get_results_pTable(self):
+    def get_results_pTable(self) -> pd.DataFrame:
         """
         Returns result table of all particles detected in the image
 
@@ -449,35 +469,31 @@ class ImgDataSet:
         #     pTable = pTable.append(i.get_properties())
         # pTable.reset_index(inplace = True, drop = True)
         # self.res_particleDF = pTable
-        self.res_particleDF = self._all_PP_DF.loc[:, "OBJ"].apply(
+        self.res_particleDF: pd.DataFrame = self.all_PP_DF.loc[:, "OBJ"].apply(
             lambda p: pd.Series(p.get_properties())
         )
         self.res_particleDF = self.res_particleDF.astype({"ID": int})
         return self.res_particleDF
 
-    def get_results_aglTable(self):
+    def get_results_aglTable(self) -> pd.DataFrame:
         # aglTable = pd.DataFrame()
         # for i in self._all_AGL_DF.OBJ:
         #     aglTable = aglTable.append(i.get_properties())
         # aglTable.reset_index(inplace=True, drop=True)
         # self.res_aglDF = aglTable
-        self.res_agglDF = self._all_AGL_DF.loc[:, "OBJ"].apply(
+        self.res_agglDF = self.all_AGGL_DF.loc[:, "OBJ"].apply(
             lambda a: pd.Series(a.get_properties())
         )
         return self.res_agglDF
 
-    def get_summary(self):
+    def get_summary(self) -> pd.DataFrame:
         # self.res_summary = self.res_summary.assign(pd.Series(len(self._all_P_DF.index), name="particle_count"))
         # print(self.res_summary)
         if len(self.res_agglDF.index) == 0:
             self.get_results_aglTable()
         self.res_summary = pd.DataFrame()
-        self.res_summary.loc[0, "N_primary_particle"] = len(
-            self._all_PP_DF.index
-        )
-        self.res_summary.loc[0, "N_aerosol_particle"] = len(
-            self._all_AGL_DF.index
-        )
+        self.res_summary.loc[0, "N_primary_particle"] = len(self._all_PP_DF.index)
+        self.res_summary.loc[0, "N_aerosol_particle"] = len(self._all_AGGL_DF.index)
         pp1_mask = self.res_agglDF.loc[:, "members_count"] == 1
         self.res_summary.loc[0, "N_pp1"] = pp1_mask.sum()
         self.res_summary.loc[0, "N_ppA"] = (
@@ -520,21 +536,17 @@ class ImgDataSet:
             self.res_summary.loc[0, "N_primary_particle"]
             / self.res_summary.loc[0, "N_aerosol_particle"]
         )
-        self.res_summary.loc[0, "particle_Dmean"] = self.res_particleDF[
-            "D"
-        ].mean()
-        self.res_summary.loc[0, "particle_Dstd"] = self.res_particleDF[
-            "D"
-        ].std()
-        self.res_summary.loc[0, "particle_D10"] = self.res_particleDF[
-            "D"
-        ].quantile(q=0.1)
-        self.res_summary.loc[0, "particle_D50"] = self.res_particleDF[
-            "D"
-        ].quantile(q=0.5)
-        self.res_summary.loc[0, "particle_D90"] = self.res_particleDF[
-            "D"
-        ].quantile(q=0.9)
+        self.res_summary.loc[0, "particle_Dmean"] = self.res_particleDF["D"].mean()
+        self.res_summary.loc[0, "particle_Dstd"] = self.res_particleDF["D"].std()
+        self.res_summary.loc[0, "particle_D10"] = self.res_particleDF["D"].quantile(
+            q=0.1
+        )
+        self.res_summary.loc[0, "particle_D50"] = self.res_particleDF["D"].quantile(
+            q=0.5
+        )
+        self.res_summary.loc[0, "particle_D90"] = self.res_particleDF["D"].quantile(
+            q=0.9
+        )
         # Sauter Mean Diameter
         self.res_summary.loc[0, "particle_SMD"] = (
             self.res_particleDF.loc[:, "D"] ** 3
@@ -606,9 +618,7 @@ class ImgDataSet:
         elif px_size_unit == "m":
             pass
         else:
-            raise ValueError(
-                "Pixel size unit in tif exif SEM metadata not recognized."
-            )
+            raise ValueError("Pixel size unit in tif exif SEM metadata not recognized.")
         return px_size
 
     def plot_img(
@@ -622,7 +632,6 @@ class ImgDataSet:
         bar_data=None,
         bar_discrete=False,
     ):
-
         fig = plt.figure(figsize=(14, 9), dpi=100)
         ax = fig.add_subplot(1, 1, 1)
 
@@ -664,8 +673,7 @@ class ImgDataSet:
 
             else:
                 raise ValueError(
-                    "please provide bar_data to properly plot"
-                    " color bar into image."
+                    "please provide bar_data to properly plot" " color bar into image."
                 )
 
         if show == True:
@@ -678,9 +686,7 @@ class ImgDataSet:
         ax.tick_params(
             axis="x", which="both", bottom=False, top=False, labelbottom=False
         )
-        ax.tick_params(
-            axis="y", which="both", right=False, left=False, labelleft=False
-        )
+        ax.tick_params(axis="y", which="both", right=False, left=False, labelleft=False)
 
         if export == True:
             fname = self.name + "_circles.png"
@@ -759,9 +765,7 @@ class ImgDataSet:
             X = p.X / self.px_size
             Y = p.Y / self.px_size
             D = p.D / self.px_size
-            cv2.circle(
-                im1, (int(X), int(Y)), int(D / 2), color[i].tolist(), -1
-            )
+            cv2.circle(im1, (int(X), int(Y)), int(D / 2), color[i].tolist(), -1)
             cv2.circle(
                 im2,
                 (int(X), int(Y)),
@@ -805,7 +809,6 @@ class ImgDataSet:
         im1, im2 = self.draw_particles_transp(AGL.get_members(), color=color)
 
         if labels == True:
-
             font = cv2.FONT_HERSHEY_SIMPLEX
             scale = 0.5
             fontColor = color
@@ -841,16 +844,12 @@ class ImgDataSet:
     # def draw_agl_label(self, AGL, color = (100, 255, 100, 0)):
 
     def draw_all_agl(self, labels=False, transparency=0.1):
-
         # --- COLORMAP
 
         colors = {
             "collector": 255
-            * mpl.colors.to_rgba_array(mpl.colors.CSS4_COLORS["deepskyblue"])[
-                0
-            ],
-            "similar": 255
-            * mpl.colors.to_rgba_array(mpl.colors.CSS4_COLORS["red"])[0],
+            * mpl.colors.to_rgba_array(mpl.colors.CSS4_COLORS["deepskyblue"])[0],
+            "similar": 255 * mpl.colors.to_rgba_array(mpl.colors.CSS4_COLORS["red"])[0],
             "separate": 255
             * mpl.colors.to_rgba_array(mpl.colors.CSS4_COLORS["lime"])[0],
         }
@@ -864,7 +863,7 @@ class ImgDataSet:
 
         res1 = np.zeros((shape[0], shape[1], 4), dtype=np.uint8)
         res2 = np.zeros((shape[0], shape[1], 4), dtype=np.uint8)
-        for i in self._all_AGL_DF.OBJ:
+        for i in self._all_AGGL_DF.OBJ:
             im1, im2 = self.draw_agl(i, color=colors[i.type], labels=labels)
             cnd1 = im1[:, :, 3] > 0
             res1[cnd1] = im1[cnd1]
@@ -893,7 +892,6 @@ class ImgDataSet:
         ret_cbar_data=False,
         bg_white=False,
     ):
-
         # --- COLORMAP
         if isinstance(prop, dict):
             assert len(prop) == 1, (
@@ -903,8 +901,7 @@ class ImgDataSet:
             prop_key = list(prop.keys())[0]
         else:
             assert isinstance(prop, str), (
-                "wrong data input- only string and"
-                " dict of strings are accepted."
+                "wrong data input- only string and" " dict of strings are accepted."
             )
             prop_key = "ID"
         if (vmin is None) or (vmax is None):
@@ -920,7 +917,7 @@ class ImgDataSet:
 
         res1 = np.zeros((shape[0], shape[1], 4), dtype=np.uint8)
         res2 = np.zeros((shape[0], shape[1], 4), dtype=np.uint8)
-        for i in self._all_AGL_DF.OBJ:
+        for i in self._all_AGGL_DF.OBJ:
             val = i.get_properties()[prop_key]
             color = RGB_convert_to256(cmap(norm(val)))
             im1, im2 = self.draw_agl(i, color=color, labels=labels)
@@ -972,8 +969,7 @@ class ImgDataSet:
             prop_key = list(prop.keys())[0]
         else:
             assert isinstance(prop, str), (
-                "wrong data input- only string and"
-                " dict of strings are accepted."
+                "wrong data input- only string and" " dict of strings are accepted."
             )
         if (vmin is None) or (vmax is None):
             if self.res_particleDF.empty:
@@ -1035,7 +1031,7 @@ class ImgDataSet:
     def _prepare_PPsource_buffer(self) -> None:
         """Prepares PP source buffer for Particle object creation
 
-        Modifies _PPsource_bufferDF from loaded state to state ready for 
+        Modifies _PPsource_bufferDF from loaded state to state ready for
         Particle object creation.
         1. Calculate primary particle diameter if needed
         2. Ensure uniform dtype
@@ -1068,7 +1064,6 @@ class ImgDataSet:
             by=["R"],
             ascending=False,
         )
-
 
     def _scale_HCT_data(self) -> None:
         # applying scale to R (converting to µm)
@@ -1155,13 +1150,13 @@ class ImgDataSet:
             },
         )
 
-    def _construct_KDTree(self) -> None:
+    def _construct_KDTree(self) -> spsp.KDTree:
         if self._all_PP_DF is None or self._all_PP_DF.empty:
             raise ImgDataSetStructureError(
                 f"Primary Particle DataFrame was not properly created after "
                 f" Particle objects creation for ImgDataSet: {str(self)}"
             )
-        self._KDTree = spsp.KDTree(self._all_PP_DF.loc[:, ["X", "Y"]])
+        self._KDTree = spsp.KDTree(self.all_PP_DF.loc[:, ["X", "Y"]])
         return self._KDTree
 
     def _find_all_intersecting(self) -> None:
@@ -1203,9 +1198,7 @@ class ImgDataSet:
         try:
             self._KDTree
         except AttributeError:
-            print(
-                "Program hasn't found KDTree structure. Initializing KDTree ..."
-            )
+            print("Program hasn't found KDTree structure. Initializing KDTree ...")
             self._construct_KDTree()
         KD = self._KDTree
         nbrs = KD.query_ball_point([particle.X, particle.Y], d)
@@ -1222,15 +1215,12 @@ class ImgDataSet:
         return intersecting
 
     def _find_intersecting_family(self, particle, list_=[]):
-
         if particle.ID not in list_:
             list_.append(particle.ID)
             children = particle.interIDs
             for i in children:
                 if i not in list_:
-                    self._find_intersecting_family(
-                        self.get_particles([i])[0], list_
-                    )
+                    self._find_intersecting_family(self.get_particles([i])[0], list_)
 
         return list_
 
@@ -1247,9 +1237,7 @@ class ImgDataSet:
         return f"<DS({self.name})>"
 
 
-def recognize_particle_csv(
-    filepath: os.PathLike, full: bool = False
-) -> PPSouceCsvType:
+def recognize_particle_csv(filepath: os.PathLike, full: bool = False) -> PPSouceCsvType:
     fpath: Path = Path(filepath)
     if not full:
         nrows = 5

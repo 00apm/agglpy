@@ -46,7 +46,7 @@ def init_mgr_dirstruct(
     logger.debug(f"Initializing Manager directory structure at: {wdir}")
     if is_mgr_dirstruct(wdir):
         logger.debug(
-            f"Manager directory structure is already prepared for analysis."
+            "Manager directory structure is already prepared for analysis."
         )
         return
     if settings_path is None:
@@ -118,7 +118,7 @@ def is_mgr_dirstruct(path: os.PathLike) -> bool:
         return True
 
 
-def validate_mgr_dirstruct(path: os.PathLike):
+def validate_mgr_dirstruct(path: os.PathLike) -> None:
     """Check if <path> has valid directory structure
 
     Valid directory structure comprise:
@@ -199,7 +199,7 @@ def find_datasets_paths(
             img_dir = DS_main_dir / i #Path(images[i]["img_file"]).stem
             if not img_dir.exists():
                 raise DirectoryStructureError(
-                    f"Image Data Set directory {repr(img_dir)} not found"
+                    f"Image Data Set directory {img_dir!r} not found"
                 )
             else:
                 img_file = img_dir / Path(images[i]["img_file"])

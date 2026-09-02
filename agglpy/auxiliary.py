@@ -1,11 +1,10 @@
 import os
 from pathlib import Path
-from typing import Any, List, Tuple
+from typing import Any, List, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
 import tifffile as tf  # type: ignore
-
 
 
 def RGB_convert_to256(color: Tuple[float, ...]) -> Tuple[int, ...]:
@@ -43,11 +42,13 @@ def txt_is_default_or_none(txt: str) -> bool:
     c4: bool = txt_is_empty(txt)
     return c1 or c2 or c3 or c4
 
+
 def txt_is_none_plus(txt: str) -> bool:
     c1: bool = txt is None
     c2: bool = txt_is_none(txt)
     c3: bool = txt_is_empty(txt)
     return c1 or c2 or c3
+
 
 def txt_is_true(txt: str) -> bool:
     accepted_strings = {"true", "1", "t", "y", "yes", "yeah", "yup"}
@@ -79,7 +80,7 @@ def txt_is_number(string: str) -> bool:
 # TODO: type hints
 # typing module for matplotlib is not ready for colormaps used in this class
 class nlcmap:
-    def __init__(self, cmap, levels):
+    def __init__(self, cmap, levels: np.ndarray) -> None:  # type: ignore
         self.name = cmap.name
         self.cmap = cmap
         self.N = cmap.N
@@ -87,13 +88,12 @@ class nlcmap:
         self.levels = np.asarray(levels, dtype="float64")
         self._x = self.levels
         self.levmax = self.levels.max()
-        self.transformed_levels = np.linspace(
-            0.0, self.levmax, len(self.levels)
-        )
+        self.transformed_levels = np.linspace(0.0, self.levmax, len(self.levels))
 
-    def __call__(self, xi, alpha=1.0, **kwargs):
+    def __call__(self, xi, alpha=1.0, **kwargs):  # type: ignore
         yi = np.interp(xi, self._x, self.transformed_levels)
         return self.cmap(yi / self.levmax, alpha)
+
 
 def read_tiff_tags(file: os.PathLike) -> dict:
     """
@@ -109,75 +109,112 @@ def read_tiff_tags(file: os.PathLike) -> dict:
     """
 
     with tf.TiffFile(file) as tif:
-        tif_tags:dict = {}
+        tif_tags: dict = {}
         for tag in tif.pages[0].tags.values():
             name, value = tag.name, tag.value
             tif_tags[name] = value
     return tif_tags
 
 
+def get_floor(
+    val: Union[float, int, npt.ArrayLike],
+    order: bool = True,
+) -> Union[float, int, npt.NDArray[np.float_]]:
+    """Get the floor value of a number or array based on order of magnitude.
 
-def get_floor(val: float, order: bool = True) -> float:
-    """Get the floor value of a number based on order of magnitude.
-
-    When `order` is True, the function returns the floor of the closest order 
+    When `order` is True, the function returns the floor of the closest order
     of magnitude.
     When `order` is False, the function rounds down to the closest value in the
-      same order of magnitude.
-
-    Args:
-        val (float): The input value to compute the floor for.
-        order (bool, optional): If True, computes based on order of magnitude. 
-            If False, rounds down to the nearest number in the same magnitude. 
-            Defaults to True.
-
-    Raises:
-        ValueError: If the input value is zero.
-
-    Returns:
-        float: The computed floor value based on the input and order.
-    """
-    if val == 0:
-        raise ValueError("Value must be non-zero.")
-    if order:
-        # Compute the log10 of the absolute value to handle both positive 
-        # and negative numbers
-        log_val: float = np.log10(abs(val))
-        log_floor: float = np.floor(log_val)
-        return 10 ** log_floor
-    else:
-        # Get the order of magnitude (e.g., for 512 it will be 100)
-        magnitude: float = 10 ** np.floor(np.log10(abs(val)))
-        return np.floor(val / magnitude) * magnitude
-
-
-def get_ceil(val: float, order: bool = True) -> float:
-    """Get the ceiling value of a number based on order of magnitude
-
-    When `order` is True, the function returns the ceiling of the closest order
-    of magnitude.
-    When `order` is False, the function rounds up to the closest value in the 
     same order of magnitude.
 
     Args:
-        val (float): The input value to compute the ceiling for.
-        order (bool, optional): If True, computes based on order of magnitude. 
-            If False, rounds up to the nearest number in the same magnitude. 
+        val (Union[float, int, ArrayLike]): Input value(s) to compute the floor for.
+            Can be a single number (float or int) or an array-like structure
+            (list, tuple, np.ndarray).
+
+        order (bool, optional): If True, computes based on order of magnitude.
+            If False, rounds down to the nearest number in the same magnitude.
             Defaults to True.
 
     Raises:
-        ValueError: If the input value is zero.
+        ValueError: If any input value is zero.
 
     Returns:
-        float: The computed ceiling value based on the input and order.
+        Union[float, int, NDArray[np.float_]]: The computed floor value(s).
+            Returns a float for float inputs, an int for int inputs,
+            and a NumPy array for array-like inputs.
     """
-    if val == 0:
-        raise ValueError("Value must be non-zero.")
-    if order:
+    # Convert input to a NumPy array
+    val_array = np.asarray(val)
 
-        log_val: float = np.log10(abs(val))
-        log_ceil: float = np.ceil(log_val)
-        return 10 ** log_ceil
+    if np.any(val_array == 0):
+        raise ValueError("All values must be non-zero.")
+
+    if order:
+        log_val = np.log10(np.abs(val_array))
+        log_floor = np.floor(log_val)
+        result = 10**log_floor
     else:
-        magnitude: float = 10 ** np.floor(np.log10(abs(val)))
-        return np.ceil(val / magnitude) * magnitude
+        magnitude = 10 ** np.floor(np.log10(np.abs(val_array)))
+        result = np.floor(val_array / magnitude) * magnitude
+
+    # If the input was scalar, return a scalar of the appropriate type
+    if np.isscalar(val):
+        if isinstance(val, int):
+            return int(result)  # Convert to int
+        return float(result)  # Convert to float
+
+    # Otherwise, return the result as a NumPy array
+    return np.asarray(result, dtype=np.float_)
+
+
+def get_ceil(
+    val: Union[float, int, npt.ArrayLike],
+    order: bool = True,
+) -> Union[float, int, npt.NDArray[np.float_]]:
+    """Get the ceiling value of a number or array based on order of magnitude.
+
+    When `order` is True, the function returns the ceiling of the closest order
+    of magnitude.
+    When `order` is False, the function rounds up to the closest value in the
+    same order of magnitude.
+
+    Args:
+        val (Union[float, int, ArrayLike]): Input value(s) to compute the ceiling for.
+            Can be a single number (float or int) or an array-like structure
+            (list, tuple, np.ndarray).
+
+        order (bool, optional): If True, computes based on order of magnitude.
+            If False, rounds up to the nearest number in the same magnitude.
+            Defaults to True.
+
+    Raises:
+        ValueError: If any input value is zero.
+
+    Returns:
+        Union[float, int, NDArray[np.float_]]: The computed ceiling value(s).
+            Returns a float for float inputs, an int for int inputs,
+            and a NumPy array for array-like inputs.
+    """
+    # Convert input to a NumPy array
+    val_array = np.asarray(val)
+
+    if np.any(val_array == 0):
+        raise ValueError("All values must be non-zero.")
+
+    if order:
+        log_val = np.log10(np.abs(val_array))
+        log_ceil = np.ceil(log_val)
+        result = 10**log_ceil
+    else:
+        magnitude = 10 ** np.floor(np.log10(np.abs(val_array)))
+        result = np.ceil(val_array / magnitude) * magnitude
+
+    # If the input was scalar, return a scalar of the appropriate type
+    if np.isscalar(val):
+        if isinstance(val, int):
+            return int(result)  # Convert to int
+        return float(result)  # Convert to float
+
+    # Otherwise, return the result as a NumPy array
+    return np.asarray(result, dtype=np.float_)

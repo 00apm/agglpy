@@ -61,9 +61,7 @@ class Manager:
         init_data_sets: bool = True,
     ):
         # Initialize attributes directly related to constructor arguments
-        self._workdir = Path(
-            working_dir
-        )  # used for immutable @property working_dir
+        self._workdir = Path(working_dir)  # used for immutable @property working_dir
         if not name:
             self.name = self._workdir.name
         else:
@@ -101,9 +99,7 @@ class Manager:
 
         # Load settings file
         self._settings = load_manager_settings(path=self._settings_path)
-        self.collector_threshold = self._settings["analysis"][
-            "collector_threshold"
-        ]
+        self.collector_threshold = self._settings["analysis"]["collector_threshold"]
 
         if init_data_sets:
             self.create_image_data_sets()
@@ -123,7 +119,7 @@ class Manager:
         """
         return self._workdir
 
-    def batch_detect_primary_particles(self, force: bool = False):
+    def batch_detect_primary_particles(self, force: bool = False) -> None:
         if force:
             # process all ImgDataSets and overwrite the results
             ds_process = self._DS
@@ -132,12 +128,12 @@ class Manager:
             ds_process = [ds for ds in self._DS if not ds._PPsource_flag]
         if len(ds_process) == 0:
             wmsg = (
-                f"All of the ImgDataSets already have loaded primary particles "
-                f"source file. Detection is not needed. Check the 'HCT_file' "
-                f"key in settings.data.images if some of the data sets still "
-                f"need detection. Otherwise you may want to force "
-                f"the detection using force=True, but this will overwrite "
-                f"the existing results."
+                "All of the ImgDataSets already have loaded primary particles "
+                "source file. Detection is not needed. Check the 'HCT_file' "
+                "key in settings.data.images if some of the data sets still "
+                "need detection. Otherwise you may want to force "
+                "the detection using force=True, but this will overwrite "
+                "the existing results."
             )
             warnings.warn(wmsg)
             logger.warning(wmsg)
@@ -154,7 +150,7 @@ class Manager:
                 f"exported to respective ImgDataSet directory"
             )
 
-    def batch_detect_agglomerates(self, export_img=True):
+    def batch_detect_agglomerates(self, export_img: bool = True) -> None:
         """
         Method for batch analysis of SEM photo and circle fitting data
         from folder structure
@@ -165,10 +161,11 @@ class Manager:
         None.
 
         """
-        logger.debug(f"{str(self)} Beginning analysis for all DataSets")
+        logger.debug(f"{self!s} Beginning analysis for all DataSets")
         total1 = len(self._DS)
         pbar1 = tqdm(self._DS, total=total1, position=0, leave=True)
-
+        if self.collector_threshold is None:
+            raise ValueError("Collector Threshold is not defined.")
         for i in pbar1:
             desc0 = "Processing DataSet|" + i.name + "| "
             pbar1.update(0)
@@ -178,16 +175,14 @@ class Manager:
             pbar1.set_description(desc0 + "- classifying agglomerates...")
             i.classify_all_AGL(self.collector_threshold)
             pbar1.update(0)
-            if export_img == True:
+            if export_img:
                 pbar1.set_description(desc0 + "- drawing agglomerates...")
-                draw_labels = self._settings["export"]["draw_particles"][
-                    "labels"
-                ]
+                draw_labels = self._settings["export"]["draw_particles"]["labels"]
                 img = i.draw_all_agl_by(prop="ID", labels=draw_labels)
                 i.plot_img(img, show=True, export=True)
                 pbar1.update(0)
         pbar1.close()
-        logger.info(f"{str(self)} Analysis for all DataSets finished.")
+        logger.info(f"{self!s} Analysis for all DataSets finished.")
 
     def create_image_data_sets(self, auto_load: bool = True) -> None:
         self._DS_paths = find_datasets_paths(
@@ -209,9 +204,7 @@ class Manager:
             self._DS.append(
                 ImgDataSet(
                     path.parent,
-                    settings=self._settings["data"]["images"][
-                        path.parent.stem
-                    ],
+                    settings=self._settings["data"]["images"][path.parent.stem],
                     auto_load=auto_load,
                 )
             )
@@ -219,15 +212,13 @@ class Manager:
             info_dict["magnification"].append(self._DS[i].mag)
             info_dict["pixel_size"].append(self._DS[i].px_size)
             info_dict["subdir"].append(self._DS[i].path)
-        self.img_info = pd.DataFrame.from_dict(
-            data=info_dict, orient="columns"
-        )
+        self.img_info = pd.DataFrame.from_dict(data=info_dict, orient="columns")
         logger.info(
-            f"{str(self)} Succesfully appended DataSets: "
-            f"{str([str(i) for i in self._DS])}"
+            f"{self!s} Succesfully appended DataSets: "
+            f"{[str(i) for i in self._DS]!s}"
         )
 
-    def generate_pTable(self):
+    def generate_pTable(self) -> pd.DataFrame:
         self.batch_res_pDF = pd.DataFrame()
         for i, ds in enumerate(self._DS):
             temp = ds.get_results_pTable()
@@ -241,12 +232,12 @@ class Manager:
                 [self.batch_res_pDF, temp], axis=0, ignore_index=True
             )
         logger.info(
-            f"{str(self)} Particle table for analyzed DataSets created. "
+            f"{self!s} Particle table for analyzed DataSets created. "
             f"It contains: {len(self.batch_res_pDF.index)} primary particles."
         )
         return self.batch_res_pDF
 
-    def generate_aglTable(self):
+    def generate_aglTable(self) -> pd.DataFrame:
         self.batch_res_aglDF = pd.DataFrame()
         for i, ds in enumerate(self._DS):
             temp = ds.get_results_aglTable()
@@ -258,13 +249,17 @@ class Manager:
                 [self.batch_res_aglDF, temp], axis=0, ignore_index=True
             )
         logger.info(
-            f"{str(self)} Agglomerate table for analyzed DataSets created. "
+            f"{self!s} Agglomerate table for analyzed DataSets created. "
             f"It contains: {len(self.batch_res_aglDF.index)} agglomerates."
         )
         return self.batch_res_aglDF
 
-    def generate_PSD(self, PSD_space=None, plot=True):
-        if self.batch_res_pDF.empty:
+    def generate_PSD(
+        self,
+        PSD_space: npt.NDArray = None,
+        plot: bool = True,
+    ) -> None:
+        if self.batch_res_pDF is None:
             self.generate_pTable()
         if PSD_space is None:
             if self._PSD_space is None:
@@ -300,9 +295,7 @@ class Manager:
         cols.insert(3, cols.pop(cols.index("width")))
         csum = self.batch_res_PSD["counts"].sum()
         self.batch_res_PSD = self.batch_res_PSD.reindex(columns=cols)
-        self.batch_res_PSD["cummulative"] = self.batch_res_PSD[
-            "counts"
-        ].cumsum()
+        self.batch_res_PSD["cummulative"] = self.batch_res_PSD["counts"].cumsum()
         self.batch_res_PSD["counts_norm"] = self.batch_res_PSD["counts"] / csum
         self.batch_res_PSD["cummulative_norm"] = self.batch_res_PSD[
             "counts_norm"
@@ -315,17 +308,13 @@ class Manager:
             * (self.batch_res_PSD["mid"]) ** 3
         )
         totalvol = self.batch_res_PSD["volume"].sum()
-        self.batch_res_PSD["volume_cummulative"] = self.batch_res_PSD[
-            "volume"
-        ].cumsum()
-        self.batch_res_PSD["volume_norm"] = (
-            self.batch_res_PSD["volume"] / totalvol
-        )
+        self.batch_res_PSD["volume_cummulative"] = self.batch_res_PSD["volume"].cumsum()
+        self.batch_res_PSD["volume_norm"] = self.batch_res_PSD["volume"] / totalvol
         self.batch_res_PSD["volume_cummulative_norm"] = self.batch_res_PSD[
             "volume_norm"
         ].cumsum()
 
-        if plot == True:
+        if plot:
             self.plot_PSD(norm=False, cummul=True, export=True)
         PSD_space_str = np.array2string(
             PSD_space,
@@ -335,17 +324,17 @@ class Manager:
             max_line_width=np.inf,  # no limit on line width
         )
         logger.info(
-            f"{str(self)} Primary Particle size distribution table created. "
+            f"{self!s} Primary Particle size distribution table created. "
             f"PSD_space used: {PSD_space_str}"
         )
         # return self.batch_res_PSD
 
     def generate_aglPSD(
         self,
-        PSD_space=None,
-        plot=True,
-        include_dsom=False,
-    ):
+        PSD_space: npt.NDArray = None,
+        plot: bool = True,
+        include_dsom: bool = False,
+    ) -> None:
         if self.batch_res_aglDF.empty:
             self.generate_aglTable()
         if PSD_space is None:
@@ -385,12 +374,8 @@ class Manager:
         cols.insert(3, cols.pop(cols.index("width")))
         csum = self.batch_res_aglPSD["counts"].sum()
         self.batch_res_aglPSD = self.batch_res_aglPSD.reindex(columns=cols)
-        self.batch_res_aglPSD["cummulative"] = self.batch_res_aglPSD[
-            "counts"
-        ].cumsum()
-        self.batch_res_aglPSD["counts_norm"] = (
-            self.batch_res_aglPSD["counts"] / csum
-        )
+        self.batch_res_aglPSD["cummulative"] = self.batch_res_aglPSD["counts"].cumsum()
+        self.batch_res_aglPSD["counts_norm"] = self.batch_res_aglPSD["counts"] / csum
         self.batch_res_aglPSD["cummulative_norm"] = self.batch_res_aglPSD[
             "counts_norm"
         ].cumsum()
@@ -408,11 +393,11 @@ class Manager:
         self.batch_res_aglPSD["volume_norm"] = (
             self.batch_res_aglPSD["volume"] / totalvol
         )
-        self.batch_res_aglPSD["volume_cummulative_norm"] = (
-            self.batch_res_aglPSD["volume_norm"].cumsum()
-        )
+        self.batch_res_aglPSD["volume_cummulative_norm"] = self.batch_res_aglPSD[
+            "volume_norm"
+        ].cumsum()
 
-        if plot == True:
+        if plot:
             self.plot_aglPSD(norm=False, cummul=True, export=True)
 
         PSD_space_str = np.array2string(
@@ -429,10 +414,10 @@ class Manager:
 
     def generate_aglPCD(
         self,
-        PCD_space,
-        plot=False,
-        include_dsom=False,
-    ):
+        PCD_space: npt.NDArray,
+        plot: bool = False,
+        include_dsom: bool = False,
+    ) -> None:
         if self.batch_res_aglDF.empty:
             self.generate_aglTable()
         if include_dsom:
@@ -468,17 +453,13 @@ class Manager:
         cols.insert(3, cols.pop(cols.index("width")))
         csum = self.batch_res_aglPCD["counts"].sum()
         self.batch_res_aglPCD = self.batch_res_aglPCD.reindex(columns=cols)
-        self.batch_res_aglPCD["cummulative"] = self.batch_res_aglPCD[
-            "counts"
-        ].cumsum()
-        self.batch_res_aglPCD["counts_norm"] = (
-            self.batch_res_aglPCD["counts"] / csum
-        )
+        self.batch_res_aglPCD["cummulative"] = self.batch_res_aglPCD["counts"].cumsum()
+        self.batch_res_aglPCD["counts_norm"] = self.batch_res_aglPCD["counts"] / csum
         self.batch_res_aglPCD["cummulative_norm"] = self.batch_res_aglPCD[
             "counts_norm"
         ].cumsum()
 
-        if plot == True:
+        if plot:
             self.plot_aglPCD(norm=False, cummul=True, export=True)
 
         PCD_space_str = np.array2string(
@@ -493,7 +474,7 @@ class Manager:
             f"PCD_space used: {PCD_space_str}"
         )
 
-    def generate_DSsummary(self):
+    def generate_DSsummary(self) -> None:
         self.batch_res_DSsummary = pd.DataFrame()
         for i, ds in enumerate(self._DS):
             temp = ds.get_summary()
@@ -504,9 +485,9 @@ class Manager:
             self.batch_res_DSsummary = pd.concat(
                 [self.batch_res_DSsummary, temp], axis=0, ignore_index=True
             )
-        logger.info(f"{str(self)} DataSets summary table created.")
+        logger.info(f"{self!s} DataSets summary table created.")
 
-    def generate_summary(self):
+    def generate_summary(self) -> None:
         # TODO: batch_res_<specifier> logic needs to be reordered / redesigned
         # self.batch_res_DSsummary may be None at this point
         DSsumm = self.batch_res_DSsummary
@@ -542,21 +523,17 @@ class Manager:
         summ["agl_D10"] = self.batch_res_aglDF["D"].quantile(q=0.1)
         summ["agl_D50"] = self.batch_res_aglDF["D"].quantile(q=0.5)
         summ["agl_D90"] = self.batch_res_aglDF["D"].quantile(q=0.9)
-        summ["agl_member_count_mean"] = self.batch_res_aglDF[
-            "members_count"
-        ].mean()
-        summ["agl_member_count_std"] = self.batch_res_aglDF[
-            "members_count"
-        ].std()
-        summ["agl_member_count_q10"] = self.batch_res_aglDF[
-            "members_count"
-        ].quantile(q=0.1)
-        summ["agl_member_count_q50"] = self.batch_res_aglDF[
-            "members_count"
-        ].quantile(q=0.5)
-        summ["agl_member_count_q90"] = self.batch_res_aglDF[
-            "members_count"
-        ].quantile(q=0.9)
+        summ["agl_member_count_mean"] = self.batch_res_aglDF["members_count"].mean()
+        summ["agl_member_count_std"] = self.batch_res_aglDF["members_count"].std()
+        summ["agl_member_count_q10"] = self.batch_res_aglDF["members_count"].quantile(
+            q=0.1
+        )
+        summ["agl_member_count_q50"] = self.batch_res_aglDF["members_count"].quantile(
+            q=0.5
+        )
+        summ["agl_member_count_q90"] = self.batch_res_aglDF["members_count"].quantile(
+            q=0.9
+        )
         self.batch_res_summary = summ.T
 
         logger.info(
@@ -565,38 +542,47 @@ class Manager:
             f"{self.batch_res_summary.loc['n_ppP', 0]:.3f}"
         )
 
-    def get_path(self):
+    def get_path(self) -> Path:
         return self._workdir
 
-    def get_pTable(self):
-        return self.batch_res_pDF
+    def get_pTable(self) -> pd.DataFrame:
+        if self.batch_res_pDF is None:
+            raise ValueError("Particle DataFrame batch_res_pDF was not created")
+        else:
+            return self.batch_res_pDF
 
-    def get_aglTable(self):
-        return self.batch_res_aglDF
+    def get_agglTable(self) -> pd.DataFrame:
+        if self.batch_res_aglDF is None:
+            raise ValueError("Agglomerate DataFrame batch_res_aglDF was not created")
+        else:
+            return self.batch_res_aglDF
 
-    def get_summary(self):
-        return self.batch_res_summary
+    def get_summary(self) -> pd.DataFrame:
+        if self.batch_res_summary is None:
+            raise ValueError("Summary DataFrame batch_res_summary was not created")
+        else:
+            return self.batch_res_summary
 
-    def get_min_pD(self):
-        Dlist = []
-        for i, ds in enumerate(self._DS):
+    def get_min_pD(self) -> float:
+        Dlist: List[float] = []
+        for ds in self._DS:
             Dlist.append(ds.get_smallest_particle().D)
         return min(Dlist)
 
-    def get_max_pD(self):
-        Dlist = []
+    def get_max_pD(self) -> float:
+        Dlist: List[float] = []
         for i, ds in enumerate(self._DS):
             Dlist.append(ds.get_largest_particle().D)
         return max(Dlist)
 
     def get_PSD(
         self,
-        PSD_space=None,
-        plot=False,
-        orientation="left",
-        norm=False,
-        cpsd=False,
-    ):
+        PSD_space: npt.NDArray = None,
+        plot: bool = False,
+        orientation: str = "left",
+        norm: bool = False,
+        cpsd: bool = False,
+    ) -> pd.DataFrame:
         if self.batch_res_PSD.empty or (PSD_space is not None):
             self.generate_PSD(PSD_space=PSD_space, plot=plot)
         else:
@@ -672,8 +658,6 @@ class Manager:
 
         return wDF.loc[:, selection]
 
-    def get_all_aglOBJ(self):
-        pass
 
     def plot_PSD(self, norm=False, cummul=True, export=False, lines=True):
         fig, ax1 = plt.subplots()
@@ -685,9 +669,7 @@ class Manager:
             ax1.set_ylabel("dN [#]")
 
         if lines == False:
-            ax1.step(
-                x=self.batch_res_PSD["right"], y=h, color="black", linewidth=1
-            )
+            ax1.step(x=self.batch_res_PSD["right"], y=h, color="black", linewidth=1)
             ax1.bar(
                 self.batch_res_PSD["left"],
                 height=h,
@@ -715,7 +697,7 @@ class Manager:
             )
             ax2.set_ylabel("cumulative dN/N [%]")
 
-        ax1.set_xlabel("Diameter [\u03BCm]")
+        ax1.set_xlabel("Diameter [\u03bcm]")
         fig.show()
         if export == True:
             if norm == True:
@@ -775,24 +757,20 @@ class Manager:
             )
             ax2.set_ylabel("cumulative dN/N [%]")
 
-        ax1.set_xlabel("Agglomerate equivalent diameter [\u03BCm]")
+        ax1.set_xlabel("Agglomerate equivalent diameter [\u03bcm]")
         fig.show()
         if export == True:
             if norm == True:
                 PSDimg = (
-                    self._workdir
-                    / os.path.basename(self._workdir)
-                    / "_agl_normPSD.png"
+                    self._workdir / os.path.basename(self._workdir) / "_agl_normPSD.png"
                 )
             else:
                 PSDimg = (
-                    self._workdir
-                    / os.path.basename(self._workdir)
-                    / "_agl_PSD.png"
+                    self._workdir / os.path.basename(self._workdir) / "_agl_PSD.png"
                 )
             plt.savefig(PSDimg, dpi=300)
 
-    def export_all_results(self):
+    def export_all_results(self) -> None:
         xls_file = self._workdir / (self._workdir.name + "_agl_analysis.xlsx")
         with pd.ExcelWriter(xls_file) as writer:
             exp_conditions = pd.DataFrame.from_dict(
@@ -801,9 +779,7 @@ class Manager:
             exp_conditions.to_excel(writer, sheet_name="conditions")
             self.img_info.to_excel(writer, sheet_name="img_info")
             self.batch_res_summary.to_excel(writer, sheet_name="summary")
-            self.batch_res_DSsummary.to_excel(
-                writer, sheet_name="DataSets_summary"
-            )
+            self.batch_res_DSsummary.to_excel(writer, sheet_name="DataSets_summary")
             self.batch_res_PSD.to_excel(writer, sheet_name="PSD")
             self.batch_res_aglPSD.to_excel(writer, sheet_name="aglPSD")
             self.batch_res_aglPCD.to_excel(writer, sheet_name="aglPCD")
@@ -869,9 +845,7 @@ class Manager:
             else:
                 sp_periods = int(param[2])
 
-            space = PSD_space(
-                sp_start, sp_end, sp_periods, log=log, step=step_bool
-            )
+            space = PSD_space(sp_start, sp_end, sp_periods, log=log, step=step_bool)
 
         else:
             try:
@@ -884,18 +858,16 @@ class Manager:
                 sp_start = self.get_min_pD()
                 sp_end = self.get_max_pD()
                 sp_periods = max(self.img_info["pixel size [um]"])
-                space = PSD_space(
-                    sp_start, sp_end, sp_periods, log=False, step=True
-                )
+                space = PSD_space(sp_start, sp_end, sp_periods, log=False, step=True)
 
         self._PSD_space = space
         return space
 
     # ----------- dunder methods
-    def __getitem__(self, key):
+    def __getitem__(self, key) -> ImgDataSet:
         return self._DS[key]
 
-    def __iter__(self):
+    def __iter__(self) -> ImgDataSet:
         yield from self._DS
 
     def __repr__(self):
@@ -920,9 +892,7 @@ def PSD_space(
     if log:
         # Ensure that start and end are positive for logarithmic space
         if start <= 0 or end <= 0:
-            raise ValueError(
-                "Start and end must be positive for logarithmic scaling."
-            )
+            raise ValueError("Start and end must be positive for logarithmic scaling.")
 
         # Convert start and end to logarithmic space
         log_start = np.log10(start)
@@ -942,7 +912,5 @@ def PSD_space(
         else:
             # Divide the diameter space by the number of steps, infer step size
             periods = int(periods)
-            bins_arr = np.linspace(
-                start=start, stop=end, num=periods + 1, dtype=float
-            )
+            bins_arr = np.linspace(start=start, stop=end, num=periods + 1, dtype=float)
     return bins_arr
