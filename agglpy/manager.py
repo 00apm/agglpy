@@ -150,7 +150,11 @@ class Manager:
                 f"exported to respective ImgDataSet directory"
             )
 
-    def batch_detect_agglomerates(self, export_img: bool = True) -> None:
+    def batch_detect_agglomerates(
+        self, 
+        classify: bool = True, 
+        export_img: bool = False
+    ) -> None:
         """
         Method for batch analysis of SEM photo and circle fitting data
         from folder structure
@@ -164,7 +168,7 @@ class Manager:
         logger.debug(f"{self!s} Beginning analysis for all DataSets")
         total1 = len(self._DS)
         pbar1 = tqdm(self._DS, total=total1, position=0, leave=True)
-        if self.collector_threshold is None:
+        if classify and (self.collector_threshold is None):
             raise ValueError("Collector Threshold is not defined.")
         for i in pbar1:
             desc0 = "Processing DataSet|" + i.name + "| "
@@ -172,9 +176,10 @@ class Manager:
             pbar1.set_description(desc0 + "- finding agglomerates...")
             i.detect_agglomerates()
             pbar1.update(0)
-            pbar1.set_description(desc0 + "- classifying agglomerates...")
-            i.classify_all_AGL(self.collector_threshold)
-            pbar1.update(0)
+            if classify:
+                pbar1.set_description(desc0 + "- classifying agglomerates...")
+                i.classify_all_AGL(self.collector_threshold)
+                pbar1.update(0)
             if export_img:
                 pbar1.set_description(desc0 + "- drawing agglomerates...")
                 draw_labels = self._settings["export"]["draw_particles"]["labels"]
@@ -183,6 +188,22 @@ class Manager:
                 pbar1.update(0)
         pbar1.close()
         logger.info(f"{self!s} Analysis for all DataSets finished.")
+
+    def calc_extended_agl_param(
+        self,
+        include_dsom: bool = True,
+    ) -> None:
+        logger.debug(
+            f"{self!s} Calculating extended agglomerate parameters for " f"all DataSets"
+        )
+
+        pbar = tqdm(self._DS, total=len(self._DS), position=0, leave=True)
+        for i in pbar:
+            desc0 = f"Calculating extended parameters for DataSet|{i.name}| "
+            pbar.set_description(desc0)
+            i.calc_extended_agl_param(include_dsom=include_dsom)
+            pbar.update(0)
+        pbar.close()
 
     def create_image_data_sets(self, auto_load: bool = True) -> None:
         self._DS_paths = find_datasets_paths(
@@ -344,6 +365,12 @@ class Manager:
                 self.set_PSD_space()
             PSD_space = self._PSD_space
         if include_dsom:
+            if self.batch_res_aglDF["D_dsom"].isna().all():
+                raise ValueError(
+                    "Agglomerate table does not contain valid 'D_dsom' values. "
+                    "Probably the agglomerate parameters need to be recalculated with "
+                    "calc_extended_agl_param(include_dsom=True)."
+                )
             diameters = self.batch_res_aglDF.loc[:, "D_dsom"]
         else:
             diameters = self.batch_res_aglDF.loc[:, "D"]
@@ -423,6 +450,13 @@ class Manager:
         if self.batch_res_aglDF.empty:
             self.generate_aglTable()
         if include_dsom:
+            if self.batch_res_aglDF["members_count_dsom"].isna().all():
+                raise ValueError(
+                    f"Agglomerate table does not contain valid "
+                    f"'members_count_dsom'values. Probably the agglomerate "
+                    f"parameters need to be recalculated with "
+                    f"calc_extended_agl_param(include_dsom=True)."
+                )
             counts = self.batch_res_aglDF.loc[:, "members_count_dsom"]
         else:
             counts = self.batch_res_aglDF.loc[:, "members_count"]
@@ -660,7 +694,6 @@ class Manager:
 
         return wDF.loc[:, selection]
 
-
     def plot_PSD(self, norm=False, cummul=True, export=False, lines=True):
         fig, ax1 = plt.subplots()
         if norm == True:
@@ -867,35 +900,31 @@ class Manager:
 
     # ----------- dunder methods
     def __getitem__(
-            self, 
-            key: str | int, 
-            ) -> ImgDataSet:
+        self,
+        key: str | int,
+    ) -> ImgDataSet:
         if isinstance(key, str):
             idx_list: List = self.img_info.index[
-                self.img_info.loc[:,"name"] == key
-                ].to_list()
+                self.img_info.loc[:, "name"] == key
+            ].to_list()
             if len(idx_list) == 0:
                 raise IndexError(
-                    f"ImgDataSet with name: '{str(key)}'"
-                    f" was not found."
-                    )
+                    f"ImgDataSet with name: '{str(key)}'" f" was not found."
+                )
             elif len(idx_list) > 1:
                 raise IndexError(
-                    f"Multiple ImgDataSet with name: '{str(key)}'"
-                    f" was found."
-                    )
+                    f"Multiple ImgDataSet with name: '{str(key)}'" f" was found."
+                )
             else:
-                idkey: int = idx_list[0] 
+                idkey: int = idx_list[0]
         elif isinstance(key, int):
             idkey = key
         else:
             raise ValueError(
                 f"Manager can be indexed only by ImgDataSet name or ID."
                 f" Key of type {type(key)} was given."
-                )
+            )
         return self._DS[idkey]
-        
-
 
     def __iter__(self) -> ImgDataSet:
         yield from self._DS

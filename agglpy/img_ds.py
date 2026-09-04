@@ -375,7 +375,7 @@ class ImgDataSet:
             iFamily.clear()
             # TODO: Separate calculation from agglomerate creation
             agl_obj.calc_member_param()
-            agl_obj.calc_agl_param(include_dsom=True)
+            agl_obj.calc_agl_param()
 
             # self._all_AGL_DF.loc[j,"members"] = str(self._all_AGL_DF.loc[j,"OBJ"].members)
             # self._all_AGL_DF.loc[j,"member count"] = self._all_AGL_DF.loc[j,"OBJ"].members_count
@@ -393,6 +393,25 @@ class ImgDataSet:
         )
         self._AGGL_flag = True
         return self._all_AGGL_DF
+
+    def calc_extended_agl_param(
+        self, 
+        include_dsom: bool = True
+        ) -> None:
+
+        if not self._AGGL_flag or self._all_AGGL_DF is None:
+            raise ImgDataSetStateError(
+                f"Agglomerate objects were not properly created or are unavailable "
+                f"for ImgDataSet: {self!s}."
+            )
+
+        for a in self.all_AGGL_DF.OBJ:
+            a.calc_extended_param(include_dsom=include_dsom)
+
+        logger.debug(
+            f"{self!s} calc_extended_agl_param() executed for "
+            f"{len(self._all_AGGL_DF.index)} Agglomerates."
+        )
 
     def get_particles(self, IDlist: List[int] = []) -> List[Particle]:
         """
