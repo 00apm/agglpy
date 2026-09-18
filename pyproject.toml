@@ -1,40 +1,50 @@
 [project]
 name = "agglpy"
 description = "A tool for primary particle and agglomerate detection on digital images"
-requires-python = ">=3.10.0"
+requires-python = ">=3.11.0"
 version = "0.3.0"
 authors = [{ name = "Artur Marchewicz", email = "amarchewicz@gmail.com" }]
 license = { text = "BSD-3-Clause" }
 readme = "README.md"
 dependencies = [
-    "numpy == 1.24.4",
-    "pandas == 2.0.3",
-    "opencv-python == 4.8.1.78",
-    "scipy == 1.10.1",
-    "scikit-image == 0.21.0",
-    "tifffile == 2022.8.12",
-    "matplotlib == 3.6.3",
-    "openpyxl == 3.1.5",
-    "pyyaml == 6.0.2",
-    "tqdm == 4.66.5",
+    # numpy/pandas majors are capped: numpy 2.0 removed np.float_ (still used in
+    # auxiliary.py) and pandas 3.0 made copy-on-write mandatory and dropped
+    # DataFrame.append - both need a dedicated migration, not just a version bump.
+    "numpy >= 1.24.4, < 2",
+    "pandas >= 2.0.3, < 3",
+    "opencv-python >= 4.8.1.78, < 5",
+    "scipy >= 1.10.1, < 2",
+    "scikit-image >= 0.21.0, < 1",
+    "tifffile >= 2022.8.12",
+    "matplotlib >= 3.8, < 4",
+    "openpyxl >= 3.1.5, < 4",
+    "pyyaml >= 6.0.2, < 7",
+    "tqdm >= 4.66.5, < 5",
 ]
 
 [project.optional-dependencies]
 notebook = [
-    "ipykernel == 6.29.5",
-    "ipywidgets == 8.1.5",
-    "plotly == 5.16.1",
-    "python-kaleido == 0.2.1",
+    "ipykernel >= 6.29.5",
+    "ipywidgets >= 8.1.5, < 9",
+    # kept on the plotly 5 / kaleido 0.2 pairing on purpose: kaleido >= 1.0 needs a
+    # system Chrome/Chromium install, which is a heavier ask for a notebook extra.
+    "plotly >= 5.16.1, < 6",
+    # PyPI project is "kaleido", not "python-kaleido" (that's only the
+    # conda-forge feedstock name) - the old pin was never pip-installable.
+    "kaleido >= 0.2.1, < 0.3",
+    # not pulled in reliably by ipykernel/ipywidgets alone; without it
+    # `fig.show()` in JupyterLab raises ValueError.
+    "nbformat >= 5.9",
 ]
-test = ["pytest == 8.3.3"]
+test = ["pytest >= 8.3.3, < 9"]
 typing = [
-    "mypy == 1.11.2",
-    "pandas-stubs == 2.1.1.230928",
-    "types-pyyaml == 6.0.12.20240917",
-    "types-tqdm == 4.66.0.20240417",
+    "mypy >= 1.11.2, < 2",
+    "pandas-stubs >= 2.1.1.230928, < 3",
+    "types-pyyaml >= 6.0.12.20240917",
+    "types-tqdm >= 4.66.0.20240417",
 ]
-lint = ["ruff == 0.7.0"]
-dist = ["tox == 4.21.0"]
+lint = ["ruff >= 0.7.0, < 1"]
+dist = ["tox >= 4.21.0, < 5"]
 dev = ["agglpy[test,typing,lint,dist,notebook]"]
 
 [tool.ruff]
@@ -42,8 +52,8 @@ dev = ["agglpy[test,typing,lint,dist,notebook]"]
 line-length = 88
 indent-width = 4
 
-# Assume Python 3.8
-target-version = "py38"
+# Keep in sync with requires-python above.
+target-version = "py311"
 
 respect-gitignore = true
 
@@ -61,7 +71,7 @@ ignore = ["ANN101"]
 convention = "google"
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
 warn_return_any = true
 disallow_untyped_defs = true
 

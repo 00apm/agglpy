@@ -452,7 +452,7 @@ def find_valid_settings(path: os.PathLike) -> List[Path]:
     wdir: Path = Path(path)
     valid_files: List[Path] = []
     for p in wdir.iterdir():
-        a = re.search(".*\.(ya?ml)", str(p))  # match .yml and .yaml files
+        a = re.search(r".*\.(ya?ml)", str(p))  # match .yml and .yaml files
         if a is not None:
             p_valid = Path(a.group())
             try:
