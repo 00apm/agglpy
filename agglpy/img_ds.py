@@ -1367,11 +1367,14 @@ def load_imagej_csv(path: os.PathLike) -> pd.DataFrame:
     df = df.loc[:, list(valid_columns)]
     df.drop(["Type", "Height"], axis="columns", inplace=True)
     df.rename(columns={"Index": "ID", "Width": "D"}, inplace=True)
-    df.loc[:, "R"] = df.loc[:, "D"] / 2
+    df["R"] = df.loc[:, "D"] / 2
 
     # correcting center coordinates (anchor point of oval in ImageJ is defined
-    # in upper-left corner)
-    df.loc[:, "X"] = df.loc[:, "X"] + df.loc[:, "R"]
-    df.loc[:, "Y"] = df.loc[:, "Y"] + df.loc[:, "R"]
+    # in upper-left corner). Reassigns the whole column (rather than
+    # df.loc[:, col] = ...) since X/Y come in as int64 but the corrected
+    # center can be fractional - in-place .loc item-setting across a dtype
+    # change is deprecated in pandas and becomes an error in pandas 3.0.
+    df["X"] = df.loc[:, "X"] + df.loc[:, "R"]
+    df["Y"] = df.loc[:, "Y"] + df.loc[:, "R"]
 
     return df
