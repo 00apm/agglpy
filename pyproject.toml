@@ -26,15 +26,23 @@ dependencies = [
 notebook = [
     "ipykernel >= 6.29.5",
     "ipywidgets >= 8.1.5, < 9",
-    # kept on the plotly 5 / kaleido 0.2 pairing on purpose: kaleido >= 1.0 needs a
-    # system Chrome/Chromium install, which is a heavier ask for a notebook extra.
-    "plotly >= 5.16.1, < 6",
+    "plotly >= 6.1.1, < 7",
     # PyPI project is "kaleido", not "python-kaleido" (that's only the
     # conda-forge feedstock name) - the old pin was never pip-installable.
-    "kaleido >= 0.2.1, < 0.3",
+    # kaleido 1.x needs plotly>=6.1.1 and no longer bundles Chromium - run
+    # `plotly_get_chrome` (or `python -c "import plotly.io as pio; pio.get_chrome()"`)
+    # once in this env after install. That fetches a private, headless
+    # Chromium for kaleido's own use; it does not touch the system default
+    # browser (Firefox stays default).
+    "kaleido >= 1.0, < 2",
     # not pulled in reliably by ipykernel/ipywidgets alone; without it
     # `fig.show()` in JupyterLab raises ValueError.
     "nbformat >= 5.9",
+    # plotly's JupyterLab renderer is anywidget-based; without it fig.show()
+    # produces the figure but nothing renders. Also needs jupyterlab_widgets
+    # + anywidget installed in whatever env actually hosts the JupyterLab
+    # server, if that's not this env - see conda_env_dev.yaml.
+    "anywidget >= 0.9, < 1",
 ]
 test = ["pytest >= 8.3.3, < 9"]
 typing = [
