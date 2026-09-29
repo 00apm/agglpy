@@ -13,9 +13,6 @@ from agglpy.cfg import (create_settings,
                         load_manager_settings, validate_settings)
 from agglpy.defaults import DEFAULT_SETTINGS_SCHEMA
 from agglpy.errors import SettingsStructureError
-from agglpy.tests.fixtures import (expected_valid_config,
-                                   expected_valid_config_processed,
-                                   input_multi_raw_wdir, tests_dir)
 
 
 def test_settings_file_exists(input_multi_raw_wdir: Path):
@@ -148,7 +145,7 @@ def test_extra_keys(expected_valid_config):
 
 def test_valid_config_file_loading(tests_dir, expected_valid_config_processed):
     settings = load_manager_settings(
-        tests_dir / "input/valid_config_only/settings.yml"
+        tests_dir / "data/input/valid_config_only/settings.yml"
     )
     assert settings == expected_valid_config_processed
 
@@ -222,7 +219,7 @@ def test_create_yaml_settings(monkeypatch, tests_dir, input_multi_raw_wdir):
     # Ensure the output directory exists
     output_dir = tests_dir.joinpath("output/settings")
     output_dir.mkdir(parents=True, exist_ok=True)
-    expected_path = tests_dir.joinpath("expected/settings/settings.yml")
+    expected_path = tests_dir.joinpath("data/expected/settings/settings.yml")
     assert expected_path.exists(), "Expected YAML settings file not found"
 
     # Generate the settings.yml file
@@ -241,7 +238,7 @@ def test_create_yaml_settings(monkeypatch, tests_dir, input_multi_raw_wdir):
 
 def test_create_yaml_settings_infer_images(tests_dir):
     # Input
-    input_path = tests_dir / "input/multiple_image_raw_no_settings/"
+    input_path = tests_dir / "data/input/multiple_image_raw_no_settings/"
     
     # Output
     # Ensure the output directory exists
@@ -251,7 +248,7 @@ def test_create_yaml_settings_infer_images(tests_dir):
 
     # Expected
     expected_path = tests_dir.joinpath(
-        "expected/settings/settings_infer_images.yml"
+        "data/expected/settings/settings_infer_images.yml"
     )
     assert expected_path.exists(), "Expected YAML settings file not found"
     

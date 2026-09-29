@@ -10,11 +10,6 @@ from agglpy.dir_structure import (
     is_mgr_dirstruct,
 )
 from agglpy.errors import DirectoryStructureError
-from agglpy.tests.fixtures import (
-    input_multi_raw_wdir,
-    input_multi_wdir,
-    tests_dir,
-)
 
 
 def test_validate_mgr_dirstruct(
@@ -25,11 +20,8 @@ def test_validate_mgr_dirstruct(
     validate_mgr_dirstruct(input_multi_wdir)
 
     # Case 2: invalid directory structure
-    expected_err_msg = (
-        r"Image Data Set directory WindowsPath('<local path>"
-        r"programming libraries/agglpy/agglpy/tests/input/multiple_image_raw/"
-        r"images/D7-019') not found"
-    )
+    missing_dir = input_multi_raw_wdir / "images" / "D7-019"
+    expected_err_msg = f"Image Data Set directory {missing_dir!r} not found"
     escaped_err_msg = re.escape(expected_err_msg)
     with pytest.raises(
         DirectoryStructureError,
@@ -57,7 +49,7 @@ def test_init_mgr_dirstruct(input_multi_raw_wdir: Path, tests_dir: Path):
 
 
 def test_init_mgr_dirstruct_no_settings(tests_dir: Path):
-    input_dir = tests_dir / "input/multiple_image_raw_no_settings" 
+    input_dir = tests_dir / "data/input/multiple_image_raw_no_settings" 
     output_dir = tests_dir / "output/init_dirstruct_no_settings"
     # output_dir.mkdir(parents=True, exist_ok=False)
     shutil.copytree(input_dir, output_dir)

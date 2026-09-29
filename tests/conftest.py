@@ -1,3 +1,5 @@
+"""Shared pytest fixtures, discovered automatically by pytest (no import needed)."""
+
 import pathlib
 
 import pytest
@@ -12,16 +14,16 @@ def tests_dir():
 
 @pytest.fixture
 def input_multi_raw_wdir():
-    return pathlib.Path(__file__).parent / "input" / "multiple_image_raw"
+    return pathlib.Path(__file__).parent / "data" / "input" / "multiple_image_raw"
 
 
 @pytest.fixture
 def input_single_wdir():
-    return pathlib.Path(__file__).parent / "input" / "single_image"
+    return pathlib.Path(__file__).parent / "data" / "input" / "single_image"
 
 @pytest.fixture
 def input_multi_wdir():
-    return pathlib.Path(__file__).parent / "input" / "multiple_image"
+    return pathlib.Path(__file__).parent / "data" / "input" / "multiple_image"
 
 @pytest.fixture
 def expected_valid_config():

@@ -3,10 +3,6 @@ from pathlib import Path
 import pytest
 
 from agglpy.manager import Manager
-from agglpy.tests.fixtures import (
-    input_multi_raw_wdir,
-    input_multi_wdir,
-)
 
 
 def test_manager_constr_wo_init(input_multi_raw_wdir: Path):
