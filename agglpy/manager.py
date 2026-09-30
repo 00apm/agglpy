@@ -732,14 +732,14 @@ class Manager:
 
     def plot_PSD(self, norm=False, cummul=True, export=False, lines=True):
         fig, ax1 = plt.subplots()
-        if norm == True:
+        if norm:
             h = 100 * self.batch_res_PSD["counts_norm"]
             ax1.set_ylabel("dN/N [%]")
         else:
             h = self.batch_res_PSD["counts"]
             ax1.set_ylabel("dN [#]")
 
-        if lines == False:
+        if not lines:
             ax1.step(
                 x=self.batch_res_PSD["right"], y=h, color="black", linewidth=1
             )
@@ -761,7 +761,7 @@ class Manager:
                 linewidth=0.5,
                 color="xkcd:azure",
             )
-        if cummul == True:
+        if cummul:
             ax2 = ax1.twinx()
             ax2.plot(
                 self.batch_res_PSD["mid"],
@@ -772,8 +772,8 @@ class Manager:
 
         ax1.set_xlabel("Diameter [\u03bcm]")
         fig.show()
-        if export == True:
-            if norm == True:
+        if export:
+            if norm:
                 suffix = "_particle_normPSD.png"
             else:
                 suffix = "_particle_PSD.png"
@@ -783,14 +783,14 @@ class Manager:
 
     def plot_aglPSD(self, norm=False, cummul=True, export=False, lines=True):
         fig, ax1 = plt.subplots()
-        if norm == True:
+        if norm:
             h = 100 * self.batch_res_aglPSD["counts_norm"]
             ax1.set_ylabel("dN/N [%]")
         else:
             h = self.batch_res_aglPSD["counts"]
             ax1.set_ylabel("dN [#]")
 
-        if lines == False:
+        if not lines:
             ax1.step(
                 x=self.batch_res_aglPSD["right"],
                 y=h,
@@ -815,7 +815,7 @@ class Manager:
                 linewidth=0.5,
                 color="lightgrey",
             )
-        if cummul == True:
+        if cummul:
             ax2 = ax1.twinx()
             ax2.plot(
                 self.batch_res_aglPSD["mid"],
@@ -826,8 +826,8 @@ class Manager:
 
         ax1.set_xlabel("Agglomerate equivalent diameter [\u03bcm]")
         fig.show()
-        if export == True:
-            if norm == True:
+        if export:
+            if norm:
                 suffix = "_agl_normPSD.png"
             else:
                 suffix = "_agl_PSD.png"

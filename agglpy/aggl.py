@@ -165,7 +165,8 @@ class Agglomerate:
         self.Dg = 2 * self.Rg
         if include_dsom:
             # Include 'dark side of the moon (dsom)' primary particles
-            idj_map = self._members_DF.loc[:, "idj"] == True
+            # .eq(True): element-wise, NaN counts as False
+            idj_map = self._members_DF.loc[:, "idj"].eq(True)
             self.volume_dsom = (
                 self.volume + self._members_DF.loc[idj_map, "volume"].sum()
             )

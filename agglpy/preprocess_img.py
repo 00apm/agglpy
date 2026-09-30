@@ -113,8 +113,6 @@ def reset_imgset_struct(path):
             "\nDo you want to continue [Y/N]? "
         )
         if confirm(msg):
-            imgpaths = []
-            imgnames = []
             for dirpath, dirs, files in os.walk(path):
                 for name in files:
                     name_woext = os.path.splitext(

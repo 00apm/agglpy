@@ -449,7 +449,6 @@ def load_manager_settings(
     Returns:
         dict: loaded settings dict
     """
-    fpath: Path = Path(path)
     with open(path, mode="rt", encoding="utf-8") as settings_file:
         settings: Mapping[str, Any] = load_yaml(settings_file)
         try:

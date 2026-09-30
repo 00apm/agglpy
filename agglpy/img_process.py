@@ -239,21 +239,21 @@ def HCT(
         circlesDF = pd.DataFrame(circles[0], columns=["X", "Y", "R"])
     logger.debug(f"HCT detected: {len(circlesDF.index)} primary particles.")
     # Displaying and exporting images
-    if display_img == True or export_img == True:
+    if display_img or export_img:
         imgC = draw_particles(work_image, circlesDF)
-        if export_edges == True:
+        if export_edges:
             imgE: npt.NDArray | None = cv2.Canny(
                 work_image, threshold1=param1, threshold2=0.5 * param1
             )
         else:
             imgE = None
-        if display_img == True:
+        if display_img:
             cv2.imshow("circles", imgC)
-            if export_edges == True:
+            if export_edges:
                 cv2.imshow("edges", imgE)
             cv2.waitKey(0)  # waits until a key is pressed
             cv2.destroyAllWindows()  # destroys the window showing image
-        if export_img == True:
+        if export_img:
             if not export_img_path:
                 raise ValueError(
                     "Trying to export HCT result circle image, but "
@@ -262,7 +262,7 @@ def HCT(
             else:
                 ex_img_pth = Path(export_img_path)
             cv2.imwrite(str(ex_img_pth), imgC)
-            if export_edges == True:
+            if export_edges:
                 if not export_edges_path:
                     raise ValueError(
                         "Trying to export HCT result edges image, but "

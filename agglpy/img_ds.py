@@ -678,8 +678,7 @@ class ImgDataSet:
         if bar:
             if bar_data is not None:
                 prop = bar_data[0]
-                prop_key = list(prop.keys())[0]
-                prop_label = list(prop.values())[0]
+                prop_label = next(iter(prop.values()))
                 cmap = bar_data[1]
                 norm = bar_data[2]
                 ticks = None
@@ -715,7 +714,7 @@ class ImgDataSet:
                     " color bar into image."
                 )
 
-        if show == True:
+        if show:
             fig.show()
 
         ax.spines["right"].set_visible(False)
@@ -729,7 +728,7 @@ class ImgDataSet:
             axis="y", which="both", right=False, left=False, labelleft=False
         )
 
-        if export == True:
+        if export:
             fname = self.name + "_circles.png"
             if dirpath is not None:
                 fpth = dirpath / fname
@@ -841,17 +840,9 @@ class ImgDataSet:
     def draw_agl(self, AGL, color=(100, 255, 100, 0), labels=False):
         # for i in AGL.get_members():
 
-        memTable = pd.DataFrame()
-        for i, P in enumerate(AGL.get_members()):
-            memTable.loc[i, "X"] = P.X / self.px_size
-            memTable.loc[i, "Y"] = P.Y / self.px_size
-        memTable.reset_index(inplace=True, drop=True)
-        MAXs = memTable.max()
-        MINs = memTable.min()
-
         im1, im2 = self.draw_particles_transp(AGL.get_members(), color=color)
 
-        if labels == True:
+        if labels:
             font = cv2.FONT_HERSHEY_SIMPLEX
             scale = 0.5
             fontColor = color
@@ -862,12 +853,7 @@ class ImgDataSet:
             )
 
             bboxW = bbox[0][0]
-            bboxH = bbox[0][1]
 
-            # locX = int((MINs.X + 1*(MAXs.X-MINs.X)/2 ))
-            # locY = int((MINs.Y + 1*(MAXs.Y-MINs.Y)/2 ))
-            # locX = int(MINs.X)
-            # locY = int(MINs.Y)
             locX = int((AGL.get_members()[0].X) / self.px_size - bboxW / 2)
             locY = int((AGL.get_members()[0].Y) / self.px_size)
             loc = (locX, locY)
@@ -944,7 +930,7 @@ class ImgDataSet:
                 "prop dict is too long, choose single property to draw"
             )
             # label = list(prop.items())[0]
-            prop_key = list(prop.keys())[0]
+            prop_key = next(iter(prop))
         else:
             assert isinstance(prop, str), (
                 "wrong data input- only string and"
@@ -1013,7 +999,7 @@ class ImgDataSet:
                 "prop dict is too long, choose single property to draw"
             )
             # label = list(prop.items())[0]
-            prop_key = list(prop.keys())[0]
+            prop_key = next(iter(prop))
         else:
             assert isinstance(prop, str), (
                 "wrong data input- only string and"
@@ -1041,7 +1027,7 @@ class ImgDataSet:
             val = p.get_properties()[prop_key]
             colors[i] = np.array(RGB_convert_to256(cmap(norm(val))))
 
-        im1, im2 = self.draw_particles_transp(
+        _, im2 = self.draw_particles_transp(
             self._all_PP_DF.OBJ,
             color=colors,
             transparency=0,

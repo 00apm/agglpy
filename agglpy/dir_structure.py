@@ -153,8 +153,8 @@ def validate_mgr_dirstruct(path: os.PathLike) -> None:
 
     settings = load_manager_settings(valid_path)
 
-    # Check if image for each Image Data Set exists
-    DSpaths = find_datasets_paths(
+    # Check if image for each Image Data Set exists (raises if not)
+    find_datasets_paths(
         path=wdir,
         settings=settings,
         ignore=True,
