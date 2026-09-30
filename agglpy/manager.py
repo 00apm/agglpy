@@ -822,11 +822,8 @@ class Manager:
             self.batch_res_aglDF.to_excel(writer, sheet_name="agl_data")
         logger.info(f"{str(self)} Results exported to excel file: {xls_file}.")
 
-    def set_PSD_space(self):
+    def set_PSD_space(self) -> npt.NDArray:
         s = self._settings["analysis"]["PSD_space"]
-
-        space = []
-
         if s is None:
             # set PSD space automatically
             dmin = self.get_min_pD()
@@ -842,6 +839,7 @@ class Manager:
             )
         else:
             space = PSD_space(**s)
+        self._PSD_space = space
         return space
 
     def set_PSD_space_old(self):
