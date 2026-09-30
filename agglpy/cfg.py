@@ -1,6 +1,5 @@
 import os
 import re
-import warnings
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Tuple, Union, cast
@@ -341,15 +340,14 @@ def handle_img_names(
 
     if isinstance(processed_config, dict):
         if txt_is_default_or_none(processed_config["img_file"]):
-            # Needs change: for now .tif is hardcoded; warning is displayed
+            # .tif is the only supported format (SUPPORTED_IMG_FORMATS), so
+            # the extension is not a guess. With more formats, look up the
+            # actual file on disk instead.
             processed_config["img_file"] = image_name + ".tif"
-            warning_msg = (
-                "img_file for image: image_name was set to default. File "
-                "extension is assumed to be .tif; if it needs to be change "
-                "please specify file name with extension in yaml settings"
+            logger.debug(
+                f"img_file for image {image_name} not set, "
+                f"assuming {processed_config['img_file']}"
             )
-            warnings.warn(warning_msg, RuntimeWarning)
-            logger.warning(warning_msg)
         if isinstance(processed_config["HCT_file"], str):
             if txt_is_default(processed_config["HCT_file"]):
                 processed_config["HCT_file"] = image_name + "_HCT.csv"
