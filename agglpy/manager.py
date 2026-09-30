@@ -2,9 +2,8 @@ import os
 import uuid
 import warnings
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
-import matplotlib as mpl  # type: ignore
 import matplotlib.pyplot as plt  # type: ignore
 import numpy as np
 import numpy.typing as npt
@@ -16,9 +15,8 @@ from agglpy.auxiliary import (
     get_floor,
 )
 from agglpy.cfg import load_manager_settings
-from agglpy.defaults import SUPPORTED_IMG_FORMATS
 from agglpy.dir_structure import find_datasets_paths, validate_mgr_dirstruct
-from agglpy.errors import DirectoryStructureError, MultipleFilesFoundError
+from agglpy.errors import DirectoryStructureError
 from agglpy.img_ds import ImgDataSet
 from agglpy.logger import logger
 from agglpy.typing import YamlSettingsTypedDict
@@ -91,7 +89,7 @@ class Manager:
         self._DS = []
         self._PSD_space = None
 
-        logger.info(f"Creating Manager object {str(self)} at: {working_dir}.")
+        logger.info(f"Creating Manager object {self!s} at: {working_dir}.")
 
         try:
             validate_mgr_dirstruct(self._workdir)
@@ -108,7 +106,7 @@ class Manager:
         if init_data_sets:
             self.create_image_data_sets()
         logger.info(
-            f"{str(self)} Manager object was successfully created at {str(self.working_dir)}"
+            f"{self!s} Manager object was successfully created at {self.working_dir!s}"
         )
 
     # ----------- Manager Properties
@@ -219,7 +217,7 @@ class Manager:
 
         # Constructing DataSets (ImgAgl objects) for analysis
         # and filling IMG_INFO table
-        logger.debug(f"{str(self)} Creating ImgDataSet objects.")
+        logger.debug(f"{self!s} Creating ImgDataSet objects.")
         info_dict: Dict[str, List[Any]] = {
             "name": [],
             "img_name": [],
@@ -458,7 +456,7 @@ class Manager:
             max_line_width=np.inf,  # no limit on line width
         )
         logger.info(
-            f"{str(self)} Agglomerate size distribution table created. "
+            f"{self!s} Agglomerate size distribution table created. "
             f"PSD_space used: {PSD_space_str}"
         )
 
@@ -480,10 +478,10 @@ class Manager:
         if include_dsom:
             if self.batch_res_aglDF["members_count_dsom"].isna().all():
                 raise ValueError(
-                    f"Agglomerate table does not contain valid "
-                    f"'members_count_dsom'values. Probably the agglomerate "
-                    f"parameters need to be recalculated with "
-                    f"calc_extended_agl_param(include_dsom=True)."
+                    "Agglomerate table does not contain valid "
+                    "'members_count_dsom'values. Probably the agglomerate "
+                    "parameters need to be recalculated with "
+                    "calc_extended_agl_param(include_dsom=True)."
                 )
             counts = self.batch_res_aglDF.loc[:, "members_count_dsom"]
         else:
@@ -535,7 +533,7 @@ class Manager:
             max_line_width=np.inf,  # no limit on line width
         )
         logger.info(
-            f"{str(self)} Primary Particle count distribution table created. "
+            f"{self!s} Primary Particle count distribution table created. "
             f"PCD_space used: {PCD_space_str}"
         )
 
@@ -605,7 +603,7 @@ class Manager:
         self.batch_res_summary = summ.T
 
         logger.info(
-            f"{str(self)} Results summary table created. "
+            f"{self!s} Results summary table created. "
             f"Mean Aerosol Particle Primary Particle Count: "
             f"{self.batch_res_summary.loc['n_ppP', 0]:.3f}"
         )
@@ -854,7 +852,7 @@ class Manager:
             self.batch_res_aglPCD.to_excel(writer, sheet_name="aglPCD")
             self.batch_res_pDF.to_excel(writer, sheet_name="particle_data")
             self.batch_res_aglDF.to_excel(writer, sheet_name="agl_data")
-        logger.info(f"{str(self)} Results exported to excel file: {xls_file}.")
+        logger.info(f"{self!s} Results exported to excel file: {xls_file}.")
 
     def set_PSD_space(self) -> npt.NDArray:
         s = self._settings["analysis"]["PSD_space"]
@@ -887,11 +885,11 @@ class Manager:
             ].to_list()
             if len(idx_list) == 0:
                 raise IndexError(
-                    f"ImgDataSet with name: '{str(key)}' was not found."
+                    f"ImgDataSet with name: '{key!s}' was not found."
                 )
             elif len(idx_list) > 1:
                 raise IndexError(
-                    f"Multiple ImgDataSet with name: '{str(key)}' was found."
+                    f"Multiple ImgDataSet with name: '{key!s}' was found."
                 )
             else:
                 idkey: int = idx_list[0]

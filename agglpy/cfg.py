@@ -50,7 +50,7 @@ _SettingsLoader.add_implicit_resolver(
 )
 
 
-def load_yaml(stream: str | IO[str]) -> Any:  # noqa: ANN401 (YAML can hold anything)
+def load_yaml(stream: str | IO[str]) -> Any:
     """yaml.safe_load that also reads exponent notation like 1e-6 as float."""
     return yaml.load(stream, Loader=_SettingsLoader)
 

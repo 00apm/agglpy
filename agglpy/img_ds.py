@@ -9,7 +9,7 @@ import concurrent
 import os
 import warnings
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple
 
 import cv2  # type: ignore
 
@@ -20,9 +20,7 @@ import matplotlib.pyplot as plt  # type: ignore
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
-from scipy import constants  # type: ignore
 from scipy import spatial as spsp
-from tqdm import tqdm
 
 from agglpy.aggl import Agglomerate, Particle
 from agglpy.auxiliary import RGB_convert_to256, RGB_shader, read_tiff_tags
@@ -38,7 +36,7 @@ from agglpy.errors import (
     ImgDataSetStructureError,
     ParticleCsvStructureError,
 )
-from agglpy.img_process import HCT, HCT_multi, crop_img, preprocess_img
+from agglpy.img_process import HCT_multi, crop_img, preprocess_img
 from agglpy.logger import logger
 from agglpy.typing import ImageSettingsTypedDict, PPSouceCsvType
 
@@ -294,7 +292,7 @@ class ImgDataSet:
             # kwargs unpacking supported from python 3.12
         )
         logger.info(
-            f"Primary particle detection complete for ImgDataSet {str(self)}. "
+            f"Primary particle detection complete for ImgDataSet {self!s}. "
             f"Number of detected primary particles detected: {len(df.index)}"
         )
         # save to  buffer
@@ -609,11 +607,11 @@ class ImgDataSet:
     def retrieve_magnification(self) -> float:
         if not self._img_meta_dict:
             raise ImgDataSetStructureError(
-                f"._img_meta_dict is empty for ImgDataSet {str(self)}. "
+                f"._img_meta_dict is empty for ImgDataSet {self!s}. "
                 f"Check if tiff tags are loaded properly."
             )
         logger.debug(
-            f"{str(self)} Attempting to find magnification in "
+            f"{self!s} Attempting to find magnification in "
             f"{self.get_img_filename()} tags."
         )
         lmag = self._img_meta_dict["CZ_SEM"]["ap_mag"][1].split()
@@ -628,7 +626,7 @@ class ImgDataSet:
             "._img_meta_dict is empty. Check if tiff tags are loaded properly."
         )
         logger.debug(
-            f"{str(self)} Attempting to find pixel size in "
+            f"{self!s} Attempting to find pixel size in "
             f"{self.get_img_filename()} tags."
         )
         keys = ["ap_image_pixel_size", "ap_pixel_size"]
@@ -1091,9 +1089,9 @@ class ImgDataSet:
         if self._PPsource_bufferDF is None:
             raise ImgDataSetBufferError(
                 f"PP source buffer is empty. Primary particles were not "
-                f"properly loaded for ImgDataSet: {str(self)}."
+                f"properly loaded for ImgDataSet: {self!s}."
             )
-        if not ("D" in self._PPsource_bufferDF.columns):
+        if "D" not in self._PPsource_bufferDF.columns:
             self._PPsource_bufferDF.loc[:, "D"] = (
                 2 * self._PPsource_bufferDF.loc[:, "R"]
             )
@@ -1119,13 +1117,13 @@ class ImgDataSet:
         # applying scale to R (converting to µm)
         if self._PPsource_bufferDF is None or self._PPsource_bufferDF.empty:
             raise ImgDataSetBufferError(
-                f"_HCT_bufferDF is not initialized or is empty. Probably .csv "
-                f"data was not loaded properly"
+                "_HCT_bufferDF is not initialized or is empty. Probably .csv "
+                "data was not loaded properly"
             )
         if not self.px_size:
             raise ImgDataSetStructureError(
                 f"Pixel size is None. Check settings of image file for "
-                f"DataSet {str(self)}"
+                f"DataSet {self!s}"
             )
         self._PPsource_bufferDF.loc[:, ["X", "Y", "R", "D"]] = (
             self._PPsource_bufferDF.loc[:, ["X", "Y", "R", "D"]] * self.px_size
@@ -1152,7 +1150,7 @@ class ImgDataSet:
         if buffer.empty:
             raise ImgDataSetBufferError(
                 f"Primary Parcicle source buffer is empty. Check if .csv data "
-                f"was loaded properly for ImgDataSet: {str(self)}."
+                f"was loaded properly for ImgDataSet: {self!s}."
             )
         particles_dict: Dict[int, "Particle"] = {}
         for _, row in buffer.iterrows():
@@ -1167,7 +1165,7 @@ class ImgDataSet:
         if buffer.empty:
             raise ImgDataSetBufferError(
                 f"Primary Parcicle source buffer is empty. Check if .csv data "
-                f"was loaded properly for ImgDataSet: {str(self)}."
+                f"was loaded properly for ImgDataSet: {self!s}."
             )
         particles_dict: Dict[int, "Particle"] = {}
         with concurrent.futures.ProcessPoolExecutor() as executor:
@@ -1204,7 +1202,7 @@ class ImgDataSet:
         if self._all_PP_DF is None or self._all_PP_DF.empty:
             raise ImgDataSetStructureError(
                 f"Primary Particle DataFrame was not properly created after "
-                f" Particle objects creation for ImgDataSet: {str(self)}"
+                f" Particle objects creation for ImgDataSet: {self!s}"
             )
         self._KDTree = spsp.KDTree(self.all_PP_DF.loc[:, ["X", "Y"]])
         return self._KDTree
@@ -1212,14 +1210,14 @@ class ImgDataSet:
     def _find_all_intersecting(self) -> None:
         if not self._KDTree:
             logger.debug(
-                f"KDTree structure was not created for {str(self)}. "
+                f"KDTree structure was not created for {self!s}. "
                 f"Initializing KDTree ..."
             )
             self._construct_KDTree()
         if self._all_PP_DF is None or self._all_PP_DF.empty:
             raise ImgDataSetStructureError(
                 f"Primary Particle DataFrame was not properly created after "
-                f" Particle objects creation for ImgDataSet: {str(self)}"
+                f" Particle objects creation for ImgDataSet: {self!s}"
             )
         KD: spsp.KDTree = self._KDTree
         P_workDF = self._all_PP_DF.loc[:, "OBJ"]

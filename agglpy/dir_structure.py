@@ -159,7 +159,7 @@ def validate_mgr_dirstruct(path: os.PathLike) -> None:
         settings=settings,
         ignore=True,
     )
-    logger.debug(f"Manager directory structure positively validated.")
+    logger.debug("Manager directory structure positively validated.")
 
 
 def find_datasets_paths(

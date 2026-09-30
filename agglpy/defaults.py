@@ -1,12 +1,9 @@
 # Type definitions for type checking
-from typing import Any, List, Literal, Mapping, Tuple, Union
-
-import numpy as np
+from typing import Any, List, Mapping, Tuple
 
 from agglpy.typing import (
     HctParameter,
     ImageRawSettingsTypedDict,
-    ImageSettingsTypedDict,
     PPSouceCsvType,
     PreprocessFunction,
     YamlRawSettingsTypedDict,

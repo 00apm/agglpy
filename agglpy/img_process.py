@@ -16,7 +16,6 @@ import numpy.typing as npt
 import pandas as pd
 from skimage.restoration import rolling_ball as skimage_rolling_ball
 
-from agglpy.errors import SettingsStructureError
 from agglpy.logger import logger
 
 
@@ -130,7 +129,7 @@ def preprocess_img(
     if clahe:
         logger.debug(
             f"Applying CLAHE- Contrast Limited Adaptive Histogram Equalization"
-            f" with parameters: {str(clahe)}"
+            f" with parameters: {clahe!s}"
         )
         clahe_obj = cv2.createCLAHE(clipLimit=clahe[0], tileGridSize=clahe[1])
         work_image = clahe_obj.apply(work_image)
@@ -257,8 +256,8 @@ def HCT(
         if export_img == True:
             if not export_img_path:
                 raise ValueError(
-                    f"Trying to export HCT result circle image, but "
-                    f"export_img_path was not specified."
+                    "Trying to export HCT result circle image, but "
+                    "export_img_path was not specified."
                 )
             else:
                 ex_img_pth = Path(export_img_path)
@@ -266,8 +265,8 @@ def HCT(
             if export_edges == True:
                 if not export_edges_path:
                     raise ValueError(
-                        f"Trying to export HCT result edges image, but "
-                        f"export_edges_path was not specified."
+                        "Trying to export HCT result edges image, but "
+                        "export_edges_path was not specified."
                     )
                 else:
                     ex_edges_pth = Path(export_edges_path)
@@ -390,8 +389,8 @@ def HCT_multi(
     if export_any:
         if (export_namebase is None) or (export_dir is None):
             raise ValueError(
-                f"Trying to export HCT results, but export_namebase or "
-                f"export_dir was not defined."
+                "Trying to export HCT results, but export_namebase or "
+                "export_dir was not defined."
             )
         else:
             exp_dir = Path(export_dir)
@@ -418,8 +417,8 @@ def HCT_multi(
         )
     ):
         imname = (
-            f"{str(i + 1)}_{export_namebase}_D({str(dmin)}-{str(dmax)})"
-            f"_p1({str(p1)})_p2({str(p2)})"
+            f"{i + 1!s}_{export_namebase}_D({dmin!s}-{dmax!s})"
+            f"_p1({p1!s})_p2({p2!s})"
         )
         if export_any:
             # ensure that mypy recognize that exp_dir is a Path at this point
