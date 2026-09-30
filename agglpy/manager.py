@@ -358,10 +358,10 @@ class Manager:
         plot: bool = True,
         include_dsom: bool = False,
     ) -> None:
-        if self.batch_res_aglDF.empty:
+        if self.batch_res_aglDF is None:
             self.generate_aglTable()
         if PSD_space is None:
-            if self._PSD_space.size == 0:
+            if self._PSD_space is None:
                 self.set_PSD_space()
             PSD_space = self._PSD_space
         if include_dsom:
@@ -447,7 +447,7 @@ class Manager:
         plot: bool = False,
         include_dsom: bool = False,
     ) -> None:
-        if self.batch_res_aglDF.empty:
+        if self.batch_res_aglDF is None:
             self.generate_aglTable()
         if include_dsom:
             if self.batch_res_aglDF["members_count_dsom"].isna().all():
@@ -525,11 +525,10 @@ class Manager:
 
     def generate_summary(self) -> None:
         # TODO: batch_res_<specifier> logic needs to be reordered / redesigned
-        # self.batch_res_DSsummary may be None at this point
+        if self.batch_res_DSsummary is None:
+            self.generate_DSsummary()
         DSsumm = self.batch_res_DSsummary
         summ = pd.DataFrame()  # self.batch_res_summary
-        if len(DSsumm.index) == 0:
-            self.generate_DSsummary()
         summ = summ.reindex_like(DSsumm)
         summ.drop("DS ID", axis=1, inplace=True)
         summ = summ.head(1)
@@ -619,7 +618,7 @@ class Manager:
         norm: bool = False,
         cpsd: bool = False,
     ) -> pd.DataFrame:
-        if self.batch_res_PSD.empty or (PSD_space is not None):
+        if self.batch_res_PSD is None or (PSD_space is not None):
             self.generate_PSD(PSD_space=PSD_space, plot=plot)
         else:
             self.set_PSD_space()
