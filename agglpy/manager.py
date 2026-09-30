@@ -841,60 +841,6 @@ class Manager:
         self._PSD_space = space
         return space
 
-    def set_PSD_space_old(self):
-        s = self._settings["analysis"]["PSD_space"]
-        log = self._settings["analysis"]["PSD_space_log"]
-
-        space = []
-        if ("[" == s[0]) and ("]" == s[-1]):
-            space = s.replace("[", "")
-            space = space.replace("]", "")
-            space = space.split(",")
-            space = [float(i) for i in space]
-        elif "," in s:
-            param = s.split(",")
-            # print(param)
-            assert len(param) in [3, 4], (
-                "Wrong structure of PSD_space "
-                "variable in settings.csv. If input is list of interval bounds- "
-                "ensure that this parameter starts and ends with [ and ]"
-            )
-
-            if "step" in param:
-                param.remove("step")
-                step_bool = True
-            else:
-                step_bool = False
-
-            sp_start = float(param[0])
-            sp_end = float(param[1])
-
-            if step_bool:
-                try:
-                    sp_periods = float(param[2])
-                except ValueError:
-                    sp_periods = max(self.img_info["pixel size [um]"])
-            else:
-                sp_periods = int(param[2])
-
-            space = PSD_space(sp_start, sp_end, sp_periods, log=log, step=step_bool)
-
-        else:
-            try:
-                if float(s).is_integer():
-                    sp_start = self.get_min_pD()
-                    sp_end = self.get_max_pD()
-                    sp_periods = int(s)
-                    space = PSD_space(sp_start, sp_end, sp_periods, log=log)
-            except ValueError:
-                sp_start = self.get_min_pD()
-                sp_end = self.get_max_pD()
-                sp_periods = max(self.img_info["pixel size [um]"])
-                space = PSD_space(sp_start, sp_end, sp_periods, log=False, step=True)
-
-        self._PSD_space = space
-        return space
-
     # ----------- dunder methods
     def __getitem__(
         self,
