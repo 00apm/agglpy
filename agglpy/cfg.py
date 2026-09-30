@@ -2,7 +2,7 @@ import os
 import re
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Tuple, Union, cast
+from typing import IO, Any, Dict, List, Mapping, Tuple, Union, cast
 
 import yaml
 
@@ -24,6 +24,29 @@ from agglpy.typing import (
     YamlRawSettingsTypedDict,
     YamlSettingsTypedDict,
 )
+
+
+class _SettingsLoader(yaml.SafeLoader):
+    """SafeLoader that also reads exponent notation like 1e-6 as float.
+
+    PyYAML implements YAML 1.1, where a float needs a dot and a signed
+    exponent, so "1e-6" or "1.0e6" load as strings. YAML 1.2 and Python's
+    float() accept both.
+    """
+
+
+# Appended after the built-in resolvers, so it only applies to scalars that
+# no other rule matched (ints, YAML 1.1 floats, bools stay as they were)
+_SettingsLoader.add_implicit_resolver(
+    "tag:yaml.org,2002:float",
+    re.compile(r"^[-+]?(?:[0-9][0-9_]*(?:\.[0-9_]*)?|\.[0-9_]+)[eE][-+]?[0-9]+$"),
+    list("-+0123456789."),
+)
+
+
+def load_yaml(stream: str | IO[str]) -> Any:  # noqa: ANN401 (YAML can hold anything)
+    """yaml.safe_load that also reads exponent notation like 1e-6 as float."""
+    return yaml.load(stream, Loader=_SettingsLoader)
 
 
 def create_settings_dict(images: List[Path]) -> YamlRawSettingsTypedDict:
@@ -396,7 +419,7 @@ def is_valid_settings_file(path: os.PathLike) -> bool:
     """
     fpath: Path = Path(path)
     with open(fpath, mode="rt", encoding="utf-8") as settings_file:
-        settings = yaml.safe_load(settings_file)
+        settings = load_yaml(settings_file)
         if is_valid_settings(config=settings):
             return True
         else:
@@ -422,7 +445,7 @@ def load_manager_settings(
     """
     fpath: Path = Path(path)
     with open(path, mode="rt", encoding="utf-8") as settings_file:
-        settings: Mapping[str, Any] = yaml.safe_load(settings_file)
+        settings: Mapping[str, Any] = load_yaml(settings_file)
         try:
             validate_settings(
                 config=settings,

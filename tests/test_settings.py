@@ -9,6 +9,7 @@ from agglpy.cfg import (
     create_settings_dict,
     find_all_images,
     load_manager_settings,
+    load_yaml,
     validate_settings,
 )
 from agglpy.defaults import DEFAULT_SETTINGS_SCHEMA
@@ -233,3 +234,59 @@ def test_create_settings_writes_expected_yaml(
     assert output_path.read_text(encoding="utf-8") == expected_path.read_text(
         encoding="utf-8"
     )
+
+
+# ----------- YAML float parsing
+# PyYAML implements YAML 1.1, where a float needs a dot AND a signed exponent,
+# so "1e-6" or "1.0e6" would load as strings. load_yaml accepts them as floats.
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("1e-6", 1e-6),  # no dot
+        ("1E-6", 1e-6),  # capital E
+        ("1.0e6", 1e6),  # unsigned exponent
+        ("-2.5e3", -2500.0),  # negative mantissa
+        ("1.0e-6", 1e-6),  # already a float in YAML 1.1
+        (".5e-3", 5e-4),  # already a float in YAML 1.1
+    ],
+)
+def test_load_yaml_reads_exponent_notation_as_float(text: str, expected: float):
+    value = load_yaml(f"x: {text}")["x"]
+
+    assert isinstance(value, float)
+    assert value == pytest.approx(expected)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("20", 20),  # int stays int
+        ("D7-017", "D7-017"),  # image names stay strings
+        ("auto", "auto"),  # sentinels stay strings (resolved by handle_defaults)
+        ("e5", "e5"),  # no mantissa, not a number
+        ("'1e-6'", "1e-6"),  # explicitly quoted stays a string
+    ],
+)
+def test_load_yaml_leaves_non_floats_unchanged(text: str, expected: Any):
+    value = load_yaml(f"x: {text}")["x"]
+
+    assert value == expected
+    assert type(value) is type(expected)
+
+
+def test_load_manager_settings_exponent_floats(input_multi_wdir: Path, tmp_path: Path):
+    """PSD_space in metres written as 1e-7 must load as float, not str."""
+    text = (input_multi_wdir / "settings.yml").read_text(encoding="utf-8")
+    # guard: the fixture still looks the way this test expects
+    assert "start: 0\n" in text and "end: 10\n" in text
+    text = text.replace("start: 0\n", "start: 1e-7\n")
+    text = text.replace("end: 10\n", "end: 1e-5\n")
+    settings_path = tmp_path / "settings.yml"
+    settings_path.write_text(text, encoding="utf-8")
+
+    settings = load_manager_settings(settings_path)
+
+    assert settings["analysis"]["PSD_space"]["start"] == 1e-7
+    assert settings["analysis"]["PSD_space"]["end"] == 1e-5
