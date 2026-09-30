@@ -49,6 +49,11 @@ PARTICLE_D = [1.2, 2.5, 3.1, 7.8]
 AGL_D = [2.0, 4.5, 9.0]
 
 
+# Deprecated pandas calls (e.g. pd.value_counts) must not come back in
+# the PSD code: they warn now and break with the next pandas major
+no_future_warnings = pytest.mark.filterwarnings("error::FutureWarning")
+
+
 @pytest.fixture
 def mgr(input_multi_wdir: Path) -> Manager:
     """Manager with settings loaded but no ImgDataSets.
@@ -68,6 +73,7 @@ def test_set_PSD_space_stores_bins(mgr: Manager):
     np.testing.assert_array_equal(mgr._PSD_space, expected)
 
 
+@no_future_warnings
 def test_generate_PSD_uses_settings_space(mgr: Manager):
     """Without an explicit PSD_space, bin by settings.analysis.PSD_space."""
     mgr.batch_res_pDF = pd.DataFrame({"D": PARTICLE_D})
@@ -78,6 +84,7 @@ def test_generate_PSD_uses_settings_space(mgr: Manager):
     assert mgr.batch_res_PSD["counts"].sum() == len(PARTICLE_D)
 
 
+@no_future_warnings
 def test_generate_aglPSD_before_generate_PSD(mgr: Manager):
     """generate_aglPSD must not rely on generate_PSD having set _PSD_space."""
     mgr.batch_res_aglDF = pd.DataFrame({"D": AGL_D})
@@ -88,6 +95,7 @@ def test_generate_aglPSD_before_generate_PSD(mgr: Manager):
     assert mgr.batch_res_aglPSD["counts"].sum() == len(AGL_D)
 
 
+@no_future_warnings
 def test_generate_aglPSD_builds_missing_agl_table(mgr: Manager, monkeypatch):
     """If the agglomerate table was never generated (None), build it first."""
     calls = []
@@ -105,6 +113,7 @@ def test_generate_aglPSD_builds_missing_agl_table(mgr: Manager, monkeypatch):
     assert mgr.batch_res_aglPSD["counts"].sum() == len(AGL_D)
 
 
+@no_future_warnings
 def test_generate_aglPCD_builds_missing_agl_table(mgr: Manager, monkeypatch):
     """Same as above for the primary-particle count distribution."""
     calls = []
@@ -122,6 +131,7 @@ def test_generate_aglPCD_builds_missing_agl_table(mgr: Manager, monkeypatch):
     assert mgr.batch_res_aglPCD["counts"].tolist() == [1, 2, 1]
 
 
+@no_future_warnings
 def test_get_PSD_first_call(mgr: Manager):
     """get_PSD() works before any PSD table exists (batch_res_PSD is None)."""
     mgr.batch_res_pDF = pd.DataFrame({"D": PARTICLE_D})
