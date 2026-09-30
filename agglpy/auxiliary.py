@@ -1,6 +1,5 @@
 import os
-from pathlib import Path
-from typing import Any, List, Tuple, Union
+from typing import List, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -88,7 +87,9 @@ class nlcmap:
         self.levels = np.asarray(levels, dtype="float64")
         self._x = self.levels
         self.levmax = self.levels.max()
-        self.transformed_levels = np.linspace(0.0, self.levmax, len(self.levels))
+        self.transformed_levels = np.linspace(
+            0.0, self.levmax, len(self.levels)
+        )
 
     def __call__(self, xi, alpha=1.0, **kwargs):  # type: ignore
         yi = np.interp(xi, self._x, self.transformed_levels)

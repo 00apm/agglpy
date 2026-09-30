@@ -10,19 +10,23 @@ def tests_dir():
     """Path to the tests/ directory."""
     return pathlib.Path(__file__).parent
 
+
 @pytest.fixture
 def input_multi_raw_wdir():
     """Flat dir with 3 .tif images and a settings.yml, no images/ subdirs yet.
 
     Not a valid Manager working dir until init_mgr_dirstruct() is run on it.
     """
-    return pathlib.Path(__file__).parent / "data" / "input" / "multiple_image_raw"
+    return (
+        pathlib.Path(__file__).parent / "data" / "input" / "multiple_image_raw"
+    )
 
 
 @pytest.fixture
 def input_single_wdir():
     """Single D5 image with ImageJ RoiSet and fitting CSV (legacy layout)."""
     return pathlib.Path(__file__).parent / "data" / "input" / "single_image"
+
 
 @pytest.fixture
 def input_multi_wdir():
@@ -32,6 +36,7 @@ def input_multi_wdir():
     analysed. Uses rolling_ball: null, like the real D5 series settings.
     """
     return pathlib.Path(__file__).parent / "data" / "input" / "multiple_image"
+
 
 @pytest.fixture
 def expected_valid_config():
@@ -102,7 +107,7 @@ def expected_valid_config():
                 "D7-017",
                 "D7-021",
             ],
-       },
+        },
         "analysis": {
             "PSD_space": {
                 "start": 0.0,
@@ -122,6 +127,7 @@ def expected_valid_config():
     }
     return config
 
+
 @pytest.fixture
 def expected_valid_config_processed(expected_valid_config):
     """expected_valid_config after handle_defaults: "auto" resolved to None.
@@ -135,5 +141,3 @@ def expected_valid_config_processed(expected_valid_config):
     config["data"]["images"]["D7-019"]["pixel_size"] = None
 
     return config
-
-

@@ -21,7 +21,11 @@ AGGLPY_OLD = (
     "0,100.5,100.5,30.0",
 )
 IMAGEJ_HEADER = " ,Index,Name,Type,Group,X,Y,Width,Height"
-IMAGEJ = (load_imagej_csv, IMAGEJ_HEADER, "1,0,0001-0100,Oval,none,70,70,60,60")
+IMAGEJ = (
+    load_imagej_csv,
+    IMAGEJ_HEADER,
+    "1,0,0001-0100,Oval,none,70,70,60,60",
+)
 
 
 def write_csv(path: Path, lines: list[str], bom: bool = False) -> Path:
@@ -132,7 +136,9 @@ def test_loader_missing_column_raises(tmp_path: Path, loader, header, row):
 
 
 @pytest.mark.parametrize("full", [False, True])
-def test_recognize_particle_csv_full_or_head(input_multi_wdir: Path, full: bool):
+def test_recognize_particle_csv_full_or_head(
+    input_multi_wdir: Path, full: bool
+):
     """full=True reads the whole file instead of the first rows."""
     path = input_multi_wdir / "images" / "D7-017" / "D7-017_fitting.csv"
 

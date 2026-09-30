@@ -56,8 +56,7 @@ dist = ["tox >= 4.21.0, < 5"]
 dev = ["agglpy[test,typing,lint,dist,notebook]"]
 
 [tool.ruff]
-# Same as Black.
-line-length = 88
+line-length = 79            # PEP 8: max 79 for code
 indent-width = 4
 
 # Keep in sync with requires-python above.
@@ -66,18 +65,31 @@ target-version = "py311"
 respect-gitignore = true
 
 [tool.ruff.format]
-quote-style = "double"
+quote-style = "double"      # PEP 8 has no preference; PEP 257 wants """docstrings"""
 indent-style = "space"
 line-ending = "auto"
+docstring-code-format = true
 
 [tool.ruff.lint]
-select = ["F", "E", "I", "ANN", "RUF"]
-fixable = ["ALL"]
-ignore = ["ANN101"]
+# Type annotations are checked by mypy (disallow_untyped_defs), not ruff
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings (includes W505)
+    "F",    # pyflakes
+    "I",    # isort: import order
+    "N",    # pep8-naming
+    "RUF",  # ruff-specific rules
+]
+ignore = [
+    "N",     # postponed to Phase 2: renaming would break the public API
+    # Postponed to the docstring rewrite (roadmap 7.1): long strings,
+    # comments and docstrings the formatter cannot wrap are fixed then
+    "E501",
+    "W505",
+]
 
-[tool.ruff.lint.per-file-ignores]
-# Type annotations on test functions and fixtures add noise, not safety
-"tests/**" = ["ANN"]
+[tool.ruff.lint.pycodestyle]
+max-doc-length = 72         # PEP 8: 72 for comments and docstrings (W505)
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

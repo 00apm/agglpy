@@ -17,11 +17,15 @@ def test_validate_mgr_dirstruct_valid_layout_passes(input_multi_wdir: Path):
     validate_mgr_dirstruct(input_multi_wdir)
 
 
-def test_validate_mgr_dirstruct_missing_image_dir_raises(input_multi_raw_wdir: Path):
+def test_validate_mgr_dirstruct_missing_image_dir_raises(
+    input_multi_raw_wdir: Path,
+):
     """The error names the first images/<name>/ dir that is missing."""
     missing_dir = input_multi_raw_wdir / "images" / "D7-019"
     expected_err_msg = f"Image Data Set directory {missing_dir!r} not found"
-    with pytest.raises(DirectoryStructureError, match=re.escape(expected_err_msg)):
+    with pytest.raises(
+        DirectoryStructureError, match=re.escape(expected_err_msg)
+    ):
         validate_mgr_dirstruct(input_multi_raw_wdir)
 
 

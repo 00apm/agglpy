@@ -16,7 +16,9 @@ from agglpy.defaults import DEFAULT_SETTINGS_SCHEMA
 from agglpy.errors import SettingsStructureError
 
 
-def set_nested(config: dict[str, Any], keys: tuple[str, ...], value: Any) -> None:
+def set_nested(
+    config: dict[str, Any], keys: tuple[str, ...], value: Any
+) -> None:
     """Set config[k1][k2]...[kn] = value."""
     *parents, last = keys
     for key in parents:
@@ -29,7 +31,9 @@ def test_fixture_raw_dir_has_settings_file(input_multi_raw_wdir: Path):
     assert (input_multi_raw_wdir / "settings.yml").exists()
 
 
-def test_validate_settings_accepts_valid_config(expected_valid_config: dict[str, Any]):
+def test_validate_settings_accepts_valid_config(
+    expected_valid_config: dict[str, Any],
+):
     """A complete, well-typed config passes validation."""
     config = expected_valid_config
     # No exception should be raised
@@ -40,7 +44,9 @@ def test_validate_settings_accepts_valid_config(expected_valid_config: dict[str,
     ("config", "missing_key"),
     [
         pytest.param({}, "general", id="empty-config"),
-        pytest.param({"general": {"working_dir": "."}}, "metadata", id="only-general"),
+        pytest.param(
+            {"general": {"working_dir": "."}}, "metadata", id="only-general"
+        ),
     ],
 )
 def test_validate_settings_missing_section_raises(config, missing_key):
@@ -51,9 +57,7 @@ def test_validate_settings_missing_section_raises(config, missing_key):
         validate_settings(config, DEFAULT_SETTINGS_SCHEMA)
 
 
-MSG_NOT_PAIR = (
-    "Condition 'ambient_temp' at .metadata.conditions must be a list of length 2"
-)
+MSG_NOT_PAIR = "Condition 'ambient_temp' at .metadata.conditions must be a list of length 2"
 MSG_NOT_NUMBER = (
     "The first element of 'ambient_temp' at .metadata.conditions"
     " must be a number (int or float)"
@@ -210,7 +214,9 @@ def test_create_settings_dict(input_multi_raw_wdir):
 @pytest.mark.parametrize(
     ("input_dir", "expected_file"),
     [
-        pytest.param("multiple_image_raw", "settings.yml", id="dir-with-settings"),
+        pytest.param(
+            "multiple_image_raw", "settings.yml", id="dir-with-settings"
+        ),
         pytest.param(
             "multiple_image_raw_no_settings",
             "settings_infer_images.yml",
@@ -252,7 +258,9 @@ def test_create_settings_writes_expected_yaml(
         (".5e-3", 5e-4),  # already a float in YAML 1.1
     ],
 )
-def test_load_yaml_reads_exponent_notation_as_float(text: str, expected: float):
+def test_load_yaml_reads_exponent_notation_as_float(
+    text: str, expected: float
+):
     value = load_yaml(f"x: {text}")["x"]
 
     assert isinstance(value, float)
@@ -264,7 +272,10 @@ def test_load_yaml_reads_exponent_notation_as_float(text: str, expected: float):
     [
         ("20", 20),  # int stays int
         ("D7-017", "D7-017"),  # image names stay strings
-        ("auto", "auto"),  # sentinels stay strings (resolved by handle_defaults)
+        (
+            "auto",
+            "auto",
+        ),  # sentinels stay strings (resolved by handle_defaults)
         ("e5", "e5"),  # no mantissa, not a number
         ("'1e-6'", "1e-6"),  # explicitly quoted stays a string
     ],
@@ -276,7 +287,9 @@ def test_load_yaml_leaves_non_floats_unchanged(text: str, expected: Any):
     assert type(value) is type(expected)
 
 
-def test_load_manager_settings_exponent_floats(input_multi_wdir: Path, tmp_path: Path):
+def test_load_manager_settings_exponent_floats(
+    input_multi_wdir: Path, tmp_path: Path
+):
     """PSD_space in metres written as 1e-7 must load as float, not str."""
     text = (input_multi_wdir / "settings.yml").read_text(encoding="utf-8")
     # guard: the fixture still looks the way this test expects

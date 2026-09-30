@@ -1,13 +1,10 @@
 from typing import (
-    Literal,
-    Mapping,
-    TypeVar,
-    TypedDict,
-    Union,
     Dict,
     List,
-    Any,
+    Literal,
     Optional,
+    TypedDict,
+    Union,
 )
 
 
@@ -47,7 +44,7 @@ ImageRawSettingsTypedDict = TypedDict(
         "param2": Union[List[float | int], float, int],
         "additional_info": Optional[str],
     },
-    total = False
+    total=False,
 )
 
 
@@ -55,6 +52,7 @@ class DataSettingsTypedDict(TypedDict, total=False):
     default: ImageSettingsTypedDict
     images: Dict[str, ImageSettingsTypedDict]
     exclude_images: List[str]
+
 
 class DataRawSettingsTypedDict(TypedDict, total=False):
     default: ImageRawSettingsTypedDict
@@ -69,12 +67,14 @@ class GeneralSettingsTypedDict(TypedDict):
 class MetadataSettingsTypedDict(TypedDict):
     conditions: Dict[str, Union[int, float]]
 
+
 class PsdSpaceSettingsTypedDict(TypedDict):
     start: float
     end: float
     periods: int | float
     log: bool
     step: bool
+
 
 class AnalysisSettingsTypedDict(TypedDict):
     PSD_space: PsdSpaceSettingsTypedDict | None
@@ -92,12 +92,14 @@ class YamlSettingsTypedDict(TypedDict):
     analysis: AnalysisSettingsTypedDict
     export: ExportSettingsTypedDict
 
+
 class YamlRawSettingsTypedDict(TypedDict):
     general: GeneralSettingsTypedDict
     metadata: MetadataSettingsTypedDict
     data: DataRawSettingsTypedDict
     analysis: AnalysisSettingsTypedDict
     export: ExportSettingsTypedDict
+
 
 PPSouceCsvType = Literal["agglpy", "ImageJ", "agglpy_old"]
 PreprocessFunction = Literal["median_blur", "clahe", "rolling_ball"]

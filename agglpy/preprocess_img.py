@@ -14,6 +14,7 @@ from tqdm import tqdm
 
 cfg_file = "names.csv"
 
+
 def create_settings_file(imgpath):
     """
     Function creates setting files for individual image to analyze.
@@ -35,23 +36,23 @@ def create_settings_file(imgpath):
 
     """
     imgname = os.path.basename(imgpath)
-    sett_dict = {"img_name": [imgname],
-                 "fitting_file_name": [imgname.split('.')[0]+"_fitting.csv"],
-                 "magnification": ["auto"],
-                 "Dmin": [3],
-                 "Dmax": [100],
-                 "dist2R": [0.4],
-                 "param1": [250],
-                 "param2": [15],
-                 "additional_info": ["-"]
-                 }
+    sett_dict = {
+        "img_name": [imgname],
+        "fitting_file_name": [imgname.split(".")[0] + "_fitting.csv"],
+        "magnification": ["auto"],
+        "Dmin": [3],
+        "Dmax": [100],
+        "dist2R": [0.4],
+        "param1": [250],
+        "param2": [15],
+        "additional_info": ["-"],
+    }
     sett_DF = pd.DataFrame(sett_dict)
     dpath = os.path.dirname(imgpath)
     cfg_file = generate_filename(dpath, "_names.csv")
-    sett_DF.T.to_csv(os.path.dirname(imgpath) + os.sep + cfg_file,
-                     sep=";",
-                     header=False)
-
+    sett_DF.T.to_csv(
+        os.path.dirname(imgpath) + os.sep + cfg_file, sep=";", header=False
+    )
 
 
 def prepare_imgset_struc(path):
@@ -59,8 +60,8 @@ def prepare_imgset_struc(path):
     Function converts folder containing several SEM image files to
     Image Data Set structure for Particle detection and agglomerates analysis.
     It creates folder for each SEM image and creates necessary setting file
-    for each image. 
-    When SEM images are already in seperate folders named exactly like 
+    for each image.
+    When SEM images are already in seperate folders named exactly like
     SEM image file names, function only creates settings files for each image.
 
     Parameters
@@ -106,27 +107,28 @@ def prepare_imgset_struc(path):
 
 def reset_imgset_struct(path):
     if imgset_struc_iscorrect(path):
-
-        msg = "Do you want to revert SEM IMAGE SET structure?"\
-            " Following action may lead to irreversible loss of data."\
+        msg = (
+            "Do you want to revert SEM IMAGE SET structure?"
+            " Following action may lead to irreversible loss of data."
             "\nDo you want to continue [Y/N]? "
+        )
         if confirm(msg):
-            imgpaths = []
-            imgnames = []
             for dirpath, dirs, files in os.walk(path):
                 for name in files:
                     name_woext = os.path.splitext(
-                        os.path.basename(dirpath+os.sep+name)
-                        )[0]
+                        os.path.basename(dirpath + os.sep + name)
+                    )[0]
                     if name_woext == os.path.basename(dirpath):
-                        print(name," file moved.")
-                        os.rename(dirpath + os.sep + name, path + os.sep + name)
+                        print(name, " file moved.")
+                        os.rename(
+                            dirpath + os.sep + name, path + os.sep + name
+                        )
                     else:
                         os.remove(dirpath + os.sep + name)
-                        print(name," file removed.")
+                        print(name, " file removed.")
                 if not dirpath == path:
                     os.rmdir(dirpath)
-                    print(os.path.basename(dirpath)," directory removed.")
+                    print(os.path.basename(dirpath), " directory removed.")
 
     else:
         raise Exception("Unrecognized folder structure.")
@@ -135,7 +137,6 @@ def reset_imgset_struct(path):
 def imgset_struc_iscorrect(path):
     assert os.path.exists(path), "Given path does not exist."
     for dirpath, dirs, files in os.walk(path):
-
         for name in files:
             if ".tif" in name.lower():
                 valid_dirname = name.split(".")[0]
@@ -148,17 +149,18 @@ def imgset_struc_iscorrect(path):
 
 def find_DataSets(path, ignore=True):
     DSpaths = []
-    
+
     if ignore:
         ignorepath = path + os.sep + "ignore.csv"
-        ig = pd.read_csv(ignorepath,
-                         sep=";",
-                         usecols=[0],
-                         header=None,
-                         squeeze=True,
-                         ).astype(str)
+        ig = pd.read_csv(
+            ignorepath,
+            sep=";",
+            usecols=[0],
+            header=None,
+            squeeze=True,
+        ).astype(str)
     else:
-        ig = pd.Series([";"],dtype="object")
+        ig = pd.Series([";"], dtype="object")
 
     for dirpath, dirs, files in os.walk(path):
         counter = 0
@@ -178,51 +180,52 @@ def find_DataSets(path, ignore=True):
 
 
 def load_sett(cfg):
-    sett = pd.read_csv(cfg,
-                       sep=";",
-                       encoding="ansi",
-                       index_col=0,
-                       header=None,
-                       squeeze=True
-                       )
-    return (sett["img_name"],
-            sett["magnification"],
-            sett["Dmin"],
-            sett["Dmax"])
+    sett = pd.read_csv(
+        cfg, sep=";", encoding="ansi", index_col=0, header=None, squeeze=True
+    )
+    return (
+        sett["img_name"],
+        sett["magnification"],
+        sett["Dmin"],
+        sett["Dmax"],
+    )
 
 
 def activate_images(path, imgnames=None):
     ignorepath = path + os.sep + "ignore.csv"
     try:
-        ignore = pd.read_csv(ignorepath,
-                             sep=";",
-                             usecols=[0],
-                             header=None,
-                             )
-        ignore = ignore.squeeze('columns')
-        
+        ignore = pd.read_csv(
+            ignorepath,
+            sep=";",
+            usecols=[0],
+            header=None,
+        )
+        ignore = ignore.squeeze("columns")
+
     except FileNotFoundError:
         ignore = pd.DataFrame(list(";"))
         ignore.to_csv(ignorepath, header=False, index=False)
-    
+
     # read available image sets
     DSpaths = find_DataSets(path, ignore=False)
     DS = []
     for DSp in DSpaths:
         DS.append(os.path.basename(DSp))
     DS = pd.Series(DS, dtype=object)
-    
+
     if imgnames:
         ignore = ignore.loc[~ignore.isin(imgnames)]
     else:
         ignore = pd.DataFrame(list(";"))
-    
+
     # inform user which data sets are active
     activated = DS.loc[~DS.isin(ignore)]
-    print("\nCurrently activated data sets: \n"
-          + str(activated.to_string(index=False, header=False).split('\n'))
-          + "\n")
-    
+    print(
+        "\nCurrently activated data sets: \n"
+        + str(activated.to_string(index=False, header=False).split("\n"))
+        + "\n"
+    )
+
     # create ignore.csv file
     if ignore.size != 0:
         ignore.to_csv(ignorepath, header=False, index=False)
@@ -236,47 +239,52 @@ def deactivate_images(path, imgnames=None):
 
     # read current state of ignore.csv file
     try:
-        ignore = pd.read_csv(ignorepath,
-                             sep=";",
-                             usecols=[0],
-                             header=None,
-                             )
-        ignore = ignore.squeeze('columns')
+        ignore = pd.read_csv(
+            ignorepath,
+            sep=";",
+            usecols=[0],
+            header=None,
+        )
+        ignore = ignore.squeeze("columns")
     except FileNotFoundError:
         ignore = pd.DataFrame(list(";"))
         ignore.to_csv(ignorepath, header=False, index=False)
-    
+
     # read available image sets
     DSpaths = find_DataSets(path, ignore=False)
     DS = []
     for DSp in DSpaths:
         DS.append(os.path.basename(DSp))
     DS = pd.Series(DS, dtype=object)
-    
+
     # append imgnames that are available in folder structure
     if imgnames:
         imgnames = pd.Series(imgnames, dtype=object)
-        imgappend = imgnames.loc[imgnames.isin(DS)&~imgnames.isin(ignore)]
+        imgappend = imgnames.loc[imgnames.isin(DS) & ~imgnames.isin(ignore)]
         ignore = ignore.append(imgappend)
         ignore = ignore.dropna()
-        
+
         # warn user that some imgnames were not present in folder structure
         notinDS = imgnames.loc[~imgnames.isin(DS)]
         notinDS = notinDS.dropna()
 
         if not notinDS.empty:
-            warnings.warn("Following data sets are not present in SEM IMG folder"
-                          " structure: "
-                          + str(notinDS.to_string(index=False).split('\n')))
+            warnings.warn(
+                "Following data sets are not present in SEM IMG folder"
+                " structure: "
+                + str(notinDS.to_string(index=False).split("\n"))
+            )
     else:
         ignore = pd.DataFrame(DS)
 
     # inform user which data sets are active
     activated = DS.loc[DS.isin(ignore)].dropna()
     if not activated.empty:
-        print("\nCurrently activated data sets: \n"
-              + str(activated.to_string(index=False, header=False).split('\n'))
-              + "\n")
+        print(
+            "\nCurrently activated data sets: \n"
+            + str(activated.to_string(index=False, header=False).split("\n"))
+            + "\n"
+        )
     else:
         print("\nAll data sets are currently deactivated\n")
     ignore.to_csv(ignorepath, header=False, index=False)
@@ -286,30 +294,34 @@ def active_list(path):
     ignorepath = path + os.sep + "ignore.csv"
 
     # read current state of ignore.csv file
-    ignore = pd.read_csv(ignorepath,
-                         sep=";",
-                         usecols=[0],
-                         header=None,
-                         squeeze=True,
-                         )
+    ignore = pd.read_csv(
+        ignorepath,
+        sep=";",
+        usecols=[0],
+        header=None,
+        squeeze=True,
+    )
     DSpaths = find_DataSets(path, ignore=False)
     DS = []
     for DSp in DSpaths:
         DS.append(os.path.basename(DSp))
     DS = pd.Series(DS, dtype=object)
-    
-    
+
     activated = DS.loc[~DS.isin(ignore)].dropna()
     if not activated.empty:
-        print("\nCurrently activated data sets: \n"
-              + str(activated.to_string(index=False, header=False).split('\n'))
-              + "\n")
+        print(
+            "\nCurrently activated data sets: \n"
+            + str(activated.to_string(index=False, header=False).split("\n"))
+            + "\n"
+        )
     else:
         print("\nAll data sets are currently deactivated\n")
     return activated
 
+
 def generate_filename(path, suffix):
     return os.path.basename(path) + suffix
+
 
 def confirm(msg):
     """
@@ -322,63 +334,89 @@ def confirm(msg):
         answer = input(msg).lower()
     return answer == "y"
 
+
 #
 def prepare_imgs(IJpath, DSpaths):
-    pbar = tqdm(DSpaths, total = len(DSpaths), position=0, leave=True)
+    pbar = tqdm(DSpaths, total=len(DSpaths), position=0, leave=True)
     for path in pbar:
         # print(path)
         s = load_sett(path + os.sep + cfg_file)
         imgpath = path + os.sep + s[0]
 
-        command =   IJpath + """ --ij2 --headless --console -Dpython.console.encoding=UTF-8 --run "<local path>" "path='""" + imgpath + "', magn=" + s[1] + """" """
-# command = "<local path>""<local path>"" ""path='<local path>', magn=5000"""
+        command = (
+            IJpath
+            + """ --ij2 --headless --console -Dpython.console.encoding=UTF-8 --run "<local path>" "path='"""
+            + imgpath
+            + "', magn="
+            + s[1]
+            + """" """
+        )
+        # command = "<local path>""<local path>"" ""path='<local path>', magn=5000"""
         print(command)
         subprocess.check_output(command)
 
+
 def runHCT(IJpath, DSpaths):
 
-    pbar = tqdm(DSpaths, total = len(DSpaths), position=0, leave=True)
+    pbar = tqdm(DSpaths, total=len(DSpaths), position=0, leave=True)
     for path in pbar:
         s = load_sett(path + os.sep + cfg_file)
         original_imgpath = path + os.sep + s[0]
         name = os.path.basename(original_imgpath).split(".")[0]
-        imgpath = os.path.dirname(original_imgpath) + os.sep + name + "_edge.png"
+        imgpath = (
+            os.path.dirname(original_imgpath) + os.sep + name + "_edge.png"
+        )
         # print(imgpath)
 
-        defaults = {"minR":3,
-                    "maxR":150,
-                    "maxCir":750,
-                    "res_":50,
-                    "threshold_":0.45,
-                    "ratio_":0.98,
-                    }
-        #@ String (label='Image path') path
-        #@ Integer (label='min Radius in px',value=10.0) minR
-        #@ Integer (label='max Radius in px',value=150.0) maxR
-        #@ Integer (label='max circle number',value=10) maxCir
-        #@ Integer (label='hough transform resolution',value=500) res_
-        #@ Float (label='score threshold',value=0.5) threshold_
-        #@ Float (label='neighbour search ratio',value=0.98) ratio_
-        command = IJpath + """ --console -Dpython.console.encoding=UTF-8 --run "<local path>" "path='""" + imgpath \
-                    + "', minR=" + str(defaults["minR"])\
-                    + ", maxR=" + str(defaults["maxR"])\
-                    + ", maxCir=" + str(defaults["maxCir"])\
-                    + ", res_=" + str(defaults["res_"])\
-                    + ", threshold_=" + str(defaults["threshold_"])\
-                    + ", ratio_=" + str(defaults["ratio_"])\
-                    + """" """
+        defaults = {
+            "minR": 3,
+            "maxR": 150,
+            "maxCir": 750,
+            "res_": 50,
+            "threshold_": 0.45,
+            "ratio_": 0.98,
+        }
+        # @ String (label='Image path') path
+        # @ Integer (label='min Radius in px',value=10.0) minR
+        # @ Integer (label='max Radius in px',value=150.0) maxR
+        # @ Integer (label='max circle number',value=10) maxCir
+        # @ Integer (label='hough transform resolution',value=500) res_
+        # @ Float (label='score threshold',value=0.5) threshold_
+        # @ Float (label='neighbour search ratio',value=0.98) ratio_
+        command = (
+            IJpath
+            + """ --console -Dpython.console.encoding=UTF-8 --run "<local path>" "path='"""
+            + imgpath
+            + "', minR="
+            + str(defaults["minR"])
+            + ", maxR="
+            + str(defaults["maxR"])
+            + ", maxCir="
+            + str(defaults["maxCir"])
+            + ", res_="
+            + str(defaults["res_"])
+            + ", threshold_="
+            + str(defaults["threshold_"])
+            + ", ratio_="
+            + str(defaults["ratio_"])
+            + """" """
+        )
         # print(command)
         subprocess.check_output(command)
 
 
-
-
 if __name__ == "__main__":
-    IJpath = "<local path>"
-    dirpath = "<local path>"\
+    IJpath = (
         "<local path>"
-    setpath = "<local path>"\
+    )
+    dirpath = (
         "<local path>"
+        "<local path>"
+    )
+    setpath = (
+        "<local path>"
+        "<local path>"
+    )
 
     wdir2 = "<local path>"
     wdir3 = "<local path>"
