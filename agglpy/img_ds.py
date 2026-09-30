@@ -253,8 +253,11 @@ class ImgDataSet:
         assert self._img is not None, (
             f"Image was not loaded properly for ImgDataSet: {self!s}."
         )
+        # Work on a local image: self._img stays the raw input, so repeated
+        # calls always start from the same image
+        img = self._img
         if crop_ratio > 0:
-            self._img = crop_img(self._img, ratio=crop_ratio)
+            img = crop_img(img, ratio=crop_ratio)
             logger.debug(
                 f"Image cropped with ratio {crop_ratio} for primary particle "
                 f"detection in {self!s}"
@@ -267,8 +270,8 @@ class ImgDataSet:
         }
         if preprocess_dict:
             # if any preprocess settings were registeres use them as kwargs
-            self._img = preprocess_img(
-                image=self._img,
+            img = preprocess_img(
+                image=img,
                 **preprocess_dict,  # type: ignore
                 # kwargs unpacking supported from python 3.12
             )
@@ -282,7 +285,7 @@ class ImgDataSet:
                 )
 
         df = HCT_multi(
-            self._img,
+            img,
             export_img=export_img,
             export_edges=export_edges,
             export_csv=export_csv,
