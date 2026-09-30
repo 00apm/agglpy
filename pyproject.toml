@@ -44,7 +44,7 @@ notebook = [
     # server, if that's not this env - see conda_env_dev.yaml.
     "anywidget >= 0.9, < 1",
 ]
-test = ["pytest >= 8.3.3, < 9"]
+test = ["pytest >= 8.3.3, < 9", "pytest-regressions >= 2.5, < 3"]
 typing = [
     "mypy >= 1.11.2, < 2",
     "pandas-stubs >= 2.1.1.230928, < 3",
