@@ -39,7 +39,9 @@ def create_settings_dict(images: List[Path]) -> YamlRawSettingsTypedDict:
     Returns:
         dict: settings dictionary with a structure of YAML config
     """
-    settings: YamlRawSettingsTypedDict = DEFAULT_SETTINGS
+    # deepcopy: otherwise images are added to the module-level DEFAULT_SETTINGS
+    # and leak into every later call
+    settings: YamlRawSettingsTypedDict = deepcopy(DEFAULT_SETTINGS)
     for i in images:
         img = Path(i)
         settings["data"]["images"][img.stem] = {
