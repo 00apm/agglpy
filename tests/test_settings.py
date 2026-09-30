@@ -1,156 +1,149 @@
-import copy
-import filecmp
-import os
 import re
-import shutil
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from agglpy.cfg import (create_settings,
-                        create_settings_dict, find_all_images,
-                        load_manager_settings, validate_settings)
+from agglpy.cfg import (
+    create_settings,
+    create_settings_dict,
+    find_all_images,
+    load_manager_settings,
+    validate_settings,
+)
 from agglpy.defaults import DEFAULT_SETTINGS_SCHEMA
 from agglpy.errors import SettingsStructureError
 
 
-def test_settings_file_exists(input_multi_raw_wdir: Path):
+def set_nested(config: dict[str, Any], keys: tuple[str, ...], value: Any) -> None:
+    """Set config[k1][k2]...[kn] = value."""
+    *parents, last = keys
+    for key in parents:
+        config = config[key]
+    config[last] = value
+
+
+def test_fixture_raw_dir_has_settings_file(input_multi_raw_wdir: Path):
+    """Sanity check on test data: the raw fixture dir ships a settings.yml."""
     assert (input_multi_raw_wdir / "settings.yml").exists()
 
 
-def test_config_validation(expected_valid_config: dict[str, Any]):
+def test_validate_settings_accepts_valid_config(expected_valid_config: dict[str, Any]):
+    """A complete, well-typed config passes validation."""
     config = expected_valid_config
     # No exception should be raised
     validate_settings(config, DEFAULT_SETTINGS_SCHEMA)
 
 
-def test_empty_config():
-    config = {}
-    with pytest.raises(SettingsStructureError, match="Missing key 'general' in config"):
+@pytest.mark.parametrize(
+    ("config", "missing_key"),
+    [
+        pytest.param({}, "general", id="empty-config"),
+        pytest.param({"general": {"working_dir": "."}}, "metadata", id="only-general"),
+    ],
+)
+def test_validate_settings_missing_section_raises(config, missing_key):
+    """The error names the first missing top-level section."""
+    with pytest.raises(
+        SettingsStructureError, match=f"Missing key '{missing_key}' in config"
+    ):
         validate_settings(config, DEFAULT_SETTINGS_SCHEMA)
 
 
-def test_missing_keys():
-    config = {
-        "general": {
-            "working_dir": ".",
-        }
-        # 'metadata', 'data', 'analysis', 'export' keys are missing
-    }
-    with pytest.raises(SettingsStructureError, match="Missing key 'metadata' in config"):
-        validate_settings(config, DEFAULT_SETTINGS_SCHEMA)
+MSG_NOT_PAIR = (
+    "Condition 'ambient_temp' at .metadata.conditions must be a list of length 2"
+)
+MSG_NOT_NUMBER = (
+    "The first element of 'ambient_temp' at .metadata.conditions"
+    " must be a number (int or float)"
+)
+MSG_NOT_UNIT = (
+    "The second element of 'ambient_temp' at .metadata.conditions"
+    " must be a string representing a unit"
+)
 
 
-def test_wrong_condition_structure(expected_valid_config: dict[str, Any]):
-    config = expected_valid_config
-    cfg = list(copy.deepcopy(config) for i in range(3))
-    cfg[0]["metadata"]["conditions"]["ambient_temp"] = [21]
-    cfg[1]["metadata"]["conditions"]["ambient_temp"] = 1
-    cfg[2]["metadata"]["conditions"]["ambient_temp"] = "wrong condition"
+@pytest.mark.parametrize(
+    ("value", "expected_msg"),
+    [
+        pytest.param([21], MSG_NOT_PAIR, id="list-too-short"),
+        pytest.param(1, MSG_NOT_PAIR, id="number-not-list"),
+        pytest.param("wrong condition", MSG_NOT_PAIR, id="string-not-list"),
+        pytest.param(["1.23", "°C"], MSG_NOT_NUMBER, id="value-is-string"),
+        pytest.param([3.21, 3.21], MSG_NOT_UNIT, id="unit-is-number"),
+    ],
+)
+def test_validate_settings_bad_condition_raises(
+    expected_valid_config: dict[str, Any], value, expected_msg
+):
+    """metadata.conditions entries must be [number, unit_string]."""
+    expected_valid_config["metadata"]["conditions"]["ambient_temp"] = value
+    with pytest.raises(SettingsStructureError, match=re.escape(expected_msg)):
+        validate_settings(expected_valid_config, DEFAULT_SETTINGS_SCHEMA)
 
-    cfg_wrong_list = list(copy.deepcopy(config) for i in range(2))
-    cfg_wrong_list[0]["metadata"]["conditions"]["ambient_temp"] = [
-        "1.23",
-        "°C",
-    ]
-    cfg_wrong_list[1]["metadata"]["conditions"]["ambient_temp"] = [
-        3.21,
-        3.21,
-    ]
 
-    with pytest.raises(
-        SettingsStructureError,
-        match=re.escape(
-            "Condition 'ambient_temp' at .metadata.conditions must "
-            "be a list of length 2"
+@pytest.mark.parametrize(
+    ("keys", "value", "expected_msg"),
+    [
+        pytest.param(
+            ("data", "default", "d_min"),
+            "should_be_int",
+            "Expected one of (<class 'list'>, <class 'int'>) "
+            "at .data.default.d_min, but got str",
+            id="one-of-several-types",
         ),
-    ):
-        for c in cfg:
-            validate_settings(c, DEFAULT_SETTINGS_SCHEMA)
-    with pytest.raises(
-        SettingsStructureError,
-        match=re.escape(
-            "The first element of 'ambient_temp' at .metadata.conditions"
-            " must be a number (int or float)"
+        pytest.param(
+            ("general", "working_dir"),
+            1,
+            "Expected <class 'str'> at .general.working_dir, but got int",
+            id="single-type",
         ),
-    ):
-        validate_settings(cfg_wrong_list[0], DEFAULT_SETTINGS_SCHEMA)
-    with pytest.raises(
-        SettingsStructureError,
-        match=re.escape(
-            f"The second element of 'ambient_temp' at .metadata.conditions"
-            f" must be a string representing a unit"
+    ],
+)
+def test_validate_settings_wrong_type_raises(
+    expected_valid_config: dict[str, Any], keys, value, expected_msg
+):
+    """Type errors report the route to the bad value and the allowed types."""
+    set_nested(expected_valid_config, keys, value)
+    with pytest.raises(SettingsStructureError, match=re.escape(expected_msg)):
+        validate_settings(expected_valid_config, DEFAULT_SETTINGS_SCHEMA)
+
+
+@pytest.mark.parametrize(
+    ("keys", "route"),
+    [
+        pytest.param(("extra_key",), "", id="root"),
+        pytest.param(("analysis", "extra_key"), ".analysis", id="level-2"),
+        pytest.param(
+            ("export", "draw_particles", "extra_key"),
+            ".export.draw_particles",
+            id="level-3",
         ),
-    ):
-        validate_settings(cfg_wrong_list[1], DEFAULT_SETTINGS_SCHEMA)
+    ],
+)
+def test_validate_settings_extra_key_raises(
+    expected_valid_config: dict[str, Any], keys, route
+):
+    """Unknown keys are rejected at every nesting level (catches typos)."""
+    set_nested(expected_valid_config, keys, "This key should trigger an error")
+    # "$" anchors the end, so the root case doesn't match a deeper route
+    expected_msg = re.escape(f"Extra key 'extra_key' found at {route}") + "$"
+    with pytest.raises(SettingsStructureError, match=expected_msg):
+        validate_settings(expected_valid_config, DEFAULT_SETTINGS_SCHEMA)
 
 
-def test_wrong_value_type(expected_valid_config: dict[str, Any]):
-    # Case 1- wrong multiple type (tuple)
-    config = expected_valid_config
-    config["data"]["default"]["d_min"] = "should_be_int"
-    expected_error_message = (
-        f"Expected one of (<class 'list'>, <class 'int'>) "
-        f"at .data.default.d_min, but got str"
-    )
-    with pytest.raises(SettingsStructureError, match=re.escape(expected_error_message)):
-        validate_settings(config, DEFAULT_SETTINGS_SCHEMA)
-
-    # Case 2- wrong single type
-    config2 = expected_valid_config
-    config2["general"]["working_dir"] = 1
-    expected_error_message2 = (
-        f"Expected <class 'str'> at .general.working_dir, but got int"
-    )
-    with pytest.raises(SettingsStructureError, match=expected_error_message2):
-        validate_settings(config2, DEFAULT_SETTINGS_SCHEMA)
-
-
-def test_extra_keys(expected_valid_config):
-    config = expected_valid_config
-    # case1 error in root lvl
-    config_extra_key_root = copy.deepcopy(config)
-    config_extra_key_root["extra_key"] = "This key should trigger an error"
-    # case2 error in lvl 2
-    config_extra_key_lvl2 = copy.deepcopy(config)
-    config_extra_key_lvl2["analysis"][
-        "extra_key"
-    ] = "This key should trigger an error"
-    # case3 error in lvl 3
-    config_extra_key_lvl3 = copy.deepcopy(config)
-    config_extra_key_lvl3["export"]["draw_particles"][
-        "extra_key"
-    ] = "This key should trigger an error"
-
-    # Test each configuration for extra keys
-    with pytest.raises(
-        SettingsStructureError,
-        match="Extra key 'extra_key' found at ",
-    ):
-        validate_settings(config_extra_key_root, DEFAULT_SETTINGS_SCHEMA)
-
-    with pytest.raises(
-        SettingsStructureError,
-        match="Extra key 'extra_key' found at .analysis",
-    ):
-        validate_settings(config_extra_key_lvl2, DEFAULT_SETTINGS_SCHEMA)
-
-    with pytest.raises(
-        SettingsStructureError,
-        match="Extra key 'extra_key' found at .export.draw_particles",
-    ):
-        validate_settings(config_extra_key_lvl3, DEFAULT_SETTINGS_SCHEMA)
-
-
-def test_valid_config_file_loading(tests_dir, expected_valid_config_processed):
+def test_load_manager_settings_resolves_defaults(
+    tests_dir, expected_valid_config_processed
+):
+    """Loading resolves YAML anchors/merge keys and turns "auto" into None."""
     settings = load_manager_settings(
         tests_dir / "data/input/valid_config_only/settings.yml"
     )
     assert settings == expected_valid_config_processed
 
 
-def test_find_images(input_multi_raw_wdir):
+def test_find_all_images(input_multi_raw_wdir):
+    """Finds all .tif files in a flat dir."""
     images = find_all_images(input_multi_raw_wdir)
     expected = [
         input_multi_raw_wdir / Path("D7-017.tif"),
@@ -161,6 +154,7 @@ def test_find_images(input_multi_raw_wdir):
 
 
 def test_create_settings_dict(input_multi_raw_wdir):
+    """Default settings with one entry per image, each merging *default_img."""
     images = find_all_images(input_multi_raw_wdir)
     settings = create_settings_dict(images=images)
     expected = {
@@ -174,6 +168,7 @@ def test_create_settings_dict(input_multi_raw_wdir):
                 "pixel_size": "auto",
                 "crop_ratio": 0.0,
                 "median_blur": 3,
+                "rolling_ball": [50, True, True],
                 "d_min": [3, 50],
                 "d_max": [50, 140],
                 "dist2R": 0.5,
@@ -211,89 +206,30 @@ def test_create_settings_dict(input_multi_raw_wdir):
     assert settings == expected
 
 
-def test_create_yaml_settings(monkeypatch, tests_dir, input_multi_raw_wdir):
+@pytest.mark.parametrize(
+    ("input_dir", "expected_file"),
+    [
+        pytest.param("multiple_image_raw", "settings.yml", id="dir-with-settings"),
+        pytest.param(
+            "multiple_image_raw_no_settings",
+            "settings_infer_images.yml",
+            id="dir-without-settings",
+        ),
+    ],
+)
+def test_create_settings_writes_expected_yaml(
+    tests_dir: Path, tmp_path: Path, input_dir, expected_file
+):
+    """Written YAML (with anchors) lists one entry per .tif found in dir_path."""
+    output_path = tmp_path / "settings.yml"
+    expected_path = tests_dir / "data/expected/settings" / expected_file
 
-    # Use monkeypatch to simulate user input
-    monkeypatch.setattr("builtins.input", lambda _: "y")
-
-    # Ensure the output directory exists
-    output_dir = tests_dir.joinpath("output/settings")
-    output_dir.mkdir(parents=True, exist_ok=True)
-    expected_path = tests_dir.joinpath("data/expected/settings/settings.yml")
-    assert expected_path.exists(), "Expected YAML settings file not found"
-
-    # Generate the settings.yml file
     create_settings(
-        dir_path=input_multi_raw_wdir,
-        output_path=output_dir / "settings.yml",
-    )
-    output_path = output_dir / "settings.yml"
-    # Compare the generated file with the expected file
-    assert filecmp.cmp(
-        expected_path,
-        output_path,
-        shallow=False,
-    ), f"The generated {output_path} file does not match the expected {expected_path} file."
-
-
-def test_create_yaml_settings_infer_images(tests_dir):
-    # Input
-    input_path = tests_dir / "data/input/multiple_image_raw_no_settings/"
-    
-    # Output
-    # Ensure the output directory exists
-    output_dir = tests_dir.joinpath("output/settings")
-    output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = output_dir / "settings_infer_images.yml"
-
-    # Expected
-    expected_path = tests_dir.joinpath(
-        "data/expected/settings/settings_infer_images.yml"
-    )
-    assert expected_path.exists(), "Expected YAML settings file not found"
-    
-    # Generate the settings.yml file
-    create_settings(
-        dir_path=input_path,
+        dir_path=tests_dir / "data/input" / input_dir,
         output_path=output_path,
     )
-    
-    # Compare the generated file with the expected file
-    assert filecmp.cmp(
-        expected_path,
-        output_path,
-        shallow=False,
-    ), f"The generated {output_path} file does not match the expected {expected_path} file."
 
-
-# # Clean up the output files after the test
-# @pytest.fixture(autouse=True)
-# def cleanup_output_settings(tests_dir):
-#     yield
-#     out_created_settings_path = tests_dir.joinpath(
-#         "output/settings/settings.yml"
-#     )
-#     if out_created_settings_path.exists():
-#         os.remove(out_created_settings_path)
-#     out_created_infer_settings_path = tests_dir.joinpath(
-#         "output/settings/settings_infer_images.yml"
-#     )
-#     if out_created_infer_settings_path.exists():
-#         os.remove(out_created_infer_settings_path)
-    
-
-# Clean up the output files after the test
-@pytest.fixture(autouse=True)
-def cleanup_output_settings(request, tests_dir):
-    output_dirs = [
-        tests_dir / "output/settings/",
-    ]
-
-    def cleanup():
-        for output_dir in output_dirs:
-            if output_dir.exists():
-                try:
-                    shutil.rmtree(output_dir)
-                except Exception as e:
-                    print(f"Error removing {output_dir}: {e}")
-    request.addfinalizer(cleanup)
+    # read_text() normalises line endings, so this works on every OS
+    assert output_path.read_text(encoding="utf-8") == expected_path.read_text(
+        encoding="utf-8"
+    )

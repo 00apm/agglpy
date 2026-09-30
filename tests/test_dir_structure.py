@@ -1,75 +1,59 @@
+import re
 import shutil
 from pathlib import Path
-import re
 
 import pytest
 
 from agglpy.dir_structure import (
     init_mgr_dirstruct,
-    validate_mgr_dirstruct,
     is_mgr_dirstruct,
+    validate_mgr_dirstruct,
 )
 from agglpy.errors import DirectoryStructureError
 
 
-def test_validate_mgr_dirstruct(
-    input_multi_wdir: Path,
-    input_multi_raw_wdir: Path,
-):
-    # Case 1: valid directory structure
+def test_validate_mgr_dirstruct_valid_layout_passes(input_multi_wdir: Path):
+    """A valid layout passes silently (no exception)."""
     validate_mgr_dirstruct(input_multi_wdir)
 
-    # Case 2: invalid directory structure
+
+def test_validate_mgr_dirstruct_missing_image_dir_raises(input_multi_raw_wdir: Path):
+    """The error names the first images/<name>/ dir that is missing."""
     missing_dir = input_multi_raw_wdir / "images" / "D7-019"
     expected_err_msg = f"Image Data Set directory {missing_dir!r} not found"
-    escaped_err_msg = re.escape(expected_err_msg)
-    with pytest.raises(
-        DirectoryStructureError,
-        match=rf"{escaped_err_msg}"
-    ):
+    with pytest.raises(DirectoryStructureError, match=re.escape(expected_err_msg)):
         validate_mgr_dirstruct(input_multi_raw_wdir)
 
-def test_is_mgr_dirstruct(
-    input_multi_wdir: Path,
-    input_multi_raw_wdir: Path,
+
+@pytest.mark.parametrize(
+    ("input_dir", "expected"),
+    [
+        pytest.param("multiple_image", True, id="valid-layout"),
+        pytest.param("multiple_image_raw", False, id="flat-dir"),
+    ],
+)
+def test_is_mgr_dirstruct(tests_dir: Path, input_dir, expected):
+    """Boolean counterpart of validate_mgr_dirstruct: returns instead of raising."""
+    assert is_mgr_dirstruct(tests_dir / "data/input" / input_dir) is expected
+
+
+@pytest.mark.parametrize(
+    "input_dir",
+    [
+        pytest.param("multiple_image_raw", id="with-settings"),
+        pytest.param("multiple_image_raw_no_settings", id="no-settings"),
+    ],
+)
+def test_init_mgr_dirstruct_creates_valid_layout(
+    tests_dir: Path, tmp_path: Path, input_dir
 ):
-    # Case 1: valid directory structure
-    assert is_mgr_dirstruct(input_multi_wdir)
+    """A flat dir of images is reorganised into images/<name>/ subdirs.
 
-    # Case 2: invalid directory structure
-    assert not is_mgr_dirstruct(input_multi_raw_wdir)
+    Without a settings.yml, one is created from the found images first.
+    """
+    wdir = tmp_path / "wdir"
+    shutil.copytree(tests_dir / "data/input" / input_dir, wdir)
 
+    init_mgr_dirstruct(wdir)
 
-def test_init_mgr_dirstruct(input_multi_raw_wdir: Path, tests_dir: Path):
-    output_dir = tests_dir / "output/init_dirstruct"
-    # output_dir.mkdir(parents=True, exist_ok=False)
-    shutil.copytree(input_multi_raw_wdir, output_dir)
-    init_mgr_dirstruct(output_dir)
-    assert is_mgr_dirstruct(output_dir)
-
-
-def test_init_mgr_dirstruct_no_settings(tests_dir: Path):
-    input_dir = tests_dir / "data/input/multiple_image_raw_no_settings" 
-    output_dir = tests_dir / "output/init_dirstruct_no_settings"
-    # output_dir.mkdir(parents=True, exist_ok=False)
-    shutil.copytree(input_dir, output_dir)
-    init_mgr_dirstruct(output_dir)
-    assert is_mgr_dirstruct(output_dir)
-
-# Clean up the output files after the test
-@pytest.fixture(autouse=True)
-def cleanup_output_init_dirstruct(request, tests_dir):
-    output_dirs = [
-        tests_dir / "output/init_dirstruct",
-        tests_dir / "output/init_dirstruct_no_settings",
-
-    ]
-
-    def cleanup():
-        for output_dir in output_dirs:
-            if output_dir.exists():
-                try:
-                    shutil.rmtree(output_dir)
-                except Exception as e:
-                    print(f"Error removing {output_dir}: {e}")
-    request.addfinalizer(cleanup)
+    assert is_mgr_dirstruct(wdir)

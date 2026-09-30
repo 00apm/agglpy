@@ -12,6 +12,7 @@ data:
     pixel_size: auto
     crop_ratio: 0.1
     median_blur: 3
+    rolling_ball: null
     d_min: [3, 50]
     d_max: [50, 140]
     dist2R: 0.5

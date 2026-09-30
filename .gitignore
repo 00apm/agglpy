@@ -27,9 +27,6 @@ _dev/
 .pylint.d/
 
 
-# ignore tests output folder 
-tests/output/
-
 # ignore pytest cache
 .pytest_cache/
 

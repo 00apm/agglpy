@@ -75,6 +75,10 @@ select = ["F", "E", "I", "ANN", "RUF"]
 fixable = ["ALL"]
 ignore = ["ANN101"]
 
+[tool.ruff.lint.per-file-ignores]
+# Type annotations on test functions and fixtures add noise, not safety
+"tests/**" = ["ANN"]
+
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
