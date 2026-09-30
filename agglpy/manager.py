@@ -447,6 +447,13 @@ class Manager:
         plot: bool = False,
         include_dsom: bool = False,
     ) -> None:
+        if plot:
+            # plot_aglPCD was never implemented; plotting moves out of
+            # Manager in the Phase 2 refactor
+            raise NotImplementedError(
+                "Plotting of the agglomerate primary particle count "
+                "distribution is not implemented. Use plot=False."
+            )
         if self.batch_res_aglDF is None:
             self.generate_aglTable()
         if include_dsom:
@@ -494,9 +501,6 @@ class Manager:
         self.batch_res_aglPCD["cummulative_norm"] = self.batch_res_aglPCD[
             "counts_norm"
         ].cumsum()
-
-        if plot:
-            self.plot_aglPCD(norm=False, cummul=True, export=True)
 
         PCD_space_str = np.array2string(
             PCD_space,
@@ -735,18 +739,12 @@ class Manager:
         fig.show()
         if export == True:
             if norm == True:
-                PSDimg = (
-                    self._workdir
-                    / os.path.basename(self._workdir)
-                    / "_particle_normPSD.png"
-                )
+                suffix = "_particle_normPSD.png"
             else:
-                PSDimg = (
-                    self._workdir
-                    / os.path.basename(self._workdir)
-                    / "_particle_PSD.png"
-                )
-            plt.savefig(PSDimg, dpi=300)
+                suffix = "_particle_PSD.png"
+            PSDimg = self._workdir / "plots" / f"{self._workdir.name}{suffix}"
+            PSDimg.parent.mkdir(exist_ok=True)
+            fig.savefig(PSDimg, dpi=300)
 
     def plot_aglPSD(self, norm=False, cummul=True, export=False, lines=True):
         fig, ax1 = plt.subplots()
@@ -795,14 +793,12 @@ class Manager:
         fig.show()
         if export == True:
             if norm == True:
-                PSDimg = (
-                    self._workdir / os.path.basename(self._workdir) / "_agl_normPSD.png"
-                )
+                suffix = "_agl_normPSD.png"
             else:
-                PSDimg = (
-                    self._workdir / os.path.basename(self._workdir) / "_agl_PSD.png"
-                )
-            plt.savefig(PSDimg, dpi=300)
+                suffix = "_agl_PSD.png"
+            PSDimg = self._workdir / "plots" / f"{self._workdir.name}{suffix}"
+            PSDimg.parent.mkdir(exist_ok=True)
+            fig.savefig(PSDimg, dpi=300)
 
     def export_all_results(self) -> None:
         xls_file = self._workdir / (self._workdir.name + "_agl_analysis.xlsx")
