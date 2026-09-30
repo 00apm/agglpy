@@ -82,8 +82,10 @@ select = [
 ]
 ignore = [
     "N",     # postponed to Phase 2: renaming would break the public API
-    "E501",  # TODO: rewrap long strings/comments the formatter can't split
-    "W505",  # TODO: rewrap comments/docstrings to 72 columns
+    # Postponed to the docstring rewrite (roadmap 7.1): long strings,
+    # comments and docstrings the formatter cannot wrap are fixed then
+    "E501",
+    "W505",
 ]
 
 [tool.ruff.lint.pycodestyle]
