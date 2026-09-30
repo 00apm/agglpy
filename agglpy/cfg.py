@@ -6,7 +6,11 @@ from typing import IO, Any, Dict, List, Mapping, Tuple, Union, cast
 
 import yaml
 
-from agglpy.auxiliary import txt_is_default, txt_is_default_or_none, txt_is_none_plus
+from agglpy.auxiliary import (
+    txt_is_default,
+    txt_is_default_or_none,
+    txt_is_none_plus,
+)
 from agglpy.defaults import (
     DEFAULT_IMAGE_SETTINGS_SCHEMA,
     DEFAULT_IMAGE_SETTINGS_VALUES,
@@ -39,7 +43,9 @@ class _SettingsLoader(yaml.SafeLoader):
 # no other rule matched (ints, YAML 1.1 floats, bools stay as they were)
 _SettingsLoader.add_implicit_resolver(
     "tag:yaml.org,2002:float",
-    re.compile(r"^[-+]?(?:[0-9][0-9_]*(?:\.[0-9_]*)?|\.[0-9_]+)[eE][-+]?[0-9]+$"),
+    re.compile(
+        r"^[-+]?(?:[0-9][0-9_]*(?:\.[0-9_]*)?|\.[0-9_]+)[eE][-+]?[0-9]+$"
+    ),
     list("-+0123456789."),
 )
 
@@ -163,7 +169,7 @@ def fill_empty_image_settings(
         default = DEFAULT_IMAGE_SETTINGS_VALUES
         def_str = "agglpy lib"
     for key, val in settings["data"]["images"].items():
-        if val is None: # finds defined images without settings dict
+        if val is None:  # finds defined images without settings dict
             val = default
             logger.debug(
                 f"Settings for image: {key} were empty. Filling with "
@@ -247,7 +253,7 @@ def validate_settings(
                 for im in config[key]:
                     if config[key][im] is None:
                         # filling image settings if it was not provided
-                        # TODO: this should not be there, deprecete when 
+                        # TODO: this should not be there, deprecete when
                         # updating to pydantic
                         config[key][im] = deepcopy(
                             DEFAULT_IMAGE_SETTINGS_VALUES
@@ -335,7 +341,7 @@ def handle_defaults(
         return tuple(
             handle_defaults(item, route + f".{item}") for item in config
         )
-    # If the data is a string and matches one of the default-like values, 
+    # If the data is a string and matches one of the default-like values,
     # convert it to None
     elif isinstance(config, str) and config.lower() in valid_default:
         return None
@@ -494,4 +500,3 @@ def find_valid_settings(path: os.PathLike) -> List[Path]:
                 valid_files.append(p_valid)
     logger.debug(f"Valid settings found: {valid_files}")
     return valid_files
-

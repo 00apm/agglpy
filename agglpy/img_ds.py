@@ -62,7 +62,9 @@ class ImgDataSet:
     _settings: ImageSettingsTypedDict
     _img_filename: str | None
     _img_path: Path | None
-    _img_rgb: npt.NDArray | None  # image w/o processing (in RGB opencv color format)
+    _img_rgb: (
+        npt.NDArray | None
+    )  # image w/o processing (in RGB opencv color format)
     _img: npt.NDArray | None  # image processed (in grayscale)
     _img_meta_dict: dict | None
 
@@ -76,7 +78,7 @@ class ImgDataSet:
     _PP_flag: bool
     _all_PP_DF: pd.DataFrame | None
     _all_AGGL_DF: pd.DataFrame | None
-    
+
     _AGGL_flag: bool
     _KDTree: spsp.KDTree | None
 
@@ -148,7 +150,8 @@ class ImgDataSet:
         # Check if image file exists
         if not self._img_path.exists():
             raise ImgDataSetStructureError(
-                f"Image file {self._img_path} not found for ImgDataSet: " f"{self!s}"
+                f"Image file {self._img_path} not found for ImgDataSet: "
+                f"{self!s}"
             )
 
         # Loading SEM image file and tags
@@ -235,7 +238,9 @@ class ImgDataSet:
     def classify_all_AGL(self, threshold: float = 0) -> None:
         for i in self.all_AGGL_DF.OBJ:
             i.classify(threshold)
-        logger.debug(f"{self!s} Agglomerates classified for threshold= {threshold}")
+        logger.debug(
+            f"{self!s} Agglomerates classified for threshold= {threshold}"
+        )
 
     def detect_primary_particles(
         self,
@@ -243,11 +248,13 @@ class ImgDataSet:
         export_img: bool = True,
         export_edges: bool = True,
     ) -> pd.DataFrame:
-        logger.info(f"Starting primary particle detection for ImgDataSet {self!s}")
+        logger.info(
+            f"Starting primary particle detection for ImgDataSet {self!s}"
+        )
         crop_ratio = self._settings["crop_ratio"]
-        assert (
-            self._img is not None
-        ), f"Image was not loaded properly for ImgDataSet: {self!s}."
+        assert self._img is not None, (
+            f"Image was not loaded properly for ImgDataSet: {self!s}."
+        )
         if crop_ratio > 0:
             self._img = crop_img(self._img, ratio=crop_ratio)
             logger.debug(
@@ -327,7 +334,8 @@ class ImgDataSet:
         self._prepare_PPsource_buffer()
 
         logger.debug(
-            f"{self!s} Primary Particles data loaded from: " f"{self._PPsource_path}"
+            f"{self!s} Primary Particles data loaded from: "
+            f"{self._PPsource_path}"
         )
 
     def create_primary_particles(self, multiprocessing: bool = False) -> None:
@@ -338,13 +346,19 @@ class ImgDataSet:
             )
         if not self._PP_dict:
             if multiprocessing:
-                logger.debug(f"{self!s} Creating particles with multiprocessing...")
+                logger.debug(
+                    f"{self!s} Creating particles with multiprocessing..."
+                )
                 self._PP_dict = self._create_PPobj_multiprocessing(
                     buffer=self._PPsource_bufferDF
                 )
             else:
-                logger.debug(f"{self!s} Creating particles in single thread...")
-                self._PP_dict = self._create_PPobj(buffer=self._PPsource_bufferDF)
+                logger.debug(
+                    f"{self!s} Creating particles in single thread..."
+                )
+                self._PP_dict = self._create_PPobj(
+                    buffer=self._PPsource_bufferDF
+                )
             self._create_PP_DF(PP_dict=self._PP_dict)
             if not (self._all_PP_DF is None or self._all_PP_DF.empty):
                 logger.debug(
@@ -394,10 +408,7 @@ class ImgDataSet:
         self._AGGL_flag = True
         return self._all_AGGL_DF
 
-    def calc_extended_agl_param(
-        self, 
-        include_dsom: bool = True
-        ) -> None:
+    def calc_extended_agl_param(self, include_dsom: bool = True) -> None:
 
         if not self._AGGL_flag or self._all_AGGL_DF is None:
             raise ImgDataSetStateError(
@@ -435,7 +446,7 @@ class ImgDataSet:
             s = DF[DF["ID"] == i].OBJ.values[0]
             selected.append(s)
         return selected
-    
+
     def get_agglomerates(self, IDlist: List[int] = []) -> List[Agglomerate]:
         selected = []
         DF = self.all_AGGL_DF
@@ -511,8 +522,12 @@ class ImgDataSet:
         if len(self.res_agglDF.index) == 0:
             self.get_results_aglTable()
         self.res_summary = pd.DataFrame()
-        self.res_summary.loc[0, "N_primary_particle"] = len(self._all_PP_DF.index)
-        self.res_summary.loc[0, "N_aerosol_particle"] = len(self._all_AGGL_DF.index)
+        self.res_summary.loc[0, "N_primary_particle"] = len(
+            self._all_PP_DF.index
+        )
+        self.res_summary.loc[0, "N_aerosol_particle"] = len(
+            self._all_AGGL_DF.index
+        )
         pp1_mask = self.res_agglDF.loc[:, "members_count"] == 1
         self.res_summary.loc[0, "N_pp1"] = pp1_mask.sum()
         self.res_summary.loc[0, "N_ppA"] = (
@@ -555,17 +570,21 @@ class ImgDataSet:
             self.res_summary.loc[0, "N_primary_particle"]
             / self.res_summary.loc[0, "N_aerosol_particle"]
         )
-        self.res_summary.loc[0, "particle_Dmean"] = self.res_particleDF["D"].mean()
-        self.res_summary.loc[0, "particle_Dstd"] = self.res_particleDF["D"].std()
-        self.res_summary.loc[0, "particle_D10"] = self.res_particleDF["D"].quantile(
-            q=0.1
-        )
-        self.res_summary.loc[0, "particle_D50"] = self.res_particleDF["D"].quantile(
-            q=0.5
-        )
-        self.res_summary.loc[0, "particle_D90"] = self.res_particleDF["D"].quantile(
-            q=0.9
-        )
+        self.res_summary.loc[0, "particle_Dmean"] = self.res_particleDF[
+            "D"
+        ].mean()
+        self.res_summary.loc[0, "particle_Dstd"] = self.res_particleDF[
+            "D"
+        ].std()
+        self.res_summary.loc[0, "particle_D10"] = self.res_particleDF[
+            "D"
+        ].quantile(q=0.1)
+        self.res_summary.loc[0, "particle_D50"] = self.res_particleDF[
+            "D"
+        ].quantile(q=0.5)
+        self.res_summary.loc[0, "particle_D90"] = self.res_particleDF[
+            "D"
+        ].quantile(q=0.9)
         # Sauter Mean Diameter
         self.res_summary.loc[0, "particle_SMD"] = (
             self.res_particleDF.loc[:, "D"] ** 3
@@ -605,9 +624,9 @@ class ImgDataSet:
         return magn
 
     def retrieve_pixel_size(self) -> float:
-        assert (
-            self._img_meta_dict
-        ), "._img_meta_dict is empty. Check if tiff tags are loaded properly."
+        assert self._img_meta_dict, (
+            "._img_meta_dict is empty. Check if tiff tags are loaded properly."
+        )
         logger.debug(
             f"{str(self)} Attempting to find pixel size in "
             f"{self.get_img_filename()} tags."
@@ -637,7 +656,9 @@ class ImgDataSet:
         elif px_size_unit == "m":
             pass
         else:
-            raise ValueError("Pixel size unit in tif exif SEM metadata not recognized.")
+            raise ValueError(
+                "Pixel size unit in tif exif SEM metadata not recognized."
+            )
         return px_size
 
     def plot_img(
@@ -692,7 +713,8 @@ class ImgDataSet:
 
             else:
                 raise ValueError(
-                    "please provide bar_data to properly plot" " color bar into image."
+                    "please provide bar_data to properly plot"
+                    " color bar into image."
                 )
 
         if show == True:
@@ -705,7 +727,9 @@ class ImgDataSet:
         ax.tick_params(
             axis="x", which="both", bottom=False, top=False, labelbottom=False
         )
-        ax.tick_params(axis="y", which="both", right=False, left=False, labelleft=False)
+        ax.tick_params(
+            axis="y", which="both", right=False, left=False, labelleft=False
+        )
 
         if export == True:
             fname = self.name + "_circles.png"
@@ -784,7 +808,9 @@ class ImgDataSet:
             X = p.X / self.px_size
             Y = p.Y / self.px_size
             D = p.D / self.px_size
-            cv2.circle(im1, (int(X), int(Y)), int(D / 2), color[i].tolist(), -1)
+            cv2.circle(
+                im1, (int(X), int(Y)), int(D / 2), color[i].tolist(), -1
+            )
             cv2.circle(
                 im2,
                 (int(X), int(Y)),
@@ -867,8 +893,11 @@ class ImgDataSet:
 
         colors = {
             "collector": 255
-            * mpl.colors.to_rgba_array(mpl.colors.CSS4_COLORS["deepskyblue"])[0],
-            "similar": 255 * mpl.colors.to_rgba_array(mpl.colors.CSS4_COLORS["red"])[0],
+            * mpl.colors.to_rgba_array(mpl.colors.CSS4_COLORS["deepskyblue"])[
+                0
+            ],
+            "similar": 255
+            * mpl.colors.to_rgba_array(mpl.colors.CSS4_COLORS["red"])[0],
             "separate": 255
             * mpl.colors.to_rgba_array(mpl.colors.CSS4_COLORS["lime"])[0],
         }
@@ -914,13 +943,14 @@ class ImgDataSet:
         # --- COLORMAP
         if isinstance(prop, dict):
             assert len(prop) == 1, (
-                "prop dict is too long," " choose single property to draw"
+                "prop dict is too long, choose single property to draw"
             )
             # label = list(prop.items())[0]
             prop_key = list(prop.keys())[0]
         else:
             assert isinstance(prop, str), (
-                "wrong data input- only string and" " dict of strings are accepted."
+                "wrong data input- only string and"
+                " dict of strings are accepted."
             )
             prop_key = "ID"
         if (vmin is None) or (vmax is None):
@@ -982,13 +1012,14 @@ class ImgDataSet:
         # --- COLORMAP
         if isinstance(prop, dict):
             assert len(prop) == 1, (
-                "prop dict is too long," " choose single property to draw"
+                "prop dict is too long, choose single property to draw"
             )
             # label = list(prop.items())[0]
             prop_key = list(prop.keys())[0]
         else:
             assert isinstance(prop, str), (
-                "wrong data input- only string and" " dict of strings are accepted."
+                "wrong data input- only string and"
+                " dict of strings are accepted."
             )
         if (vmin is None) or (vmax is None):
             if self.res_particleDF.empty:
@@ -1217,7 +1248,9 @@ class ImgDataSet:
         try:
             self._KDTree
         except AttributeError:
-            print("Program hasn't found KDTree structure. Initializing KDTree ...")
+            print(
+                "Program hasn't found KDTree structure. Initializing KDTree ..."
+            )
             self._construct_KDTree()
         KD = self._KDTree
         nbrs = KD.query_ball_point([particle.X, particle.Y], d)
@@ -1239,7 +1272,9 @@ class ImgDataSet:
             children = particle.interIDs
             for i in children:
                 if i not in list_:
-                    self._find_intersecting_family(self.get_particles([i])[0], list_)
+                    self._find_intersecting_family(
+                        self.get_particles([i])[0], list_
+                    )
 
         return list_
 
@@ -1280,7 +1315,9 @@ def _check_particle_csv_columns(
         )
 
 
-def recognize_particle_csv(filepath: os.PathLike, full: bool = False) -> PPSouceCsvType:
+def recognize_particle_csv(
+    filepath: os.PathLike, full: bool = False
+) -> PPSouceCsvType:
     fpath: Path = Path(filepath)
     # None makes pandas read the whole file
     nrows: int | None = None if full else 5

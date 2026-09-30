@@ -92,40 +92,40 @@ def preprocess_img(
 ) -> npt.NDArray:
     from datetime import datetime
     from pathlib import Path
-    
+
     # Create export directory if needed
     if image_export:
         export_dir = Path("preprocessed")
         export_dir.mkdir(exist_ok=True)
         # Generate a timestamp for unique filenames
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    
+
     def show_and_save(img: npt.NDArray, title: str, filename: str) -> None:
         """Helper function to show and/or save images"""
         if image_show:
             cv2.imshow(title, img)
-            k = cv2.waitKey(0) & 0xff
+            k = cv2.waitKey(0) & 0xFF
             if k == 27:  # ESC key
                 cv2.destroyAllWindows()
-            elif k == ord(' '):  # Space key
+            elif k == ord(" "):  # Space key
                 cv2.destroyAllWindows()
-        
+
         if image_export:
             filepath = export_dir / f"{timestamp}_{filename}"
             cv2.imwrite(str(filepath), img)
             logger.debug(f"Saved image to: {filepath}")
-    
+
     work_image: npt.NDArray = image.copy()
-    
+
     # Show/save original image
     show_and_save(work_image, "before preprocess", "01_original.png")
-    
+
     # Apply median blur
     if median_blur:
         logger.debug(f"Applying median blur with kernel size: {median_blur}")
         work_image = cv2.medianBlur(work_image, median_blur)
         show_and_save(work_image, "after median blur", "02_median_blur.png")
-    
+
     # Apply CLAHE
     if clahe:
         logger.debug(
@@ -135,7 +135,7 @@ def preprocess_img(
         clahe_obj = cv2.createCLAHE(clipLimit=clahe[0], tileGridSize=clahe[1])
         work_image = clahe_obj.apply(work_image)
         show_and_save(work_image, "after CLAHE", "03_clahe.png")
-    
+
     # Apply rolling ball background subtraction
     if rolling_ball:
         show_and_save(work_image, "before BG sub", "04_before_bg_sub.png")
@@ -147,10 +147,10 @@ def preprocess_img(
             do_presmooth=do_presmooth,
         )
         show_and_save(work_image, "after BG sub", "05_after_bg_sub.png")
-    
+
     if image_show:
         cv2.destroyAllWindows()
-    
+
     return work_image
 
 
@@ -533,13 +533,17 @@ def draw_particles(
             f"Expected color to be an array of shape (3,), but got shape {color.shape}"
         )
     if not np.all((0 <= color) & (color <= 255)):
-        raise ValueError(f"Color values should be in the range 0-255, but got {color}")
+        raise ValueError(
+            f"Color values should be in the range 0-255, but got {color}"
+        )
 
     for i, row in particles.iterrows():
         X = row.X
         Y = row.Y
         R = row.R
-        cv2.circle(overlay, (int(X), int(Y)), int(R), tuple(color.tolist()), -1)
+        cv2.circle(
+            overlay, (int(X), int(Y)), int(R), tuple(color.tolist()), -1
+        )
         cv2.circle(work_image, (int(X), int(Y)), int(R), (255, 255, 255), 1)
 
     cv2.addWeighted(overlay, alpha, work_image, 1 - alpha, 0, work_image)

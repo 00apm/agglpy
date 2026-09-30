@@ -28,6 +28,7 @@ def test_manager_init_without_data_sets(input_multi_wdir: Path):
 #     ]
 #     assert paths == expected
 
+
 def test_manager_init_creates_data_sets(input_multi_wdir: Path):
     """Full init builds one ImgDataSet per image, skipping exclude_images."""
     M = Manager(working_dir=input_multi_wdir, init_data_sets=True)
@@ -152,7 +153,9 @@ def test_generate_summary_builds_missing_DSsummary(mgr: Manager, monkeypatch):
 
     monkeypatch.setattr(mgr, "generate_DSsummary", fake_generate_DSsummary)
     mgr.batch_res_pDF = pd.DataFrame({"D": PARTICLE_D})
-    mgr.batch_res_aglDF = pd.DataFrame({"D": AGL_D, "members_count": [2, 3, 8]})
+    mgr.batch_res_aglDF = pd.DataFrame(
+        {"D": AGL_D, "members_count": [2, 3, 8]}
+    )
 
     mgr.generate_summary()
 
