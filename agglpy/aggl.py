@@ -151,7 +151,7 @@ class Agglomerate:
 
     @property
     def has_extended_param(self) -> bool:
-        return self._extended_param
+        return self._extended_flag
 
     def calc_extended_param(self, include_dsom: bool = True) -> None:
         if self._members_DF is None or self._members_DF.empty:

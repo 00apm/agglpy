@@ -300,7 +300,7 @@ class Manager:
         cut = pd.cut(
             self.batch_res_pDF.D, bins=PSD_space, include_lowest=False
         )
-        self.batch_res_PSD = pd.value_counts(cut, sort=False)
+        self.batch_res_PSD = cut.value_counts(sort=False)
         lefts = []
         mids = []
         rights = []
@@ -390,7 +390,7 @@ class Manager:
         else:
             diameters = self.batch_res_aglDF.loc[:, "D"]
         cut = pd.cut(diameters, bins=PSD_space, include_lowest=False)
-        self.batch_res_aglPSD = pd.value_counts(cut, sort=False)
+        self.batch_res_aglPSD = cut.value_counts(sort=False)
 
         lefts = []
         mids = []
@@ -487,7 +487,7 @@ class Manager:
         else:
             counts = self.batch_res_aglDF.loc[:, "members_count"]
         cut = pd.cut(counts, bins=PCD_space, include_lowest=False)
-        self.batch_res_aglPCD = pd.value_counts(cut, sort=False)
+        self.batch_res_aglPCD = cut.value_counts(sort=False)
 
         lefts = []
         mids = []

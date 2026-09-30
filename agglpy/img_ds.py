@@ -5,7 +5,6 @@ Created on Fri Feb  7 10:25:40 2020
 @author: Artur
 """
 
-import concurrent
 import os
 import warnings
 from pathlib import Path
@@ -190,7 +189,7 @@ class ImgDataSet:
                 self.detect_primary_particles()
             else:
                 self.load_PPsource_csv()
-            self.create_primary_particles(multiprocessing=False)
+            self.create_primary_particles()
 
     @property
     def path(self) -> Path:
@@ -253,8 +252,11 @@ class ImgDataSet:
         assert self._img is not None, (
             f"Image was not loaded properly for ImgDataSet: {self!s}."
         )
+        # Work on a local image: self._img stays the raw input, so repeated
+        # calls always start from the same image
+        img = self._img
         if crop_ratio > 0:
-            self._img = crop_img(self._img, ratio=crop_ratio)
+            img = crop_img(img, ratio=crop_ratio)
             logger.debug(
                 f"Image cropped with ratio {crop_ratio} for primary particle "
                 f"detection in {self!s}"
@@ -267,8 +269,8 @@ class ImgDataSet:
         }
         if preprocess_dict:
             # if any preprocess settings were registeres use them as kwargs
-            self._img = preprocess_img(
-                image=self._img,
+            img = preprocess_img(
+                image=img,
                 **preprocess_dict,  # type: ignore
                 # kwargs unpacking supported from python 3.12
             )
@@ -282,7 +284,7 @@ class ImgDataSet:
                 )
 
         df = HCT_multi(
-            self._img,
+            img,
             export_img=export_img,
             export_edges=export_edges,
             export_csv=export_csv,
@@ -336,27 +338,15 @@ class ImgDataSet:
             f"{self._PPsource_path}"
         )
 
-    def create_primary_particles(self, multiprocessing: bool = False) -> None:
+    def create_primary_particles(self) -> None:
         if self._PPsource_bufferDF is None or self._PPsource_bufferDF.empty:
             raise ImgDataSetBufferError(
                 f"Primary Parcicle source buffer is not initialized. Check if "
                 f".csv data was loaded properly for ImgDataSet: {self!s}."
             )
         if not self._PP_dict:
-            if multiprocessing:
-                logger.debug(
-                    f"{self!s} Creating particles with multiprocessing..."
-                )
-                self._PP_dict = self._create_PPobj_multiprocessing(
-                    buffer=self._PPsource_bufferDF
-                )
-            else:
-                logger.debug(
-                    f"{self!s} Creating particles in single thread..."
-                )
-                self._PP_dict = self._create_PPobj(
-                    buffer=self._PPsource_bufferDF
-                )
+            logger.debug(f"{self!s} Creating particles...")
+            self._PP_dict = self._create_PPobj(buffer=self._PPsource_bufferDF)
             self._create_PP_DF(PP_dict=self._PP_dict)
             if not (self._all_PP_DF is None or self._all_PP_DF.empty):
                 logger.debug(
@@ -1142,27 +1132,6 @@ class ImgDataSet:
         for _, row in buffer.iterrows():
             ID, particle = self._create_PPobj_from_row(row=row)
             particles_dict[ID] = particle
-        return particles_dict
-
-    def _create_PPobj_multiprocessing(
-        self,
-        buffer: pd.DataFrame,
-    ) -> Dict[int, Particle]:
-        if buffer.empty:
-            raise ImgDataSetBufferError(
-                f"Primary Parcicle source buffer is empty. Check if .csv data "
-                f"was loaded properly for ImgDataSet: {self!s}."
-            )
-        particles_dict: Dict[int, "Particle"] = {}
-        with concurrent.futures.ProcessPoolExecutor() as executor:
-            futures = {
-                executor.submit(self._create_PPobj_from_row, row): row["ID"]
-                for _, row in buffer.iterrows()
-            }
-
-            for future in concurrent.futures.as_completed(futures):
-                id, particle = future.result()
-                particles_dict[id] = particle
         return particles_dict
 
     def _create_PP_DF(self, PP_dict: Dict[int, Particle]) -> None:
