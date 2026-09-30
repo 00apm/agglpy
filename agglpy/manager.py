@@ -358,10 +358,10 @@ class Manager:
         plot: bool = True,
         include_dsom: bool = False,
     ) -> None:
-        if self.batch_res_aglDF.empty:
+        if self.batch_res_aglDF is None:
             self.generate_aglTable()
         if PSD_space is None:
-            if self._PSD_space.size == 0:
+            if self._PSD_space is None:
                 self.set_PSD_space()
             PSD_space = self._PSD_space
         if include_dsom:
@@ -447,7 +447,14 @@ class Manager:
         plot: bool = False,
         include_dsom: bool = False,
     ) -> None:
-        if self.batch_res_aglDF.empty:
+        if plot:
+            # plot_aglPCD was never implemented; plotting moves out of
+            # Manager in the Phase 2 refactor
+            raise NotImplementedError(
+                "Plotting of the agglomerate primary particle count "
+                "distribution is not implemented. Use plot=False."
+            )
+        if self.batch_res_aglDF is None:
             self.generate_aglTable()
         if include_dsom:
             if self.batch_res_aglDF["members_count_dsom"].isna().all():
@@ -495,9 +502,6 @@ class Manager:
             "counts_norm"
         ].cumsum()
 
-        if plot:
-            self.plot_aglPCD(norm=False, cummul=True, export=True)
-
         PCD_space_str = np.array2string(
             PCD_space,
             precision=2,
@@ -525,11 +529,10 @@ class Manager:
 
     def generate_summary(self) -> None:
         # TODO: batch_res_<specifier> logic needs to be reordered / redesigned
-        # self.batch_res_DSsummary may be None at this point
+        if self.batch_res_DSsummary is None:
+            self.generate_DSsummary()
         DSsumm = self.batch_res_DSsummary
         summ = pd.DataFrame()  # self.batch_res_summary
-        if len(DSsumm.index) == 0:
-            self.generate_DSsummary()
         summ = summ.reindex_like(DSsumm)
         summ.drop("DS ID", axis=1, inplace=True)
         summ = summ.head(1)
@@ -619,7 +622,7 @@ class Manager:
         norm: bool = False,
         cpsd: bool = False,
     ) -> pd.DataFrame:
-        if self.batch_res_PSD.empty or (PSD_space is not None):
+        if self.batch_res_PSD is None or (PSD_space is not None):
             self.generate_PSD(PSD_space=PSD_space, plot=plot)
         else:
             self.set_PSD_space()
@@ -736,18 +739,12 @@ class Manager:
         fig.show()
         if export == True:
             if norm == True:
-                PSDimg = (
-                    self._workdir
-                    / os.path.basename(self._workdir)
-                    / "_particle_normPSD.png"
-                )
+                suffix = "_particle_normPSD.png"
             else:
-                PSDimg = (
-                    self._workdir
-                    / os.path.basename(self._workdir)
-                    / "_particle_PSD.png"
-                )
-            plt.savefig(PSDimg, dpi=300)
+                suffix = "_particle_PSD.png"
+            PSDimg = self._workdir / "plots" / f"{self._workdir.name}{suffix}"
+            PSDimg.parent.mkdir(exist_ok=True)
+            fig.savefig(PSDimg, dpi=300)
 
     def plot_aglPSD(self, norm=False, cummul=True, export=False, lines=True):
         fig, ax1 = plt.subplots()
@@ -796,14 +793,12 @@ class Manager:
         fig.show()
         if export == True:
             if norm == True:
-                PSDimg = (
-                    self._workdir / os.path.basename(self._workdir) / "_agl_normPSD.png"
-                )
+                suffix = "_agl_normPSD.png"
             else:
-                PSDimg = (
-                    self._workdir / os.path.basename(self._workdir) / "_agl_PSD.png"
-                )
-            plt.savefig(PSDimg, dpi=300)
+                suffix = "_agl_PSD.png"
+            PSDimg = self._workdir / "plots" / f"{self._workdir.name}{suffix}"
+            PSDimg.parent.mkdir(exist_ok=True)
+            fig.savefig(PSDimg, dpi=300)
 
     def export_all_results(self) -> None:
         xls_file = self._workdir / (self._workdir.name + "_agl_analysis.xlsx")
@@ -822,11 +817,8 @@ class Manager:
             self.batch_res_aglDF.to_excel(writer, sheet_name="agl_data")
         logger.info(f"{str(self)} Results exported to excel file: {xls_file}.")
 
-    def set_PSD_space(self):
+    def set_PSD_space(self) -> npt.NDArray:
         s = self._settings["analysis"]["PSD_space"]
-
-        space = []
-
         if s is None:
             # set PSD space automatically
             dmin = self.get_min_pD()
@@ -842,59 +834,6 @@ class Manager:
             )
         else:
             space = PSD_space(**s)
-        return space
-
-    def set_PSD_space_old(self):
-        s = self._settings["analysis"]["PSD_space"]
-        log = self._settings["analysis"]["PSD_space_log"]
-
-        space = []
-        if ("[" == s[0]) and ("]" == s[-1]):
-            space = s.replace("[", "")
-            space = space.replace("]", "")
-            space = space.split(",")
-            space = [float(i) for i in space]
-        elif "," in s:
-            param = s.split(",")
-            # print(param)
-            assert len(param) in [3, 4], (
-                "Wrong structure of PSD_space "
-                "variable in settings.csv. If input is list of interval bounds- "
-                "ensure that this parameter starts and ends with [ and ]"
-            )
-
-            if "step" in param:
-                param.remove("step")
-                step_bool = True
-            else:
-                step_bool = False
-
-            sp_start = float(param[0])
-            sp_end = float(param[1])
-
-            if step_bool:
-                try:
-                    sp_periods = float(param[2])
-                except ValueError:
-                    sp_periods = max(self.img_info["pixel size [um]"])
-            else:
-                sp_periods = int(param[2])
-
-            space = PSD_space(sp_start, sp_end, sp_periods, log=log, step=step_bool)
-
-        else:
-            try:
-                if float(s).is_integer():
-                    sp_start = self.get_min_pD()
-                    sp_end = self.get_max_pD()
-                    sp_periods = int(s)
-                    space = PSD_space(sp_start, sp_end, sp_periods, log=log)
-            except ValueError:
-                sp_start = self.get_min_pD()
-                sp_end = self.get_max_pD()
-                sp_periods = max(self.img_info["pixel size [um]"])
-                space = PSD_space(sp_start, sp_end, sp_periods, log=False, step=True)
-
         self._PSD_space = space
         return space
 

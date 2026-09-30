@@ -1256,12 +1256,36 @@ class ImgDataSet:
         return f"<DS({self.name})>"
 
 
+def _read_particle_csv(
+    path: os.PathLike, nrows: int | None = None
+) -> pd.DataFrame:
+    """Read a primary particle .csv file.
+
+    Files are read as UTF-8 on every platform. "utf-8-sig" also drops the
+    byte order mark that Excel and some Windows tools write at the start.
+    """
+    return pd.read_csv(path, sep=",", encoding="utf-8-sig", nrows=nrows)
+
+
+def _check_particle_csv_columns(
+    df: pd.DataFrame, csv_type: PPSouceCsvType, path: os.PathLike
+) -> None:
+    """Raise ParticleCsvStructureError if columns of csv_type are missing."""
+    valid_columns = VALID_PARTICLE_CSV_DATA[csv_type]
+    missing = [col for col in valid_columns if col not in df.columns]
+    if missing:
+        raise ParticleCsvStructureError(
+            f"Columns {missing} required for {csv_type} csv were not found "
+            f"in the csv file: {Path(path)}"
+        )
+
+
 def recognize_particle_csv(filepath: os.PathLike, full: bool = False) -> PPSouceCsvType:
     fpath: Path = Path(filepath)
-    if not full:
-        nrows = 5
+    # None makes pandas read the whole file
+    nrows: int | None = None if full else 5
     recognized_types: List[PPSouceCsvType] = []
-    df: pd.DataFrame = pd.read_csv(fpath, nrows=nrows)
+    df: pd.DataFrame = _read_particle_csv(fpath, nrows=nrows)
     for csvtype, cols in VALID_PARTICLE_CSV_DATA.items():
         if set(cols).issubset(df.columns):
             recognized_types.append(csvtype)
@@ -1293,13 +1317,8 @@ def load_agglpy_csv(path: os.PathLike) -> pd.DataFrame:
     Returns:
         pd.DataFrame: DataFrame containing primary particle coordinates and radius
     """
-    fpath: Path = Path(path)
-    df: pd.DataFrame = pd.read_csv(path, sep=",", encoding="ansi")
-    valid_columns: Tuple[str, ...] = VALID_PARTICLE_CSV_DATA["agglpy"]
-    assert set(valid_columns).issubset(df.columns), (
-        f"Some of columns valid for agglpy default csv ({str(valid_columns)}) "
-        f"were not found in the csv file: {fpath}"
-    )
+    df: pd.DataFrame = _read_particle_csv(path)
+    _check_particle_csv_columns(df, "agglpy", path)
     return df
 
 
@@ -1312,13 +1331,8 @@ def load_agglpy_old_csv(path: os.PathLike) -> pd.DataFrame:
     Returns:
         pd.DataFrame: DataFrame containing primary particle coordinates and radius
     """
-    fpath: Path = Path(path)
-    df: pd.DataFrame = pd.read_csv(path, sep=",", encoding="ansi")
-    valid_columns: Tuple[str, ...] = VALID_PARTICLE_CSV_DATA["agglpy_old"]
-    assert set(valid_columns).issubset(df.columns), (
-        f"Some of columns valid for agglpy old format csv ({str(valid_columns)}) "
-        f"were not found in the csv file: {fpath}"
-    )
+    df: pd.DataFrame = _read_particle_csv(path)
+    _check_particle_csv_columns(df, "agglpy_old", path)
     cols_rename = {
         "X (pixels)": "X",
         "Y (pixels)": "Y",
@@ -1338,22 +1352,20 @@ def load_imagej_csv(path: os.PathLike) -> pd.DataFrame:
         pd.DataFrame: DataFrame containing primary particle coordinates and radius
     """
     fpath: Path = Path(path)
-    df: pd.DataFrame = pd.read_csv(path, sep=",", encoding="ansi")
+    df: pd.DataFrame = _read_particle_csv(path)
+    _check_particle_csv_columns(df, "ImageJ", path)
     valid_columns: Tuple[str, ...] = VALID_PARTICLE_CSV_DATA["ImageJ"]
-    valid_agglpy_columns: Tuple[str, ...] = VALID_PARTICLE_CSV_DATA["agglpy"]
-    assert set(valid_columns).issubset(df.columns), (
-        f"Some of columns valid for ImageJ csv ({str(valid_columns)}) were not "
-        f"found in the csv file: {fpath}"
-    )
 
     # Select all particles with ImageJ "Oval" type
     map_oval = df.loc[:, "Type"] == "Oval"
     # Select all particles with equal width and height (eliminate ellipses)
     map_wh_eq = df.loc[:, "Width"] == df.loc[:, "Height"]
-    sum_non_spherical = ~map_oval.sum() + ~map_wh_eq.sum()
+    map_circle = map_oval & map_wh_eq
+    # count rows that fail either condition (not a sum of the two counts)
+    sum_non_spherical = int((~map_circle).sum())
 
     if sum_non_spherical > 0:
-        dropped_IDs: list = df.loc[~(map_oval & map_wh_eq), "Index"].to_list()
+        dropped_IDs: list = df.loc[~map_circle, "Index"].to_list()
         logger.warning(
             f"Non spherical particles were detected in ImageJ csv file: {fpath} "
             f"Dropped {sum_non_spherical} particles, "
@@ -1361,7 +1373,7 @@ def load_imagej_csv(path: os.PathLike) -> pd.DataFrame:
         )
 
     # Drop non spherical particles
-    df = df.loc[map_oval & map_wh_eq, :]
+    df = df.loc[map_circle, :]
 
     # Drop unnecessary columns
     df = df.loc[:, list(valid_columns)]
