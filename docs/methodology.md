@@ -5,14 +5,15 @@ agglpy implements a method for detecting spherical primary particles in Scanning
 
 ## Overview
 
-The analysis proceeds through six stages:
+The analysis proceeds through seven stages:
 
 1. Input image preprocessing,
 2. Edge detection and binarization,
 3. Primary particle detection using the Hough Circle Transform (HCT),
 4. (Optional) Manual correction of missed and incorrectly detected primary particles,
 5. Primary particle connectivity determination,
-6. Grouping of connected particles into agglomerates.
+6. Grouping of connected particles into agglomerates,
+7. Estimating the primary particles hidden on the far side of larger particles.
 
 ## 1. Input image preprocessing
 
@@ -87,6 +88,26 @@ Once pairwise connections are known, agglomerates are formed by a **recursive/DF
 A particle with no connections becomes a single-particle "agglomerate." These are not true agglomerates — which is why agglpy's output is more accurately described as *aerosol particle data* rather than strictly *agglomerate data*.
 
 Codebase: `aggl.py` (`Particle`/`Agglomerate` construction and classification into `"collector" | "attached2coll" | "separate" | "similar"`, driven by `Manager.collector_threshold`).
+
+## 7. Hidden primary particles: idj and dsom
+
+An SEM image shows only one side of each particle. Primary particles deposited on the far side of a larger particle (in particular of a collector) are not visible, so the number and volume of primary particles in an agglomerate are underestimated. agglpy gives a simple estimate of what is hidden.
+
+**Internally disjoint (idj) particles.** A primary particle $P_j$ whose circle lies completely inside the circle of another particle $P_i$,
+
+$$s \le r_{P_i} - r_{P_j},$$
+
+is seen in front of $P_i$, i.e. on its visible side. Such particles are flagged as *idj*. (Partly overlapping particles, at the outline of the larger one, are not idj.)
+
+**Dark side of the moon (dsom) correction.** If deposition has no preferred direction (random, chaotic deposition), primary particles are spread uniformly over the whole surface of the larger particle. The hidden side then carries, statistically, the same particles as the visible side. The visible-side particles are the idj ones, so each idj particle is counted twice:
+
+$$V_{dsom} = V + \sum_{j \in idj} V_{P_j}, \qquad N_{dsom} = N + N_{idj}, \qquad D_{dsom} = \left(\frac{6 V_{dsom}}{\pi}\right)^{1/3},$$
+
+where $V$ is the summed volume of all member spheres (idj ones included once), $N$ the member count and $D_{dsom}$ the volume-equivalent diameter of the corrected agglomerate.
+
+This is a deliberately simple estimate. It assumes isotropic deposition and ignores particles hidden behind the outline (only the idj particles are doubled). More precise estimates may exist and could replace it.
+
+Codebase: `img_ds.py` (`_find_all_intersecting` flags idj), `aggl.py` (`Agglomerate.calc_extended_param(include_dsom=True)`). The names `idj` and `dsom` are shortcuts and will get descriptive names when this code is rewritten.
 
 ## Output
 
