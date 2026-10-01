@@ -22,7 +22,7 @@ its position and size, an agglomerate by its members (see
 Expected files live in ``tests/data/golden/expected/``. After an intended
 change of results, regenerate them and review the diff before committing:
 
-    pytest tests/test_golden.py --force-regen
+    pytest tests/golden --force-regen
 """
 
 import shutil
@@ -34,8 +34,10 @@ import pytest
 from agglpy.img_ds import ImgDataSet
 from agglpy.manager import Manager
 
-GOLDEN_DIR = Path(__file__).parent / "data" / "golden"
-IMAGES_DIR = Path(__file__).parent / "data" / "input" / "multiple_image"
+from support.paths import DATA_DIR
+
+GOLDEN_DIR = DATA_DIR / "golden"
+IMAGES_DIR = DATA_DIR / "input" / "multiple_image"
 IMAGE_NAMES = ["D7-017", "D7-019"]
 
 # Repeated runs differ by ~1e-12 relative at most (last digits of the

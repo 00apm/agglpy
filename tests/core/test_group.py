@@ -1,6 +1,6 @@
 """Grouping of primary particles into agglomerates, and idj detection.
 
-Synthetic cases from ``synthetic.cases`` with hand-worked answers. They
+Synthetic cases from ``support.synthetic.cases`` with hand-worked answers. They
 run against the legacy code now; Phase 2 adds the new core's adapter to
 ``ADAPTERS`` and the same cases become the unit tests of
 ``agglpy.group``.
@@ -10,9 +10,10 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-from synthetic.cases import DOUBLETS, SINGLE, Case
-from synthetic.legacy_adapter import run_legacy
-from synthetic.result import Result
+
+from support.synthetic.cases import DOUBLETS, SINGLE, Case
+from support.synthetic.legacy_adapter import run_legacy
+from support.synthetic.result import Result
 
 Adapter = Callable[..., Result]
 
