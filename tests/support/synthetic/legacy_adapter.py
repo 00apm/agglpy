@@ -56,7 +56,11 @@ def run_legacy(
         "pixel_size": pixel_size,
     }
     ds = ImgDataSet(ds_dir, settings=settings, auto_load=True)
-    ds.detect_agglomerates()
+    _clear_shared_search_list()
+    try:
+        ds.detect_agglomerates()
+    finally:
+        _clear_shared_search_list()
     ds.classify_all_AGL(threshold=threshold)
 
     p = ds.get_results_pTable().set_index("ID")
@@ -73,3 +77,16 @@ def run_legacy(
     )
     particles.index = particles.index.map(key_by_id)
     return Result(particles=particles.loc[keys])
+
+
+def _clear_shared_search_list() -> None:
+    """Empty the visited-ID list the legacy search keeps between calls.
+
+    ``ImgDataSet._find_intersecting_family`` collects visited IDs in a
+    mutable default argument (D-015). A search that stops halfway (e.g.
+    on RecursionError) leaves its IDs there, and the next detection in
+    the same process starts with them: it crashes or merges unrelated
+    particles. All tests run in one process, so every run starts and
+    ends with an empty list.
+    """
+    ImgDataSet._find_intersecting_family.__defaults__[0].clear()

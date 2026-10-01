@@ -1,0 +1,69 @@
+"""Registry of implementations the synthetic cases run against.
+
+Phase 2 adds ``"core": run_core``. Known bugs of an implementation are
+listed in ``KNOWN_FAILURES`` and become strict xfails for that
+implementation only: the test reports them as expected failures, and
+fails as soon as one of them starts passing, so a fixed bug can't stay
+marked.
+"""
+
+from collections.abc import Callable
+from dataclasses import dataclass
+
+import pytest
+
+from .cases import Case
+from .legacy_adapter import run_legacy
+from .result import Result
+
+Adapter = Callable[..., Result]
+
+ADAPTERS: dict[str, Adapter] = {"legacy": run_legacy}
+
+# Realistic SEM pixel size in metres. Runs at 1.0 keep coordinates in px.
+REAL_PIXEL_SIZE = 2.5e-9
+
+
+@dataclass(frozen=True)
+class KnownFailure:
+    reason: str
+    raises: type[BaseException] | None = None
+
+
+_SCALING = (
+    "the legacy code scales to metres before comparing, which can change "
+    "an exact result by one ulp; the new core compares in px (2.3, 2.4)"
+)
+
+# (adapter, check, case name, pixel size) -> why it fails
+KNOWN_FAILURES: dict[tuple[str, str, str, float], KnownFailure] = {
+    # 14 * 2.5e-9 = 3.5e-08 > 10 * 2.5e-9 + 4 * 2.5e-9
+    ("legacy", "grouping", "doublet_unequal_tangent", REAL_PIXEL_SIZE): (
+        KnownFailure(_SCALING)
+    ),
+    # 6 * 2.5e-9 = 1.5000000000000002e-08 > 10 * 2.5e-9 - 4 * 2.5e-9
+    ("legacy", "idj", "doublet_internally_tangent", REAL_PIXEL_SIZE): (
+        KnownFailure(_SCALING)
+    ),
+    ("legacy", "grouping", "chain_2500", 1.0): KnownFailure(
+        "recursive search exceeds the recursion limit (D-015, fixed in 2.3)",
+        raises=RecursionError,
+    ),
+}
+
+
+def expect_known_failure(
+    request: pytest.FixtureRequest,
+    adapter: str,
+    check: str,
+    case: Case,
+    pixel_size: float = 1.0,
+) -> None:
+    """Mark the running test as a strict xfail if it is a known failure."""
+    known = KNOWN_FAILURES.get((adapter, check, case.name, pixel_size))
+    if known is not None:
+        request.applymarker(
+            pytest.mark.xfail(
+                strict=True, reason=known.reason, raises=known.raises
+            )
+        )

@@ -261,3 +261,17 @@ STRUCTURES: list[Case] = [
         ),
     ),
 ]
+
+
+def long_chain(n: int) -> Case:
+    """``n`` equal particles in a straight line, each touching the next."""
+    keys = [f"p{i:05d}" for i in range(n)]
+    return make_case(
+        f"chain_{n}",
+        [(k, 20 * i, 0, 10) for i, k in enumerate(keys)],
+        groups=[keys],
+        note=(
+            f"A chain of {n} touching particles is one agglomerate, however "
+            "long it is."
+        ),
+    )
