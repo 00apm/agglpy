@@ -45,6 +45,10 @@ KNOWN_FAILURES: dict[tuple[str, str, str, float], KnownFailure] = {
     ("legacy", "idj", "doublet_internally_tangent", REAL_PIXEL_SIZE): (
         KnownFailure(_SCALING)
     ),
+    # 14 * 2.5e-9 / (20 * 2.5e-9) = 0.7000000000000001 > 0.7
+    ("legacy", "classify", "ratio_at_0.7", REAL_PIXEL_SIZE): (
+        KnownFailure(_SCALING)
+    ),
     ("legacy", "grouping", "chain_2500", 1.0): KnownFailure(
         "recursive search exceeds the recursion limit (D-015, fixed in 2.3)",
         raises=RecursionError,

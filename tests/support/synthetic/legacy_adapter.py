@@ -23,7 +23,6 @@ def run_legacy(
     case: Case,
     tmp_path: Path,
     pixel_size: float = 1.0,
-    threshold: float = 0.0,
 ) -> Result:
     """Run one case through ImgDataSet and convert the outcome to a Result.
 
@@ -32,7 +31,6 @@ def run_legacy(
         tmp_path: A fresh directory; a dataset folder is created inside.
         pixel_size: Metres per pixel given to ImgDataSet. The legacy code
             scales coordinates by it before grouping.
-        threshold: ``collector_threshold`` used for classification.
     """
     ds_dir = tmp_path / case.name
     ds_dir.mkdir()
@@ -61,7 +59,7 @@ def run_legacy(
         ds.detect_agglomerates()
     finally:
         _clear_shared_search_list()
-    ds.classify_all_AGL(threshold=threshold)
+    ds.classify_all_AGL(threshold=case.threshold)
 
     p = ds.get_results_pTable().set_index("ID")
     key_by_id = dict(zip(range(1, len(keys) + 1), keys, strict=True))
@@ -76,7 +74,18 @@ def run_legacy(
         }
     )
     particles.index = particles.index.map(key_by_id)
-    return Result(particles=particles.loc[keys])
+    particles = particles.loc[keys]
+
+    agl = ds.get_results_aglTable().set_index("name")
+    members = particles.groupby("agglomerate_id").groups
+    agglomerates = pd.DataFrame(
+        {
+            "members": [frozenset(members[name]) for name in agl.index],
+            "type": agl["type"],
+        },
+        index=agl.index.rename("agglomerate_id"),
+    )
+    return Result(particles=particles, agglomerates=agglomerates)
 
 
 def _clear_shared_search_list() -> None:
