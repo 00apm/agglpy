@@ -7,16 +7,18 @@ authors = [{ name = "Artur Marchewicz", email = "amarchewicz@gmail.com" }]
 license = { text = "BSD-3-Clause" }
 readme = "README.md"
 dependencies = [
-    # numpy/pandas majors are capped: numpy 2.0 removed np.float_ (still used in
-    # auxiliary.py) and pandas 3.0 made copy-on-write mandatory and dropped
-    # DataFrame.append - both need a dedicated migration, not just a version bump.
-    "numpy >= 1.24.4, < 2",
-    "pandas >= 2.0.3, < 3",
-    "opencv-python >= 4.8.1.78, < 5",
-    "scipy >= 1.10.1, < 2",
-    "scikit-image >= 0.21.0, < 1",
+    # NumPy 1.x and 2.x both work (full test suite, golden tests included).
+    # The compiled packages below have floors at their first releases built
+    # for NumPy 2; older wheels break when NumPy 2 is installed.
+    # pandas stays below 3.0: copy-on-write became mandatory and
+    # DataFrame.append was dropped - that needs its own migration.
+    "numpy >= 1.24.4, < 3",
+    "pandas >= 2.2.2, < 3",
+    "opencv-python >= 4.10.0.84, < 5",
+    "scipy >= 1.13, < 2",
+    "scikit-image >= 0.24, < 1",
     "tifffile >= 2022.8.12",
-    "matplotlib >= 3.8, < 4",
+    "matplotlib >= 3.8.4, < 4",
     "openpyxl >= 3.1.5, < 4",
     "pyyaml >= 6.0.2, < 7",
     "tqdm >= 4.66.5, < 5",
