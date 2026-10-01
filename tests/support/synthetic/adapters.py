@@ -10,15 +10,40 @@ marked.
 from collections.abc import Callable
 from dataclasses import dataclass
 
+import numpy as np
+import pandas as pd
 import pytest
 
+from agglpy.errors import ImgDataSetBufferError
+
 from .cases import Case
-from .legacy_adapter import run_legacy
+from .legacy_adapter import legacy_distribution, legacy_psd_bins, run_legacy
 from .result import Result
 
 Adapter = Callable[..., Result]
 
+# Runs a circle case: (case, tmp_path, pixel_size=...) -> Result
 ADAPTERS: dict[str, Adapter] = {"legacy": run_legacy}
+
+
+@dataclass(frozen=True)
+class StatsFunctions:
+    """Binning functions of one implementation, called directly.
+
+    ``psd_bins(start, end, periods, log=False, step=False)`` returns the
+    bin edges; ``distribution(values, bins)`` returns one row per bin
+    with ``left, right, mid, width, count, cumulative, count_norm,
+    cumulative_norm, volume, volume_norm, volume_cumulative_norm``.
+    """
+
+    psd_bins: Callable[..., np.ndarray]
+    distribution: Callable[[list[float], np.ndarray], pd.DataFrame]
+
+
+# Same keys as ADAPTERS, so the ``adapter`` fixture selects both.
+STATS: dict[str, StatsFunctions] = {
+    "legacy": StatsFunctions(legacy_psd_bins, legacy_distribution)
+}
 
 # Realistic SEM pixel size in metres. Runs at 1.0 keep coordinates in px.
 REAL_PIXEL_SIZE = 2.5e-9
@@ -48,6 +73,26 @@ KNOWN_FAILURES: dict[tuple[str, str, str, float], KnownFailure] = {
     # 14 * 2.5e-9 / (20 * 2.5e-9) = 0.7000000000000001 > 0.7
     ("legacy", "classify", "ratio_at_0.7", REAL_PIXEL_SIZE): (
         KnownFailure(_SCALING)
+    ),
+    # np.arange(start, end + step, step) can keep end + step as well
+    ("legacy", "psd_bins", "lin_step_metres", 1.0): KnownFailure(
+        "linear step bins get an extra edge beyond end through float "
+        "rounding in np.arange (fix in 2.5)"
+    ),
+    ("legacy", "psd_bins", "lin_step_from_0.1um", 1.0): KnownFailure(
+        "linear step bins get an extra edge beyond end through float "
+        "rounding in np.arange (fix in 2.5)"
+    ),
+    # the constructor rejects an empty particle table
+    ("legacy", "summary", "empty", 1.0): KnownFailure(
+        "an image without particles raises instead of giving an empty "
+        "summary (2.5)",
+        raises=ImgDataSetBufferError,
+    ),
+    ("legacy", "summary", "empty", REAL_PIXEL_SIZE): KnownFailure(
+        "an image without particles raises instead of giving an empty "
+        "summary (2.5)",
+        raises=ImgDataSetBufferError,
     ),
     ("legacy", "grouping", "chain_2500", 1.0): KnownFailure(
         "recursive search exceeds the recursion limit (D-015, fixed in 2.3)",

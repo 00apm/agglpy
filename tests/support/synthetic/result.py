@@ -24,10 +24,13 @@ class Result:
             ``cases.PROPERTIES`` (``volume``, ``D``, ``members_count``,
             ``members_D_mean``, ``members_D_std``, ``idj_count`` and the
             ``*_dsom`` values).
+        summary: Per-image summary metrics (names in
+            ``cases.SUMMARY``; diameters in px).
     """
 
     particles: pd.DataFrame
     agglomerates: pd.DataFrame
+    summary: dict
 
     def groups(self) -> frozenset[frozenset[str]]:
         """Agglomerates as a partition of the case keys."""

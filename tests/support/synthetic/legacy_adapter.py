@@ -4,7 +4,9 @@ This is the only place in the synthetic tests that knows the legacy
 classes. It is deleted together with them (roadmap 2.9).
 
 The case goes in the way real data does: as an agglpy particle CSV
-next to an image file, loaded by ``ImgDataSet(auto_load=True)``.
+next to an image file, loaded by ``ImgDataSet(auto_load=True)``. The
+binning functions are called directly (``legacy_psd_bins``,
+``legacy_distribution``).
 """
 
 from pathlib import Path
@@ -14,6 +16,7 @@ import numpy as np
 import pandas as pd
 
 from agglpy.img_ds import ImgDataSet
+from agglpy.manager import Manager, PSD_space
 
 from .cases import Case
 from .result import Result
@@ -96,7 +99,67 @@ def run_legacy(
         },
         index=agl.index.rename("agglomerate_id"),
     )
-    return Result(particles=particles, agglomerates=agglomerates)
+
+    # x / 0 -> inf and 0 / 0 -> NaN are intended (cases.SUMMARY); numpy
+    # would warn about them in every case without agglomerates
+    with np.errstate(divide="ignore", invalid="ignore"):
+        summary = ds.get_summary().iloc[0].to_dict()
+    for name in _SUMMARY_DIAMETERS:
+        summary[name] /= px
+    return Result(
+        particles=particles, agglomerates=agglomerates, summary=summary
+    )
+
+
+_SUMMARY_DIAMETERS = (
+    "particle_Dmean",
+    "particle_Dstd",
+    "particle_D10",
+    "particle_D50",
+    "particle_D90",
+    "particle_SMD",
+)
+
+
+def legacy_psd_bins(
+    start: float,
+    end: float,
+    periods: float,
+    log: bool = False,
+    step: bool = False,
+) -> np.ndarray:
+    """Bin edges from ``agglpy.manager.PSD_space``."""
+    return PSD_space(start=start, end=end, periods=periods, log=log, step=step)
+
+
+def legacy_distribution(values: list[float], bins: np.ndarray) -> pd.DataFrame:
+    """Binned distribution from ``Manager.generate_PSD``.
+
+    ``generate_PSD`` only reads ``batch_res_pDF.D`` and the bins, so a
+    Manager is created without its constructor (which needs a working
+    directory) and given just those.
+    """
+    mgr = Manager.__new__(Manager)
+    mgr.name = "synthetic"
+    mgr._shortID = "0"
+    mgr.batch_res_pDF = pd.DataFrame({"D": values})
+    mgr.generate_PSD(PSD_space=bins, plot=False)
+    psd = mgr.batch_res_PSD
+    return pd.DataFrame(
+        {
+            "left": psd["left"],
+            "right": psd["right"],
+            "mid": psd["mid"],
+            "width": psd["width"],
+            "count": psd["counts"],
+            "cumulative": psd["cummulative"],
+            "count_norm": psd["counts_norm"],
+            "cumulative_norm": psd["cummulative_norm"],
+            "volume": psd["volume"],
+            "volume_norm": psd["volume_norm"],
+            "volume_cumulative_norm": psd["volume_cummulative_norm"],
+        }
+    ).reset_index(drop=True)
 
 
 def _clear_shared_search_list() -> None:
