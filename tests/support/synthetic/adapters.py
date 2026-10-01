@@ -83,13 +83,13 @@ KNOWN_FAILURES: dict[tuple[str, str, str, float], KnownFailure] = {
         "linear step bins get an extra edge beyond end through float "
         "rounding in np.arange (fix in 2.5)"
     ),
-    # the constructor rejects an empty particle table
-    ("legacy", "summary", "empty", 1.0): KnownFailure(
+    # the constructor rejects an empty particle table (D-022)
+    ("legacy", "summary", "no_particles", 1.0): KnownFailure(
         "an image without particles raises instead of giving an empty "
         "summary (2.5)",
         raises=ImgDataSetBufferError,
     ),
-    ("legacy", "summary", "empty", REAL_PIXEL_SIZE): KnownFailure(
+    ("legacy", "summary", "no_particles", REAL_PIXEL_SIZE): KnownFailure(
         "an image without particles raises instead of giving an empty "
         "summary (2.5)",
         raises=ImgDataSetBufferError,

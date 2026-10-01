@@ -658,7 +658,7 @@ SUMMARY: list[Case] = [
         note="No agglomerates: sep2agl is inf, n_ppA is NaN.",
     ),
     make_case(
-        "empty",
+        "no_particles",
         [],
         groups=[],
         threshold=0.5,
@@ -686,8 +686,9 @@ SUMMARY: list[Case] = [
             "agl_member_count_std": math.nan,
         },
         note=(
-            "An image without particles gives zero counts and NaN ratios, "
-            "so one empty image doesn't stop a batch."
+            "A field of view where nothing was found (low deposition, "
+            "blank sample) is a valid data point: zero counts and NaN "
+            "ratios, and it doesn't stop a batch."
         ),
     ),
 ]
