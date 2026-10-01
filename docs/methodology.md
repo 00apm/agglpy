@@ -23,7 +23,7 @@ Two corrections are applied:
 - **Median filtering** — a 3×3 pixel mask is scanned across the image; the 9 pixel values under the mask are sorted and the median replaces the central pixel's value. This reduces noise while preserving edge sharpness.
 - **Background normalization (Rolling-Ball algorithm)** — simulates a ball of a chosen radius rolled under the image intensity surface. The minimum intensity the ball can reach at each point forms a background estimate, which is subtracted from the original image. This removes slow-varying illumination/charging artifacts while preserving sharp particle features. The ball radius sets the scale of background structure that gets corrected and needs to be chosen relative to particle size.
 
-Codebase: `img_process.preprocess_img` (crop, median blur, CLAHE), `background_subtractor.py` (rolling-ball).
+Codebase: `img_process.preprocess_img` (crop, median blur, CLAHE), `img_process.rolling_ball_substraction` (rolling-ball).
 
 ## 2. Edge detection
 
