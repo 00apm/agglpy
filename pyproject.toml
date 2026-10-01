@@ -2,7 +2,7 @@
 name = "agglpy"
 description = "A tool for primary particle and agglomerate detection on digital images"
 requires-python = ">=3.11.0"
-version = "0.3.0"
+version = "0.4.0"
 authors = [{ name = "Artur Marchewicz", email = "amarchewicz@gmail.com" }]
 license = { text = "BSD-3-Clause" }
 readme = "README.md"
