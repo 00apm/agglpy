@@ -1,9 +1,7 @@
 general:
   working_dir: .
 metadata:
-  conditions:
-    ambient_temp: [21, °C]
-    ambient_pressure: [101.3, kPa]
+  conditions: {}
 data:
   default: &default_img
     img_file: auto
@@ -12,27 +10,30 @@ data:
     pixel_size: auto
     crop_ratio: 0.0
     median_blur: 3
-    d_min: [3, 50]
-    d_max: [50, 140]
+    rolling_ball:
+    - 50
+    - true
+    - true
+    d_min:
+    - 3
+    - 50
+    d_max:
+    - 50
+    - 140
     dist2R: 0.5
     param1: 200
     param2: 15
     additional_info: null
   images:
-    D7-017: *default_img
-    D7-019:
+    D7-017:
       <<: *default_img
-      img_file: D7-019-modified.tif
-  exclude_images:
-    - D7-017
-    - D7-021
+      img_file: D7-017.tif
+    D7-021:
+      <<: *default_img
+      img_file: D7-021.tif
+  exclude_images: []
 analysis:
-  PSD_space:
-    start: 0.0
-    end: 20.0
-    periods: 20
-    log: True
-    step: False
+  PSD_space: null
   collector_threshold: 0.5
 export:
   draw_particles:

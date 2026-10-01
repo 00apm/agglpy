@@ -53,6 +53,7 @@ class ImgDataSetStructureError(Exception):
 
     pass
 
+
 class ImgDataSetStateError(Exception):
     """
     Raised when the state of ImgDataSet object is not correct for current operation.
@@ -60,12 +61,10 @@ class ImgDataSetStateError(Exception):
 
     pass
 
+
 class AgglomerateStructureError(Exception):
     """
     Raised when the structure of Agglomerate object is not correct.
     """
 
     pass
-
-
-

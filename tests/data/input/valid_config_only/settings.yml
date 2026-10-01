@@ -4,14 +4,15 @@ metadata:
   conditions:
     ambient_temp: [21, °C]
     ambient_pressure: [101.3, kPa]
-data: 
+data:
   default: &default_img
     img_file: auto
     HCT_file: auto
     magnification: auto
     pixel_size: auto
-    crop_ratio: 0.1
+    crop_ratio: 0.0
     median_blur: 3
+    rolling_ball: [50, true, true]
     d_min: [3, 50]
     d_max: [50, 140]
     dist2R: 0.5
@@ -19,24 +20,20 @@ data:
     param2: 15
     additional_info: null
   images:
-    D7-017: 
-      <<: *default_img
-      HCT_file: "D7-017_fitting.csv"
+    D7-017: *default_img
     D7-019:
       <<: *default_img
-      HCT_file: "D7-019_fitting.csv"
-    D7-021: *default_img 
-    D7-023:
+      img_file: D7-019-modified.tif
   exclude_images:
+    - D7-017
     - D7-021
-    - D7-023
 analysis:
   PSD_space:
-    start: 0
-    end: 10
+    start: 0.0
+    end: 20.0
     periods: 20
-    log: false
-    step: false
+    log: True
+    step: False
   collector_threshold: 0.5
 export:
   draw_particles:

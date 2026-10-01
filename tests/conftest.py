@@ -1,31 +1,50 @@
+"""Shared pytest fixtures, discovered automatically by pytest (no import needed)."""
+
 import pathlib
 
 import pytest
 
-from agglpy.img_ds import ImgDataSet
-from agglpy.manager import Manager
-
 
 @pytest.fixture
 def tests_dir():
+    """Path to the tests/ directory."""
     return pathlib.Path(__file__).parent
+
 
 @pytest.fixture
 def input_multi_raw_wdir():
-    return pathlib.Path(__file__).parent / "input" / "multiple_image_raw"
+    """Flat dir with 3 .tif images and a settings.yml, no images/ subdirs yet.
+
+    Not a valid Manager working dir until init_mgr_dirstruct() is run on it.
+    """
+    return (
+        pathlib.Path(__file__).parent / "data" / "input" / "multiple_image_raw"
+    )
 
 
 @pytest.fixture
 def input_single_wdir():
-    return pathlib.Path(__file__).parent / "input" / "single_image"
+    """Single D5 image with ImageJ RoiSet and fitting CSV (legacy layout)."""
+    return pathlib.Path(__file__).parent / "data" / "input" / "single_image"
+
 
 @pytest.fixture
 def input_multi_wdir():
-    return pathlib.Path(__file__).parent / "input" / "multiple_image"
+    """Valid Manager working dir: images/<name>/ subdirs, settings.yml.
+
+    D7-021 and D7-023 are in exclude_images, so only D7-017 and D7-019 are
+    analysed. Uses rolling_ball: null, like the real D5 series settings.
+    """
+    return pathlib.Path(__file__).parent / "data" / "input" / "multiple_image"
+
 
 @pytest.fixture
 def expected_valid_config():
-    """Config valid for YAML dump"""
+    """Raw settings dict that passes validate_settings (sentinels like "auto" kept).
+
+    Matches data/input/valid_config_only/settings.yml as read from YAML, with
+    the anchor/merge keys already expanded into each image entry.
+    """
     config = {
         "general": {
             "working_dir": ".",
@@ -44,6 +63,7 @@ def expected_valid_config():
                 "pixel_size": "auto",
                 "crop_ratio": 0.0,
                 "median_blur": 3,
+                "rolling_ball": [50, True, True],
                 "d_min": [3, 50],
                 "d_max": [50, 140],
                 "dist2R": 0.5,
@@ -59,6 +79,7 @@ def expected_valid_config():
                     "pixel_size": "auto",
                     "crop_ratio": 0.0,
                     "median_blur": 3,
+                    "rolling_ball": [50, True, True],
                     "d_min": [3, 50],
                     "d_max": [50, 140],
                     "dist2R": 0.5,
@@ -73,6 +94,7 @@ def expected_valid_config():
                     "pixel_size": "auto",
                     "crop_ratio": 0.0,
                     "median_blur": 3,
+                    "rolling_ball": [50, True, True],
                     "d_min": [3, 50],
                     "d_max": [50, 140],
                     "dist2R": 0.5,
@@ -85,7 +107,7 @@ def expected_valid_config():
                 "D7-017",
                 "D7-021",
             ],
-       },
+        },
         "analysis": {
             "PSD_space": {
                 "start": 0.0,
@@ -105,10 +127,12 @@ def expected_valid_config():
     }
     return config
 
+
 @pytest.fixture
 def expected_valid_config_processed(expected_valid_config):
-    """Config valid after handling defaults
-    State after loading to manager
+    """expected_valid_config after handle_defaults: "auto" resolved to None.
+
+    This is the state returned by load_manager_settings().
     """
     config = expected_valid_config
     config["data"]["images"]["D7-017"]["magnification"] = None
@@ -117,17 +141,3 @@ def expected_valid_config_processed(expected_valid_config):
     config["data"]["images"]["D7-019"]["pixel_size"] = None
 
     return config
-
-
-@pytest.fixture
-def model_IA(case_dir):
-    return ImgDataSet(str(case_dir))
-
-
-@pytest.fixture
-def manager_obj_not_init(input_multi_raw_wdir):
-    return Manager(input_multi_raw_wdir, init_data_sets=False)
-
-@pytest.fixture
-def manager_obj(input_multi_raw_wdir):
-    return Manager(input_multi_raw_wdir, settings_filepath="settings.yml")

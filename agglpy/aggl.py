@@ -30,23 +30,28 @@ class Agglomerate:
     member_IDs: List[int]
     type: AgglomerateType | None
 
-    # Public attributes calculated during analysis
+    # Public attributes calculated during main parameters calculation
     volume: float
-    volume_dsom: float
     D: float
-    D_dsom: float
     members_count: float
-    idj_members_count: float
-    members_count_dsom: float
     members_Dmean: float
     members_Dstdev: float
+
+    # --- Extended parameter attributes
+    # Center of mass coordinates, radius of gyration, geometric diameter
     X_com: float
     Y_com: float
     Rg: float
     Dg: float
+    # DSOM (Dark Side of the Moon) parameters
+    volume_dsom: float
+    D_dsom: float
+    idj_members_count: float
+    members_count_dsom: float
 
-    # private
+    # Private attributes
     _members_DF: pd.DataFrame | None
+    _extended_flag: bool  # Flag for extended agglomerate parameter calculation (including dsom primary particles)
 
     def __init__(
         self,
@@ -65,20 +70,29 @@ class Agglomerate:
         self._members_DF = None
         self.type = None
 
-        # Calculated attributes initialization
+        # --- Calculated attributes initialization
         self.volume = 0.0
-        self.volume_dsom = 0.0
         self.D = 0.0
-        self.D_dsom = 0.0
         self.members_count = 0.0
-        self.idj_members_count = 0.0
-        self.members_count_dsom = 0.0
         self.members_Dmean = 0.0
         self.members_Dstdev = 0.0
-        self.X_com = 0.0
-        self.Y_com = 0.0
-        self.Rg = 0.0
-        self.Dg = 0.0
+
+        # --- Extended parameters
+        # Center of mass coordinates, radius of gyration, geometric diameter
+        self.X_com = np.nan
+        self.Y_com = np.nan
+        self.Rg = np.nan
+        self.Dg = np.nan
+
+        # DSOM (Dark Side of the Moon) parameters
+        self.volume_dsom = np.nan
+        self.D_dsom = np.nan
+        self.idj_members_count = (
+            np.nan
+        )  # Internally disjoint primary particles count
+        self.members_count_dsom = np.nan
+
+        self._extended_flag = False
 
         Agglomerate.AGL_ID = Agglomerate.AGL_ID + 1
 
@@ -119,7 +133,7 @@ class Agglomerate:
         )
         self._members_DF.sort_values(by=["D"], ascending=False, inplace=True)
 
-    def calc_agl_param(self, include_dsom: bool = False) -> None:
+    def calc_agl_param(self) -> None:
         if self._members_DF is None or self._members_DF.empty:
             raise AgglomerateStructureError(
                 f"Calculation of Agglomerate {self!s} is not possible. "
@@ -134,18 +148,34 @@ class Agglomerate:
         self.members_Dstdev = Ds.std()
         self.volume = self._members_DF.loc[:, "volume"].sum()
         self.D = (6.0 * self.volume / constants.pi) ** (1 / 3)
+
+    @property
+    def has_extended_param(self) -> bool:
+        return self._extended_flag
+
+    def calc_extended_param(self, include_dsom: bool = True) -> None:
+        if self._members_DF is None or self._members_DF.empty:
+            raise AgglomerateStructureError(
+                f"Calculation of extended parameters for Agglomerate {self!s} "
+                f"is not possible. Agglomerate member DataFrame (_members_DF) "
+                f"is not initialized or is empty"
+            )
         self.X_com, self.Y_com = self.center_of_mass()
         self.Rg = self.radius_of_gyration()
         self.Dg = 2 * self.Rg
         if include_dsom:
             # Include 'dark side of the moon (dsom)' primary particles
-            idj_map = self._members_DF.loc[:, "idj"] == True
+            # .eq(True): element-wise, NaN counts as False
+            idj_map = self._members_DF.loc[:, "idj"].eq(True)
             self.volume_dsom = (
                 self.volume + self._members_DF.loc[idj_map, "volume"].sum()
             )
             self.D_dsom = (6 * self.volume_dsom / constants.pi) ** (1 / 3)
             self.idj_members_count = self.count_idj_members()
-            self.members_count_dsom = self.members_count + self.idj_members_count
+            self.members_count_dsom = (
+                self.members_count + self.idj_members_count
+            )
+        self._extended_flag = True
 
     def classify(self, threshold: float = 0) -> None:
         if self._members_DF is None or self._members_DF.empty:
@@ -159,10 +189,14 @@ class Agglomerate:
         if self.members_count > 1:
             classif_condition = (
                 self._members_DF.iloc[1, self._members_DF.columns.get_loc("D")]
-                / self._members_DF.iloc[0, self._members_DF.columns.get_loc("D")]
+                / self._members_DF.iloc[
+                    0, self._members_DF.columns.get_loc("D")
+                ]
                 <= threshold
             )
-            sorted_members: List[Particle] = self._members_DF.loc[:, "OBJ"].to_list()
+            sorted_members: List[Particle] = self._members_DF.loc[
+                :, "OBJ"
+            ].to_list()
             if classif_condition:
                 # Collector type Agglomerate
                 self.set_type("collector")  # set Agglomerate type
@@ -317,7 +351,9 @@ class Agglomerate:
 
     def __repr__(self) -> str:
         class_name = type(self).__name__
-        repr_str = f"{class_name}(member_list= {[str(m) for m in self.members]})"
+        repr_str = (
+            f"{class_name}(member_list= {[str(m) for m in self.members]})"
+        )
         return repr_str
 
     def __str__(self) -> str:

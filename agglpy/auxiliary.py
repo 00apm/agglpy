@@ -1,6 +1,5 @@
 import os
-from pathlib import Path
-from typing import Any, List, Tuple, Union
+from typing import List, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -88,7 +87,9 @@ class nlcmap:
         self.levels = np.asarray(levels, dtype="float64")
         self._x = self.levels
         self.levmax = self.levels.max()
-        self.transformed_levels = np.linspace(0.0, self.levmax, len(self.levels))
+        self.transformed_levels = np.linspace(
+            0.0, self.levmax, len(self.levels)
+        )
 
     def __call__(self, xi, alpha=1.0, **kwargs):  # type: ignore
         yi = np.interp(xi, self._x, self.transformed_levels)
@@ -119,7 +120,7 @@ def read_tiff_tags(file: os.PathLike) -> dict:
 def get_floor(
     val: Union[float, int, npt.ArrayLike],
     order: bool = True,
-) -> Union[float, int, npt.NDArray[np.float_]]:
+) -> Union[float, int, npt.NDArray[np.float64]]:
     """Get the floor value of a number or array based on order of magnitude.
 
     When `order` is True, the function returns the floor of the closest order
@@ -140,7 +141,7 @@ def get_floor(
         ValueError: If any input value is zero.
 
     Returns:
-        Union[float, int, NDArray[np.float_]]: The computed floor value(s).
+        Union[float, int, NDArray[np.float64]]: The computed floor value(s).
             Returns a float for float inputs, an int for int inputs,
             and a NumPy array for array-like inputs.
     """
@@ -165,13 +166,13 @@ def get_floor(
         return float(result)  # Convert to float
 
     # Otherwise, return the result as a NumPy array
-    return np.asarray(result, dtype=np.float_)
+    return np.asarray(result, dtype=np.float64)
 
 
 def get_ceil(
     val: Union[float, int, npt.ArrayLike],
     order: bool = True,
-) -> Union[float, int, npt.NDArray[np.float_]]:
+) -> Union[float, int, npt.NDArray[np.float64]]:
     """Get the ceiling value of a number or array based on order of magnitude.
 
     When `order` is True, the function returns the ceiling of the closest order
@@ -192,7 +193,7 @@ def get_ceil(
         ValueError: If any input value is zero.
 
     Returns:
-        Union[float, int, NDArray[np.float_]]: The computed ceiling value(s).
+        Union[float, int, NDArray[np.float64]]: The computed ceiling value(s).
             Returns a float for float inputs, an int for int inputs,
             and a NumPy array for array-like inputs.
     """
@@ -217,4 +218,4 @@ def get_ceil(
         return float(result)  # Convert to float
 
     # Otherwise, return the result as a NumPy array
-    return np.asarray(result, dtype=np.float_)
+    return np.asarray(result, dtype=np.float64)

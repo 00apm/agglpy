@@ -16,7 +16,6 @@ import numpy.typing as npt
 import pandas as pd
 from skimage.restoration import rolling_ball as skimage_rolling_ball
 
-from agglpy.errors import SettingsStructureError
 from agglpy.logger import logger
 
 
@@ -92,50 +91,50 @@ def preprocess_img(
 ) -> npt.NDArray:
     from datetime import datetime
     from pathlib import Path
-    
+
     # Create export directory if needed
     if image_export:
         export_dir = Path("preprocessed")
         export_dir.mkdir(exist_ok=True)
         # Generate a timestamp for unique filenames
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    
+
     def show_and_save(img: npt.NDArray, title: str, filename: str) -> None:
         """Helper function to show and/or save images"""
         if image_show:
             cv2.imshow(title, img)
-            k = cv2.waitKey(0) & 0xff
+            k = cv2.waitKey(0) & 0xFF
             if k == 27:  # ESC key
                 cv2.destroyAllWindows()
-            elif k == ord(' '):  # Space key
+            elif k == ord(" "):  # Space key
                 cv2.destroyAllWindows()
-        
+
         if image_export:
             filepath = export_dir / f"{timestamp}_{filename}"
             cv2.imwrite(str(filepath), img)
             logger.debug(f"Saved image to: {filepath}")
-    
+
     work_image: npt.NDArray = image.copy()
-    
+
     # Show/save original image
     show_and_save(work_image, "before preprocess", "01_original.png")
-    
+
     # Apply median blur
     if median_blur:
         logger.debug(f"Applying median blur with kernel size: {median_blur}")
         work_image = cv2.medianBlur(work_image, median_blur)
         show_and_save(work_image, "after median blur", "02_median_blur.png")
-    
+
     # Apply CLAHE
     if clahe:
         logger.debug(
             f"Applying CLAHE- Contrast Limited Adaptive Histogram Equalization"
-            f" with parameters: {str(clahe)}"
+            f" with parameters: {clahe!s}"
         )
         clahe_obj = cv2.createCLAHE(clipLimit=clahe[0], tileGridSize=clahe[1])
         work_image = clahe_obj.apply(work_image)
         show_and_save(work_image, "after CLAHE", "03_clahe.png")
-    
+
     # Apply rolling ball background subtraction
     if rolling_ball:
         show_and_save(work_image, "before BG sub", "04_before_bg_sub.png")
@@ -147,10 +146,10 @@ def preprocess_img(
             do_presmooth=do_presmooth,
         )
         show_and_save(work_image, "after BG sub", "05_after_bg_sub.png")
-    
+
     if image_show:
         cv2.destroyAllWindows()
-    
+
     return work_image
 
 
@@ -240,34 +239,34 @@ def HCT(
         circlesDF = pd.DataFrame(circles[0], columns=["X", "Y", "R"])
     logger.debug(f"HCT detected: {len(circlesDF.index)} primary particles.")
     # Displaying and exporting images
-    if display_img == True or export_img == True:
+    if display_img or export_img:
         imgC = draw_particles(work_image, circlesDF)
-        if export_edges == True:
+        if export_edges:
             imgE: npt.NDArray | None = cv2.Canny(
                 work_image, threshold1=param1, threshold2=0.5 * param1
             )
         else:
             imgE = None
-        if display_img == True:
+        if display_img:
             cv2.imshow("circles", imgC)
-            if export_edges == True:
+            if export_edges:
                 cv2.imshow("edges", imgE)
             cv2.waitKey(0)  # waits until a key is pressed
             cv2.destroyAllWindows()  # destroys the window showing image
-        if export_img == True:
+        if export_img:
             if not export_img_path:
                 raise ValueError(
-                    f"Trying to export HCT result circle image, but "
-                    f"export_img_path was not specified."
+                    "Trying to export HCT result circle image, but "
+                    "export_img_path was not specified."
                 )
             else:
                 ex_img_pth = Path(export_img_path)
             cv2.imwrite(str(ex_img_pth), imgC)
-            if export_edges == True:
+            if export_edges:
                 if not export_edges_path:
                     raise ValueError(
-                        f"Trying to export HCT result edges image, but "
-                        f"export_edges_path was not specified."
+                        "Trying to export HCT result edges image, but "
+                        "export_edges_path was not specified."
                     )
                 else:
                     ex_edges_pth = Path(export_edges_path)
@@ -390,8 +389,8 @@ def HCT_multi(
     if export_any:
         if (export_namebase is None) or (export_dir is None):
             raise ValueError(
-                f"Trying to export HCT results, but export_namebase or "
-                f"export_dir was not defined."
+                "Trying to export HCT results, but export_namebase or "
+                "export_dir was not defined."
             )
         else:
             exp_dir = Path(export_dir)
@@ -418,8 +417,8 @@ def HCT_multi(
         )
     ):
         imname = (
-            f"{str(i + 1)}_{export_namebase}_D({str(dmin)}-{str(dmax)})"
-            f"_p1({str(p1)})_p2({str(p2)})"
+            f"{i + 1!s}_{export_namebase}_D({dmin!s}-{dmax!s})"
+            f"_p1({p1!s})_p2({p2!s})"
         )
         if export_any:
             # ensure that mypy recognize that exp_dir is a Path at this point
@@ -533,13 +532,17 @@ def draw_particles(
             f"Expected color to be an array of shape (3,), but got shape {color.shape}"
         )
     if not np.all((0 <= color) & (color <= 255)):
-        raise ValueError(f"Color values should be in the range 0-255, but got {color}")
+        raise ValueError(
+            f"Color values should be in the range 0-255, but got {color}"
+        )
 
     for i, row in particles.iterrows():
         X = row.X
         Y = row.Y
         R = row.R
-        cv2.circle(overlay, (int(X), int(Y)), int(R), tuple(color.tolist()), -1)
+        cv2.circle(
+            overlay, (int(X), int(Y)), int(R), tuple(color.tolist()), -1
+        )
         cv2.circle(work_image, (int(X), int(Y)), int(R), (255, 255, 255), 1)
 
     cv2.addWeighted(overlay, alpha, work_image, 1 - alpha, 0, work_image)

@@ -1,0 +1,54 @@
+general:
+  working_dir: .
+metadata:
+  conditions:
+    AGGL_voltage: [0, kV]
+    ESP_voltage: [60, kV]
+    flue_gas_velocity: [0.5, m/s]
+    Q_gas: [2500, Nm3/h]
+    f_FAN: [30, Hz]
+data: 
+  default: &default_img
+    img_file: auto
+    HCT_file: auto
+    magnification: auto
+    pixel_size: auto
+    crop_ratio: 0.1
+    median_blur: null
+    rolling_ball: null
+    d_min: [3,60]
+    d_max: [60, 240]
+    dist2R: 0.4
+    param1: [220,270]
+    param2: [14, 24]
+    additional_info: null
+  images:
+    D7-017: 
+      <<: *default_img
+      img_file: D7-017.tif
+      HCT_file: null
+      d_min: [3,60]
+      d_max: [60, 240]
+      param1: [220,250]
+      param2: [13, 24]
+    D7-019: 
+      <<: *default_img
+      img_file: D7-019.tif
+      HCT_file: null
+      d_min: [3,60]
+      d_max: [60, 160]
+      param1: [200,170]
+      param2: [14, 22]
+  exclude_images: []
+analysis:
+  PSD_space:
+    start: 0.1e-6
+    end: 20.0e-6
+    periods: 20
+    log: True
+    step: False
+  collector_threshold: 0.8
+export:
+  draw_particles:
+    labels: false
+    alpha: 0.2

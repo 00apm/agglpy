@@ -1,13 +1,16 @@
 import os
 import re
-import warnings
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Tuple, Union, cast
+from typing import IO, Any, Dict, List, Mapping, Tuple, Union, cast
 
 import yaml
 
-from agglpy.auxiliary import txt_is_default, txt_is_default_or_none, txt_is_none_plus
+from agglpy.auxiliary import (
+    txt_is_default,
+    txt_is_default_or_none,
+    txt_is_none_plus,
+)
 from agglpy.defaults import (
     DEFAULT_IMAGE_SETTINGS_SCHEMA,
     DEFAULT_IMAGE_SETTINGS_VALUES,
@@ -27,6 +30,31 @@ from agglpy.typing import (
 )
 
 
+class _SettingsLoader(yaml.SafeLoader):
+    """SafeLoader that also reads exponent notation like 1e-6 as float.
+
+    PyYAML implements YAML 1.1, where a float needs a dot and a signed
+    exponent, so "1e-6" or "1.0e6" load as strings. YAML 1.2 and Python's
+    float() accept both.
+    """
+
+
+# Appended after the built-in resolvers, so it only applies to scalars that
+# no other rule matched (ints, YAML 1.1 floats, bools stay as they were)
+_SettingsLoader.add_implicit_resolver(
+    "tag:yaml.org,2002:float",
+    re.compile(
+        r"^[-+]?(?:[0-9][0-9_]*(?:\.[0-9_]*)?|\.[0-9_]+)[eE][-+]?[0-9]+$"
+    ),
+    list("-+0123456789."),
+)
+
+
+def load_yaml(stream: str | IO[str]) -> Any:
+    """yaml.safe_load that also reads exponent notation like 1e-6 as float."""
+    return yaml.load(stream, Loader=_SettingsLoader)
+
+
 def create_settings_dict(images: List[Path]) -> YamlRawSettingsTypedDict:
     """Create settings dictionary
 
@@ -39,7 +67,9 @@ def create_settings_dict(images: List[Path]) -> YamlRawSettingsTypedDict:
     Returns:
         dict: settings dictionary with a structure of YAML config
     """
-    settings: YamlRawSettingsTypedDict = DEFAULT_SETTINGS
+    # deepcopy: otherwise images are added to the module-level DEFAULT_SETTINGS
+    # and leak into every later call
+    settings: YamlRawSettingsTypedDict = deepcopy(DEFAULT_SETTINGS)
     for i in images:
         img = Path(i)
         settings["data"]["images"][img.stem] = {
@@ -139,7 +169,7 @@ def fill_empty_image_settings(
         default = DEFAULT_IMAGE_SETTINGS_VALUES
         def_str = "agglpy lib"
     for key, val in settings["data"]["images"].items():
-        if val is None: # finds defined images without settings dict
+        if val is None:  # finds defined images without settings dict
             val = default
             logger.debug(
                 f"Settings for image: {key} were empty. Filling with "
@@ -223,7 +253,7 @@ def validate_settings(
                 for im in config[key]:
                     if config[key][im] is None:
                         # filling image settings if it was not provided
-                        # TODO: this should not be there, deprecete when 
+                        # TODO: this should not be there, deprecete when
                         # updating to pydantic
                         config[key][im] = deepcopy(
                             DEFAULT_IMAGE_SETTINGS_VALUES
@@ -311,7 +341,7 @@ def handle_defaults(
         return tuple(
             handle_defaults(item, route + f".{item}") for item in config
         )
-    # If the data is a string and matches one of the default-like values, 
+    # If the data is a string and matches one of the default-like values,
     # convert it to None
     elif isinstance(config, str) and config.lower() in valid_default:
         return None
@@ -339,15 +369,14 @@ def handle_img_names(
 
     if isinstance(processed_config, dict):
         if txt_is_default_or_none(processed_config["img_file"]):
-            # Needs change: for now .tif is hardcoded; warning is displayed
+            # .tif is the only supported format (SUPPORTED_IMG_FORMATS), so
+            # the extension is not a guess. With more formats, look up the
+            # actual file on disk instead.
             processed_config["img_file"] = image_name + ".tif"
-            warning_msg = (
-                "img_file for image: image_name was set to default. File "
-                "extension is assumed to be .tif; if it needs to be change "
-                "please specify file name with extension in yaml settings"
+            logger.debug(
+                f"img_file for image {image_name} not set, "
+                f"assuming {processed_config['img_file']}"
             )
-            warnings.warn(warning_msg, RuntimeWarning)
-            logger.warning(warning_msg)
         if isinstance(processed_config["HCT_file"], str):
             if txt_is_default(processed_config["HCT_file"]):
                 processed_config["HCT_file"] = image_name + "_HCT.csv"
@@ -396,7 +425,7 @@ def is_valid_settings_file(path: os.PathLike) -> bool:
     """
     fpath: Path = Path(path)
     with open(fpath, mode="rt", encoding="utf-8") as settings_file:
-        settings = yaml.safe_load(settings_file)
+        settings = load_yaml(settings_file)
         if is_valid_settings(config=settings):
             return True
         else:
@@ -420,9 +449,8 @@ def load_manager_settings(
     Returns:
         dict: loaded settings dict
     """
-    fpath: Path = Path(path)
     with open(path, mode="rt", encoding="utf-8") as settings_file:
-        settings: Mapping[str, Any] = yaml.safe_load(settings_file)
+        settings: Mapping[str, Any] = load_yaml(settings_file)
         try:
             validate_settings(
                 config=settings,
@@ -452,7 +480,7 @@ def find_valid_settings(path: os.PathLike) -> List[Path]:
     wdir: Path = Path(path)
     valid_files: List[Path] = []
     for p in wdir.iterdir():
-        a = re.search(".*\.(ya?ml)", str(p))  # match .yml and .yaml files
+        a = re.search(r".*\.(ya?ml)", str(p))  # match .yml and .yaml files
         if a is not None:
             p_valid = Path(a.group())
             try:
@@ -471,4 +499,3 @@ def find_valid_settings(path: os.PathLike) -> List[Path]:
                 valid_files.append(p_valid)
     logger.debug(f"Valid settings found: {valid_files}")
     return valid_files
-

@@ -32,8 +32,8 @@ ENDPOINT_DEFAULT_LOGGER_CONFIG = {
             "class": "logging.handlers.RotatingFileHandler",
             "level": "DEBUG",
             "formatter": "detailed",
-            "filename": None, # created inside setup functions
-            "maxBytes": 10000000, # max 10MB
+            "filename": None,  # created inside setup functions
+            "maxBytes": 10000000,  # max 10MB
             "backupCount": 3,
         },
     },
@@ -52,6 +52,7 @@ ENDPOINT_DEFAULT_LOGGER_CONFIG = {
         },
     },
 }
+
 
 def setup_notebook_logger(
     log_cfg_path: Path = Path("./.agglpy/log/logger_config.yml"),
@@ -85,23 +86,22 @@ def setup_notebook_logger(
         # Set the log filename
         if log_path.is_dir():
             log_path = log_path / "agglpy.log"
-           
+
         config["handlers"]["file"]["filename"] = str(log_path)
 
         with open(log_cfg_path, "w") as file:
             yaml.dump(
-                config, 
-                file, 
+                config,
+                file,
                 default_flow_style=False,
                 sort_keys=False,
                 allow_unicode=True,
-            )       
+            )
 
-    log_path.parent.mkdir(parents=True, exist_ok=True) 
+    log_path.parent.mkdir(parents=True, exist_ok=True)
     # Apply the configuration
     try:
         logging.config.dictConfig(config)
         print(f"Logger configured using config at: {log_cfg_path}")
     except Exception as e:
         print(f"Failed to configure logger: {e}")
-
