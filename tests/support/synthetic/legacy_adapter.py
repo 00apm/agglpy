@@ -60,6 +60,7 @@ def run_legacy(
     finally:
         _clear_shared_search_list()
     ds.classify_all_AGL(threshold=case.threshold)
+    ds.calc_extended_agl_param(include_dsom=True)
 
     p = ds.get_results_pTable().set_index("ID")
     key_by_id = dict(zip(range(1, len(keys) + 1), keys, strict=True))
@@ -78,10 +79,20 @@ def run_legacy(
 
     agl = ds.get_results_aglTable().set_index("name")
     members = particles.groupby("agglomerate_id").groups
+    px, px3 = pixel_size, pixel_size**3
     agglomerates = pd.DataFrame(
         {
             "members": [frozenset(members[name]) for name in agl.index],
             "type": agl["type"],
+            "members_count": agl["members_count"],
+            "volume": agl["volume"] / px3,
+            "D": agl["D"] / px,
+            "members_D_mean": agl["members_Dmean"] / px,
+            "members_D_std": agl["members_Dstdev"] / px,
+            "idj_count": agl["idj_members_count"],
+            "volume_dsom": agl["volume_dsom"] / px3,
+            "D_dsom": agl["D_dsom"] / px,
+            "members_count_dsom": agl["members_count_dsom"],
         },
         index=agl.index.rename("agglomerate_id"),
     )

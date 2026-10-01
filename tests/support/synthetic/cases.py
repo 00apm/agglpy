@@ -6,6 +6,7 @@ is exact in floating point and an "exactly touching" pair really is
 exactly touching.
 """
 
+import math
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 
@@ -33,6 +34,8 @@ class Case:
         threshold: ``collector_threshold`` for classification.
         types: Expected particle type per key; empty if the case doesn't
             check classification.
+        properties: Expected agglomerate properties (px, px³), keyed by
+            the agglomerate's members; empty if not checked.
         note: What the case checks, in words.
     """
 
@@ -42,6 +45,9 @@ class Case:
     idj: frozenset[str] = field(default_factory=frozenset)
     threshold: float = 0.0
     types: Mapping[str, str] = field(default_factory=dict)
+    properties: Mapping[frozenset[str], Mapping[str, float]] = field(
+        default_factory=dict
+    )
     note: str = ""
 
     def agglomerate_types(self) -> dict[frozenset[str], str]:
@@ -68,6 +74,7 @@ def make_case(
     idj: Iterable[str] = (),
     threshold: float = 0.0,
     types: Mapping[str, str] | None = None,
+    properties: Mapping[Iterable[str], Mapping[str, float]] | None = None,
     note: str = "",
 ) -> Case:
     """Build a Case from plain tuples ``(key, x, y, r)`` and key groups."""
@@ -82,6 +89,9 @@ def make_case(
     types = dict(types or {})
     if types and sorted(types) != sorted(keys):
         raise ValueError(f"{name}: types must be given for every key")
+    props = {frozenset(k): dict(v) for k, v in (properties or {}).items()}
+    if not set(props) <= group_sets:
+        raise ValueError(f"{name}: properties given for a non-group")
     return Case(
         name,
         circle_objs,
@@ -89,6 +99,7 @@ def make_case(
         frozenset(idj),
         threshold,
         types,
+        props,
         note,
     )
 
@@ -413,3 +424,134 @@ CLASSIFICATION.append(
         ),
     )
 )
+
+
+def sphere(r: float) -> float:
+    """Volume of a sphere of radius ``r``."""
+    return 4 / 3 * math.pi * r**3
+
+
+def volume_equivalent_d(volume: float) -> float:
+    """Diameter of the sphere with the given volume."""
+    return (6 * volume / math.pi) ** (1 / 3)
+
+
+# Agglomerate properties, by definition:
+#   volume             sum of the member sphere volumes
+#   D                  diameter of one sphere with that volume
+#   members_D_mean/std mean / sample std (n - 1) of the member diameters;
+#                      std is NaN for a single member
+#   idj_count          members lying completely inside another member
+#   *_dsom             "dark side of the moon": a member seen completely
+#                      inside another one's outline is assumed to have a
+#                      twin hidden on the far side, so each idj member
+#                      counts twice: volume_dsom = volume + idj volume,
+#                      members_count_dsom = members_count + idj_count
+PROPERTIES: list[Case] = [
+    make_case(
+        "single",
+        [("a", 0, 0, 10)],
+        groups=[["a"]],
+        properties={
+            ("a",): {
+                "members_count": 1,
+                "volume": sphere(10),
+                "D": 20,
+                "members_D_mean": 20,
+                "members_D_std": math.nan,
+                "idj_count": 0,
+                "volume_dsom": sphere(10),
+                "D_dsom": 20,
+                "members_count_dsom": 1,
+            }
+        },
+        note="One particle: D is its own diameter, std undefined.",
+    ),
+    make_case(
+        "two_equal",
+        [("a", 0, 0, 10), ("b", 20, 0, 10)],
+        groups=[["a", "b"]],
+        properties={
+            ("a", "b"): {
+                "members_count": 2,
+                "volume": 2 * sphere(10),
+                "D": 20 * 2 ** (1 / 3),  # twice the volume
+                "members_D_mean": 20,
+                "members_D_std": 0,
+                "idj_count": 0,
+                "volume_dsom": 2 * sphere(10),
+                "D_dsom": 20 * 2 ** (1 / 3),
+                "members_count_dsom": 2,
+            }
+        },
+        note="Two equal spheres: D = d * 2^(1/3), not 2d.",
+    ),
+    make_case(
+        "two_unequal",
+        [("a", 0, 0, 10), ("b", 14, 0, 5)],
+        groups=[["a", "b"]],
+        properties={
+            ("a", "b"): {
+                "members_count": 2,
+                "volume": sphere(10) + sphere(5),
+                "D": 2 * 1125 ** (1 / 3),  # r³ = 1000 + 125
+                "members_D_mean": 15,
+                "members_D_std": 10 / math.sqrt(2),  # std(20, 10), n - 1
+                "idj_count": 0,
+                "volume_dsom": sphere(10) + sphere(5),
+                "D_dsom": 2 * 1125 ** (1 / 3),
+                "members_count_dsom": 2,
+            }
+        },
+        note="Overlap doesn't reduce the volume: spheres are summed.",
+    ),
+    make_case(
+        "one_inside",
+        [("a", 0, 0, 10), ("b", 2, 0, 4)],
+        groups=[["a", "b"]],
+        idj=["b"],
+        properties={
+            ("a", "b"): {
+                "members_count": 2,
+                "volume": sphere(10) + sphere(4),
+                "D": 2 * 1064 ** (1 / 3),  # r³ = 1000 + 64
+                "members_D_mean": 14,
+                "members_D_std": 12 / math.sqrt(2),  # std(20, 8), n - 1
+                "idj_count": 1,
+                "volume_dsom": sphere(10) + 2 * sphere(4),
+                "D_dsom": 2 * 1128 ** (1 / 3),  # r³ = 1000 + 2 * 64
+                "members_count_dsom": 3,
+            }
+        },
+        note="The inside particle counts once more in the dsom values.",
+    ),
+    make_case(
+        "polydisperse_small_members_count",
+        [
+            ("big", 0, 0, 1000),
+            ("t1", 1000.5, 0, 0.5),
+            ("t2", 0, 1000.5, 0.5),
+            ("in", 500, 0, 0.5),
+        ],
+        groups=[["big", "t1", "t2", "in"]],
+        idj=["in"],
+        properties={
+            ("big", "t1", "t2", "in"): {
+                "members_count": 4,
+                # small spheres add 3.75e-10 of the volume: rtol must be
+                # well below that for this case to mean anything
+                "volume": sphere(1000) + 3 * sphere(0.5),
+                "D": 2 * (1000**3 + 3 * 0.5**3) ** (1 / 3),
+                "members_D_mean": (2000 + 3 * 1) / 4,
+                "members_D_std": math.sqrt(
+                    ((2000 - 500.75) ** 2 + 3 * (1 - 500.75) ** 2) / 3
+                ),
+                "idj_count": 1,
+                "volume_dsom": sphere(1000) + 4 * sphere(0.5),
+                "D_dsom": 2 * (1000**3 + 4 * 0.5**3) ** (1 / 3),
+                "members_count_dsom": 5,
+            }
+        },
+        note="Tiny members (D ratio 2000) still add to volume and D.",
+    ),
+]

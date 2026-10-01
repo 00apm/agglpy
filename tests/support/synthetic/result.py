@@ -20,7 +20,10 @@ class Result:
             within one result matters), ``type``, ``idj`` (bool).
         agglomerates: One row per agglomerate, indexed by
             ``agglomerate_id``. Columns: ``members`` (frozenset of keys),
-            ``type``.
+            ``type``, and the properties in px / px³ named as in
+            ``cases.PROPERTIES`` (``volume``, ``D``, ``members_count``,
+            ``members_D_mean``, ``members_D_std``, ``idj_count`` and the
+            ``*_dsom`` values).
     """
 
     particles: pd.DataFrame
@@ -49,3 +52,8 @@ class Result:
                 strict=True,
             )
         )
+
+    def agglomerate_properties(self) -> dict[frozenset[str], dict]:
+        """All agglomerate columns except ``members``, keyed by members."""
+        table = self.agglomerates.set_index("members")
+        return {members: row.to_dict() for members, row in table.iterrows()}
