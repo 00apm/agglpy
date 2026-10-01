@@ -146,3 +146,118 @@ DOUBLETS: list[Case] = [
         ),
     ),
 ]
+
+
+STRUCTURES: list[Case] = [
+    make_case(
+        "triangle_tangent_plus_isolated",
+        # right triangle with sides 30-40-50; radii 10, 20, 30 make every
+        # pair exactly tangent: 10+20=30, 10+30=40, 20+30=50
+        [
+            ("a", 0, 0, 10),
+            ("b", 30, 0, 20),
+            ("c", 0, 40, 30),
+            ("d", 200, 0, 5),
+        ],
+        groups=[["a", "b", "c"], ["d"]],
+        note="Three mutually tangent particles + one isolated: 2 groups.",
+    ),
+    make_case(
+        "star",
+        # arms touch the centre only: neighbouring arms are
+        # 20 * sqrt(2) = 28.3 > 20 apart
+        [
+            ("c", 0, 0, 10),
+            ("e", 20, 0, 10),
+            ("n", 0, 20, 10),
+            ("w", -20, 0, 10),
+            ("s", 0, -20, 10),
+        ],
+        groups=[["c", "e", "n", "w", "s"]],
+        note="Arms connected only through the centre: one group.",
+    ),
+    make_case(
+        "chain_equal_plus_neighbour_1px",
+        [
+            ("a", 0, 0, 10),
+            ("b", 20, 0, 10),
+            ("c", 40, 0, 10),
+            ("d", 60, 0, 10),
+            ("e", 80, 0, 10),
+            ("f", 96, 0, 5),  # 1 px from e (touching at 95)
+        ],
+        groups=[["a", "b", "c", "d", "e"], ["f"]],
+        note=(
+            "Chain of 5: the ends don't touch but share one group "
+            "(indirect contact). A particle 1 px from the end stays out."
+        ),
+    ),
+    make_case(
+        "chain_largest_at_end",
+        [
+            ("a", 0, 0, 20),
+            ("b", 30, 0, 10),
+            ("c", 50, 0, 10),
+            ("d", 70, 0, 10),
+            ("e", 90, 0, 10),
+        ],
+        groups=[["a", "b", "c", "d", "e"]],
+        note=(
+            "The legacy search starts from the largest particle; with it "
+            "at one end the whole chain must still be found."
+        ),
+    ),
+    make_case(
+        "ring_square_plus_centre",
+        # 8 particles on the outline of a 40 x 40 square, neighbours 20
+        # apart (tangent); next-but-one neighbours are >= 28.3 apart.
+        # The centre particle is 20 from the nearest ring centre, needs 15.
+        [
+            ("r1", 0, 0, 10),
+            ("r2", 20, 0, 10),
+            ("r3", 40, 0, 10),
+            ("r4", 40, 20, 10),
+            ("r5", 40, 40, 10),
+            ("r6", 20, 40, 10),
+            ("r7", 0, 40, 10),
+            ("r8", 0, 20, 10),
+            ("m", 20, 20, 5),
+        ],
+        groups=[["r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8"], ["m"]],
+        note=(
+            "Closed ring: the search must stop when it gets back to the "
+            "first particle. The centre particle touches nothing: grouping "
+            "is by contact, not by being surrounded."
+        ),
+    ),
+    make_case(
+        "polydisperse_collector",
+        # collector R = 1000, small particles r = 0.5 (D ratio 2000)
+        [
+            ("big", 0, 0, 1000),
+            ("tangent", 1000.5, 0, 0.5),
+            ("gap_1px", -1001.5, 0, 0.5),
+            ("inside", 500, 0, 0.5),
+            ("on_edge_diag", -600, -800, 0.5),  # centre on the edge
+            ("tangent_top", 0, 1000.5, 0.5),
+            ("via_small", 0, 1001.5, 0.5),  # touches tangent_top only
+        ],
+        groups=[
+            [
+                "big",
+                "tangent",
+                "inside",
+                "on_edge_diag",
+                "tangent_top",
+                "via_small",
+            ],
+            ["gap_1px"],
+        ],
+        idj=["inside"],
+        note=(
+            "Large collector with small particles: tangent, overlapping, "
+            "inside (idj), 1 px away (separate), and one connected only "
+            "through another small particle."
+        ),
+    ),
+]
