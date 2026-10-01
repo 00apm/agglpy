@@ -1,0 +1,75 @@
+"""Run synthetic cases through the legacy ImgDataSet code (v0.4 API).
+
+This is the only place in the synthetic tests that knows the legacy
+classes. It is deleted together with them (roadmap 2.9).
+
+The case goes in the way real data does: as an agglpy particle CSV
+next to an image file, loaded by ``ImgDataSet(auto_load=True)``.
+"""
+
+from pathlib import Path
+
+import cv2
+import numpy as np
+import pandas as pd
+
+from agglpy.img_ds import ImgDataSet
+
+from .cases import Case
+from .result import Result
+
+
+def run_legacy(
+    case: Case,
+    tmp_path: Path,
+    pixel_size: float = 1.0,
+    threshold: float = 0.0,
+) -> Result:
+    """Run one case through ImgDataSet and convert the outcome to a Result.
+
+    Args:
+        case: The synthetic case.
+        tmp_path: A fresh directory; a dataset folder is created inside.
+        pixel_size: Metres per pixel given to ImgDataSet. The legacy code
+            scales coordinates by it before grouping.
+        threshold: ``collector_threshold`` used for classification.
+    """
+    ds_dir = tmp_path / case.name
+    ds_dir.mkdir()
+    # The constructor reads an image; its content is never used here.
+    cv2.imwrite(str(ds_dir / "img.png"), np.zeros((8, 8), dtype=np.uint8))
+
+    keys = [c.key for c in case.circles]
+    pd.DataFrame(
+        {
+            "ID": range(1, len(keys) + 1),
+            "X": [c.x for c in case.circles],
+            "Y": [c.y for c in case.circles],
+            "R": [c.r for c in case.circles],
+        }
+    ).to_csv(ds_dir / "particles.csv", index=False)
+
+    settings = {
+        "img_file": "img.png",
+        "HCT_file": "particles.csv",
+        "magnification": 1.0,
+        "pixel_size": pixel_size,
+    }
+    ds = ImgDataSet(ds_dir, settings=settings, auto_load=True)
+    ds.detect_agglomerates()
+    ds.classify_all_AGL(threshold=threshold)
+
+    p = ds.get_results_pTable().set_index("ID")
+    key_by_id = dict(zip(range(1, len(keys) + 1), keys, strict=True))
+    particles = pd.DataFrame(
+        {
+            "x": p["X"] / pixel_size,
+            "y": p["Y"] / pixel_size,
+            "r": p["D"] / 2 / pixel_size,
+            "agglomerate_id": p["affiliation"],
+            "type": p["type"],
+            "idj": p["idj"].astype(bool),
+        }
+    )
+    particles.index = particles.index.map(key_by_id)
+    return Result(particles=particles.loc[keys])
