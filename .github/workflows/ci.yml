@@ -35,3 +35,33 @@ jobs:
       - run: python -m pip install "ruff==0.16.7"
       - run: ruff check agglpy tests
       - run: ruff format --check agglpy tests
+
+  test:
+    name: test (${{ matrix.os }}, py${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false               # every combination reports
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+        python: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install the system library OpenCV needs (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libgl1
+      - name: Install agglpy with test dependencies
+        run: python -m pip install -e ".[test]"
+      - name: Show versions (and fail early if a compiled package doesn't import)
+        run: |
+          python -c "import sys, numpy, pandas, scipy, skimage, cv2, matplotlib, tifffile
+          print(sys.version)
+          print('numpy', numpy.__version__, '| pandas', pandas.__version__, '| scipy', scipy.__version__)
+          print('scikit-image', skimage.__version__, '| opencv', cv2.__version__, '| matplotlib', matplotlib.__version__, '| tifffile', tifffile.__version__)"
+      - name: Run the test suite (golden tests included)
+        run: python -m pytest -ra
