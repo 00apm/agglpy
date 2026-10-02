@@ -1,0 +1,14 @@
+# Lowest supported versions: the floors in pyproject.toml (D-025).
+# Keep in sync: change a floor in pyproject.toml and here together.
+# NumPy is set by the CI matrix (1.24.4 and 2.0.0).
+pandas==2.2.2
+opencv-python==4.10.0.84
+scipy==1.13.0
+scikit-image==0.24.0
+tifffile==2022.8.12
+matplotlib==3.8.4
+openpyxl==3.1.5
+pyyaml==6.0.2
+tqdm==4.66.5
+pytest==8.3.3
+pytest-regressions==2.5.0

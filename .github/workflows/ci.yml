@@ -65,3 +65,25 @@ jobs:
           print('scikit-image', skimage.__version__, '| opencv', cv2.__version__, '| matplotlib', matplotlib.__version__, '| tifffile', tifffile.__version__)"
       - name: Run the test suite (golden tests included)
         run: python -m pytest -ra
+
+  min-versions:
+    name: lowest versions (numpy ${{ matrix.numpy }})
+    # Windows: the floors were verified there by hand (2026-10-01), so a
+    # failure here means "version", not "platform"
+    runs-on: windows-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        numpy: ["1.24.4", "2.0.0"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Install agglpy with every dependency at its floor
+        run: python -m pip install -c .github/ci/min-versions.txt "numpy==${{ matrix.numpy }}" -e ".[test]"
+      - name: Show versions
+        run: python -m pip list
+      - name: Run the test suite
+        run: python -m pytest -ra
