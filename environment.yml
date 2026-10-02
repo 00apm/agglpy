@@ -1,0 +1,61 @@
+# Development environment for agglpy (conda-forge).
+#
+#   conda env create            (reads environment.yml in this folder)
+#   conda activate agglpy
+#   pip install -e . --no-deps
+#
+# --no-deps matters: conda-forge ships OpenCV as "opencv", while
+# pyproject.toml requires the pip package "opencv-python". Without
+# --no-deps pip would install a second copy of OpenCV on top.
+#
+# Python is the lowest supported version (requires-python in
+# pyproject.toml), so code that needs a newer Python fails here first.
+# Dependencies only carry the upper limits from pyproject.toml, so
+# conda installs the newest allowed versions; the lowest supported
+# versions are tested by CI (.github/ci/min-versions.txt).
+# Keep the upper limits in sync with pyproject.toml.
+name: agglpy
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  # agglpy dependencies
+  - numpy<3
+  - pandas<3
+  - opencv<5
+  - scipy<2
+  - scikit-image<1
+  - tifffile
+  - matplotlib<4
+  - openpyxl<4
+  - pyyaml<7
+  - tqdm<5
+  # notebook kernel (Jupyter Lab itself lives in a separate env)
+  - ipykernel
+  - ipywidgets<9
+  - plotly>=6.1.1,<7
+  # kaleido 1.x needs plotly>=6.1.1 and no longer bundles Chromium - run
+  # `plotly_get_chrome` once in this env after install (fetches a private,
+  # headless Chromium for kaleido only; does not change the system default
+  # browser). conda-forge package is "python-kaleido"; on PyPI it's "kaleido".
+  - python-kaleido>=1,<2
+  # required for fig.show() in JupyterLab; not reliably pulled in transitively
+  - nbformat
+  # plotly's JupyterLab renderer is anywidget-based. The JupyterLab server's
+  # own env also needs jupyterlab_widgets + anywidget installed (the widget
+  # frontend JS is scanned from the env hosting the server, not this kernel
+  # env), otherwise fig.show() builds the figure but renders nothing.
+  - anywidget<1
+  # tests
+  - pytest<9
+  - pytest-regressions<3
+  # typing
+  - mypy<2
+  - pandas-stubs<3
+  - types-pyyaml
+  - types-tqdm
+  # lint: same version as CI (.github/workflows/ci.yml); bump both together
+  - ruff=0.16.7
+  # dist
+  - tox<5
