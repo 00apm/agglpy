@@ -34,7 +34,7 @@ pip install git+https://github.com/00apm/agglpy@v0.4.0
 ```
 
 or create its conda environment from
-[`environment-v0.4.0.yml`](environment-v0.4.0.yml) (`conda env create -f environment-v0.4.0.yml`).
+[`environment-v0.4.0.yml`](https://github.com/00apm/agglpy/blob/v0.4.0/environment-v0.4.0.yml) (`conda env create -f environment-v0.4.0.yml`).
 
 ## Dependencies
 
