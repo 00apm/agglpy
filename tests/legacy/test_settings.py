@@ -155,7 +155,9 @@ def test_find_all_images(input_multi_raw_wdir):
         input_multi_raw_wdir / Path("D7-019.tif"),
         input_multi_raw_wdir / Path("D7-021.tif"),
     ]
-    assert images == expected
+    # glob returns the filesystem's order: sorted on NTFS, not on
+    # ext4/APFS; the order is not part of what is tested here
+    assert sorted(images) == expected
 
 
 def test_create_settings_dict(input_multi_raw_wdir):
@@ -236,9 +238,15 @@ def test_create_settings_writes_expected_yaml(
         output_path=output_path,
     )
 
-    # read_text() normalises line endings, so this works on every OS
-    assert output_path.read_text(encoding="utf-8") == expected_path.read_text(
-        encoding="utf-8"
+    written = output_path.read_text(encoding="utf-8")
+    expected = expected_path.read_text(encoding="utf-8")
+    # The image entries follow the filesystem's order (sorted on NTFS,
+    # not on ext4/APFS), so compare the parsed settings, where mapping
+    # order does not matter, and check the anchors in the text.
+    assert load_yaml(written) == load_yaml(expected)
+    assert "default: &default_img" in written
+    assert written.count("<<: *default_img") == expected.count(
+        "<<: *default_img"
     )
 
 
