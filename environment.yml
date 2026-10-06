@@ -57,5 +57,6 @@ dependencies:
   - types-tqdm
   # lint: same version as CI (.github/workflows/ci.yml); bump both together
   - ruff=0.16.7
+  - import-linter=2.15
   # dist
   - tox<5

@@ -53,7 +53,7 @@ typing = [
     "types-pyyaml >= 6.0.12.20240917",
     "types-tqdm >= 4.66.0.20240417",
 ]
-lint = ["ruff >= 0.7.0, < 1"]
+lint = ["ruff >= 0.7.0, < 1", "import-linter >= 2.15, < 3"]
 dist = ["tox >= 4.21.0, < 5"]
 dev = ["agglpy[test,typing,lint,dist,notebook]"]
 
@@ -150,6 +150,43 @@ ignore_errors = true
 [[tool.mypy.overrides]]
 module = ["scipy.*"]
 ignore_missing_imports = true
+
+[tool.importlinter]
+root_package = "agglpy"
+include_external_packages = true
+
+# Each later Phase 2 step adds its new modules to source_modules.
+[[tool.importlinter.contracts]]
+name = "New code never imports the legacy modules (D-019)"
+type = "forbidden"
+source_modules = [
+    "agglpy.errors",
+    "agglpy.logger",
+    "agglpy.params",
+    "agglpy.tables",
+]
+forbidden_modules = [
+    "agglpy.aggl",
+    "agglpy.auxiliary",
+    "agglpy.cfg",
+    "agglpy.defaults",
+    "agglpy.dir_structure",
+    "agglpy.img_ds",
+    "agglpy.img_process",
+    "agglpy.manager",
+    "agglpy.typing",
+]
+
+[[tool.importlinter.contracts]]
+name = "Foundation never imports plotting or progress bars (rules 1, 4)"
+type = "forbidden"
+source_modules = [
+    "agglpy.errors",
+    "agglpy.logger",
+    "agglpy.params",
+    "agglpy.tables",
+]
+forbidden_modules = ["matplotlib", "tqdm"]
 
 [build-system]
 requires = ["setuptools==69"]
