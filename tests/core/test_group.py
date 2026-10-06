@@ -16,12 +16,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from agglpy.errors import DuplicateParticlesWarning
+from agglpy.errors import DuplicateParticlesWarning, ParticleTableError
 from agglpy.group import (
     Contacts,
     find_agglomerates,
     find_contacts,
     find_enclosed,
+    group,
 )
 from agglpy.tables import validate_particles
 
@@ -307,3 +308,55 @@ def test_enclosed_of_empty_table():
     assert flags.dtype == bool
     assert flags.name == "enclosed"
     assert len(flags) == 0
+
+
+def test_group_adds_both_columns():
+    table = _table([0, 14, 100], [0, 0, 0], [10, 4, 3])
+    out = group(table)
+    assert out["agglomerate_id"].tolist() == [0, 0, 1]
+    assert out["enclosed"].tolist() == [False, False, False]
+    assert out["agglomerate_id"].dtype == np.int64
+    assert out["enclosed"].dtype == bool
+
+
+def test_group_does_not_modify_its_input():
+    table = _table([0, 2], [0, 0], [10, 4])
+    before = table.copy()
+    group(table)
+    pd.testing.assert_frame_equal(table, before)
+
+
+def test_custom_index_is_reset():
+    table = _table([0, 14, 100], [0, 0, 0], [10, 4, 3])
+    table.index = [30, 10, 20]
+    out = group(table)
+    assert list(out.index) == [0, 1, 2]
+    assert out["id"].tolist() == [1, 2, 3]  # rows keep the input order
+
+
+def test_regrouping_gives_the_same_result():
+    once = group(_table([0, 2, 50], [0, 0, 0], [10, 4, 3]))
+    pd.testing.assert_frame_equal(group(once), once)
+
+
+def test_empty_table():
+    out = group(_table([], [], []))
+    assert len(out) == 0
+    assert out["agglomerate_id"].dtype == np.int64
+    assert out["enclosed"].dtype == bool
+
+
+def test_group_warns_once_about_duplicates():
+    table = _table([5, 5], [5, 5], [8, 8])
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        group(table)
+    duplicates = [
+        w for w in caught if issubclass(w.category, DuplicateParticlesWarning)
+    ]
+    assert len(duplicates) == 1
+
+
+def test_group_rejects_a_broken_table():
+    with pytest.raises(ParticleTableError):
+        group(pd.DataFrame({"id": [1], "x": [0.0], "y": [0.0]}))

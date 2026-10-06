@@ -1,10 +1,11 @@
 """Registry of implementations the synthetic cases run against.
 
-Phase 2 adds ``"core": run_core``. Known bugs of an implementation are
-listed in ``KNOWN_FAILURES`` and become strict xfails for that
-implementation only: the test reports them as expected failures, and
-fails as soon as one of them starts passing, so a fixed bug can't stay
-marked.
+The new core (``"core": run_core``) supports the checks listed in
+``SUPPORTED_CHECKS``; the others are skipped. Known bugs of an
+implementation are listed in ``KNOWN_FAILURES`` and become strict
+xfails for that implementation only: the test reports them as expected
+failures, and fails as soon as one of them starts passing, so a fixed
+bug can't stay marked.
 """
 
 from collections.abc import Callable
@@ -17,13 +18,14 @@ import pytest
 from agglpy.errors import ImgDataSetBufferError
 
 from .cases import Case
+from .core_adapter import run_core
 from .legacy_adapter import legacy_distribution, legacy_psd_bins, run_legacy
 from .result import Result
 
 Adapter = Callable[..., Result]
 
 # Runs a circle case: (case, tmp_path, pixel_size=...) -> Result
-ADAPTERS: dict[str, Adapter] = {"legacy": run_legacy}
+ADAPTERS: dict[str, Adapter] = {"legacy": run_legacy, "core": run_core}
 
 # Each check, with the roadmap item that brings it to the new core.
 CHECKS: dict[str, str] = {
@@ -37,7 +39,10 @@ CHECKS: dict[str, str] = {
 }
 
 # What each implementation can do so far; tests skip the other checks.
-SUPPORTED_CHECKS: dict[str, frozenset[str]] = {"legacy": frozenset(CHECKS)}
+SUPPORTED_CHECKS: dict[str, frozenset[str]] = {
+    "legacy": frozenset(CHECKS),
+    "core": frozenset({"grouping", "idj"}),
+}
 
 
 def skip_unless_supported(adapter: str, check: str) -> None:

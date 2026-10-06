@@ -24,7 +24,7 @@ from scipy.sparse.csgraph import connected_components
 from scipy.spatial import cKDTree
 
 from agglpy.errors import DuplicateParticlesWarning
-from agglpy.tables import find_duplicates
+from agglpy.tables import find_duplicates, validate_particles
 
 # Widens the candidate search a little, so rounding inside the KD-tree
 # can't drop a pair that touches exactly; the exact test decides.
@@ -199,3 +199,29 @@ def _distance(
     dx: NDArray[np.float64] = xy[a, 0] - xy[b, 0]
     dy: NDArray[np.float64] = xy[a, 1] - xy[b, 1]
     return np.sqrt(dx * dx + dy * dy)
+
+
+def group(particles: pd.DataFrame) -> pd.DataFrame:
+    """Group particles into agglomerates and flag enclosed particles.
+
+    Args:
+        particles: A particle table.
+
+    Returns:
+        A validated copy (fresh index, rows in input order) with the
+        columns ``agglomerate_id`` (int64) and ``enclosed`` (bool),
+        replacing any from an earlier run.
+
+    Raises:
+        ParticleTableError: If the table breaks the schema.
+
+    Warns:
+        DuplicateParticlesWarning: See ``find_enclosed``.
+    """
+    # The caller saw the general duplicate warning when the table was
+    # made; only the one about enclosed duplicates comes from here.
+    table = validate_particles(particles, warn_duplicates=False)
+    contacts = find_contacts(table)
+    table["agglomerate_id"] = find_agglomerates(table, contacts)
+    table["enclosed"] = find_enclosed(table, contacts)
+    return table
