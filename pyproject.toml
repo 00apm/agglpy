@@ -81,14 +81,28 @@ select = [
     "I",    # isort: import order
     "N",    # pep8-naming
     "RUF",  # ruff-specific rules
+    "T20",  # no print() in library code
 ]
 ignore = [
-    "N",     # postponed to Phase 2: renaming would break the public API
     # Postponed to the docstring rewrite (roadmap 7.1): long strings,
     # comments and docstrings the formatter cannot wrap are fixed then
     "E501",
     "W505",
 ]
+
+[tool.ruff.lint.per-file-ignores]
+# Frozen legacy code (D-013), deleted in roadmap 2.9 together with these
+# lines. New modules get PEP 8 names and no print() from the start.
+"src/agglpy/aggl.py" = ["N"]
+"src/agglpy/auxiliary.py" = ["N"]
+"src/agglpy/cfg.py" = ["T20"]
+"src/agglpy/dir_structure.py" = ["N"]
+"src/agglpy/img_ds.py" = ["N", "T20"]
+"src/agglpy/img_process.py" = ["N"]
+"src/agglpy/manager.py" = ["N"]
+"tests/legacy/*" = ["N"]
+# The golden runner is rewritten on the new pipeline in 2.8.
+"tests/golden/test_golden.py" = ["N"]
 
 [tool.ruff.lint.pycodestyle]
 max-doc-length = 72         # PEP 8: 72 for comments and docstrings (W505)
