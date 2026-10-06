@@ -145,6 +145,12 @@ module = [
 ]
 ignore_errors = true
 
+# SciPy ships no type information; scipy-stubs would have to follow the
+# scipy version range (floor 1.13), so scipy objects are typed as Any.
+[[tool.mypy.overrides]]
+module = ["scipy.*"]
+ignore_missing_imports = true
+
 [build-system]
 requires = ["setuptools==69"]
 build-backend = "setuptools.build_meta"
