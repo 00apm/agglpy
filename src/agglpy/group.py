@@ -18,6 +18,8 @@ from typing import NamedTuple
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
+from scipy.sparse import coo_matrix
+from scipy.sparse.csgraph import connected_components
 from scipy.spatial import cKDTree
 
 # Widens the candidate search a little, so rounding inside the KD-tree
@@ -77,6 +79,48 @@ def find_contacts(particles: pd.DataFrame) -> Contacts:
 
     touching = _distance(xy, larger, smaller) <= r[larger] + r[smaller]
     return Contacts(larger[touching], smaller[touching])
+
+
+def find_agglomerates(
+    particles: pd.DataFrame, contacts: Contacts
+) -> pd.Series:
+    """Give each particle the id of the agglomerate it belongs to.
+
+    Particles linked by a chain of contacts share an agglomerate; a
+    particle without contacts is an agglomerate of its own. Ids run
+    from 0, ordered by each agglomerate's smallest particle id, so
+    they depend only on the particles, not on the row order.
+
+    Args:
+        particles: A validated particle table.
+        contacts: Its contacts (``find_contacts``).
+
+    Returns:
+        ``agglomerate_id`` (int64) per particle, on the table's index.
+    """
+    n = len(particles)
+    if n == 0:
+        return pd.Series(
+            [], index=particles.index, dtype=np.int64, name="agglomerate_id"
+        )
+    # Contacts are the edges of a graph whose nodes are the particles;
+    # scipy's "labels" are its connected groups: our agglomerates.
+    edges = np.ones(len(contacts.larger), dtype=np.int8)
+    graph = coo_matrix(
+        (edges, (contacts.larger, contacts.smaller)), shape=(n, n)
+    )
+    count, labels = connected_components(graph, directed=False)
+
+    # scipy numbers the groups in row order; renumber them by their
+    # smallest particle id.
+    ids = particles["id"].to_numpy(dtype=np.int64)
+    smallest = np.full(count, np.iinfo(np.int64).max, dtype=np.int64)
+    np.minimum.at(smallest, labels, ids)
+    rank = np.empty(count, dtype=np.int64)
+    rank[np.argsort(smallest)] = np.arange(count)
+    return pd.Series(
+        rank[labels], index=particles.index, name="agglomerate_id"
+    )
 
 
 def _distance(

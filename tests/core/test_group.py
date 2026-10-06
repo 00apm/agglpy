@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from agglpy.group import Contacts, find_contacts
+from agglpy.group import Contacts, find_agglomerates, find_contacts
 from agglpy.tables import validate_particles
 
 from support.synthetic.adapters import (
@@ -210,3 +210,50 @@ def test_no_contacts_without_a_pair(n: int):
     contacts = find_contacts(_table([0] * n, [0] * n, [5] * n))
     assert contacts.larger.dtype == np.intp
     assert len(contacts.larger) == len(contacts.smaller) == 0
+
+
+def _contacts(*pairs: tuple[int, int]) -> Contacts:
+    larger = np.array([p[0] for p in pairs], dtype=np.intp)
+    smaller = np.array([p[1] for p in pairs], dtype=np.intp)
+    return Contacts(larger, smaller)
+
+
+def test_chain_of_contacts_is_one_agglomerate():
+    # A-B and B-C touch, A and C don't: still one agglomerate. D alone.
+    table = _table([0, 1, 2, 3], [0] * 4, [1] * 4)
+    ids = find_agglomerates(table, _contacts((0, 1), (1, 2)))
+    assert ids.tolist() == [0, 0, 0, 1]
+
+
+def test_particle_without_contacts_is_its_own_agglomerate():
+    table = _table([0, 100, 200], [0] * 3, [1] * 3)
+    assert find_agglomerates(table, _contacts()).tolist() == [0, 1, 2]
+
+
+def test_agglomerate_ids_follow_the_smallest_particle_id():
+    # Rows 0-1 hold ids 5, 6; rows 2-3 ids 1, 2: that group is first.
+    table = _table([0, 1, 50, 51], [0] * 4, [1] * 4, ids=[5, 6, 1, 2])
+    ids = find_agglomerates(table, _contacts((0, 1), (2, 3)))
+    assert ids.tolist() == [1, 1, 0, 0]
+
+
+def test_agglomerate_ids_do_not_depend_on_row_order():
+    rng = np.random.default_rng(2)
+    n = 200
+    table = _table(
+        rng.uniform(0, 100, n), rng.uniform(0, 100, n), rng.uniform(1, 4, n)
+    )
+    shuffled = table.sample(frac=1, random_state=3).reset_index(drop=True)
+
+    def by_particle(t: pd.DataFrame) -> dict[int, int]:
+        ids = find_agglomerates(t, find_contacts(t))
+        return dict(zip(t["id"], ids, strict=True))
+
+    assert by_particle(shuffled) == by_particle(table)
+
+
+def test_agglomerates_of_empty_table():
+    ids = find_agglomerates(_table([], [], []), _contacts())
+    assert ids.dtype == np.int64
+    assert ids.name == "agglomerate_id"
+    assert len(ids) == 0
