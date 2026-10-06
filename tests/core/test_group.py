@@ -45,6 +45,7 @@ CASES = [SINGLE, *DOUBLETS, *STRUCTURES]
 
 # Every case runs in px. The doublet series also runs with a realistic
 # pixel size, because the legacy code scales by it before comparing.
+# The core works in px, so for it those runs repeat the px1 runs.
 RUNS = [
     *[pytest.param(c, 1.0, id=f"{c.name}-px1") for c in CASES],
     *[
@@ -194,7 +195,8 @@ def test_contacts_match_brute_force():
 
 def test_contacts_match_brute_force_on_half_pixel_grid():
     # HCT gives centres and radii on a 0.5 px grid: many pairs touch
-    # exactly, which the KD-tree's own rounding must not drop.
+    # exactly. The arithmetic is exact on this grid, so this doesn't
+    # test the search margin (see the next test).
     rng = np.random.default_rng(1)
     n = 300
     table = _table(
@@ -211,6 +213,18 @@ def test_contacts_match_brute_force_on_half_pixel_grid():
     ]
     assert tangent, "the grid should produce exactly touching pairs"
     assert _pairs(find_contacts(table)) == expected
+
+
+def test_tangent_pair_far_from_origin_is_found():
+    # d == 2 * r exactly, but the KD-tree's own rounding drops the pair
+    # without _SEARCH_MARGIN (found by the 2.3 review).
+    r = 49.4347672837589
+    table = _table(
+        [-54676.54776590472, -54661.01603785207],
+        [-47423.292388719005, -47520.93433815313],
+        [r, r],
+    )
+    assert len(find_contacts(table).larger) == 1
 
 
 @pytest.mark.parametrize("n", [0, 1])
