@@ -11,7 +11,12 @@ import sys
 from collections.abc import Iterator
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
 import pytest
+
+from agglpy.group import Contacts, find_contacts
+from agglpy.tables import validate_particles
 
 from support.synthetic.adapters import (
     ADAPTERS,
@@ -104,3 +109,104 @@ def test_long_chain_is_one_agglomerate(
     expect_known_failure(request, adapter, "grouping", LONG_CHAIN)
     result = ADAPTERS[adapter](LONG_CHAIN, tmp_path)
     assert result.groups() == LONG_CHAIN.groups, LONG_CHAIN.note
+
+
+# ---------------------------------------------------------------------
+# Unit tests of agglpy.group (one run, no adapter)
+# ---------------------------------------------------------------------
+
+
+def _table(x, y, r, ids=None) -> pd.DataFrame:
+    """A validated particle table, without the duplicate warning."""
+    ids = list(range(1, len(x) + 1)) if ids is None else ids
+    return validate_particles(
+        pd.DataFrame({"id": ids, "x": x, "y": y, "r": r, "source": "hct"}),
+        warn_duplicates=False,
+    )
+
+
+def _pairs(contacts: Contacts) -> set[tuple[int, int]]:
+    """Contacts as (larger, smaller) row-position pairs."""
+    return set(
+        zip(contacts.larger.tolist(), contacts.smaller.tolist(), strict=True)
+    )
+
+
+def _brute_force_pairs(table: pd.DataFrame) -> set[tuple[int, int]]:
+    """Touching pairs from checking every pair, oriented as Contacts."""
+    xy = table[["x", "y"]].to_numpy()
+    r = table["r"].to_numpy()
+    ids = table["id"].to_numpy()
+    pairs = set()
+    for a in range(len(table)):
+        for b in range(a + 1, len(table)):
+            dx, dy = xy[a] - xy[b]
+            if np.sqrt(dx * dx + dy * dy) <= r[a] + r[b]:
+                a_owns = r[a] > r[b] or (r[a] == r[b] and ids[a] < ids[b])
+                pairs.add((a, b) if a_owns else (b, a))
+    return pairs
+
+
+def test_touching_pair_is_a_contact():
+    table = _table([0, 14], [0, 0], [10, 4])  # d = 14 = 10 + 4
+    assert _pairs(find_contacts(table)) == {(0, 1)}
+
+
+def test_separate_pair_is_not_a_contact():
+    table = _table([0, 15], [0, 0], [10, 4])  # d = 15 > 14
+    assert _pairs(find_contacts(table)) == set()
+
+
+def test_contact_is_owned_by_the_larger_particle():
+    table = _table([0, 14], [0, 0], [4, 10])  # larger one in row 1
+    assert _pairs(find_contacts(table)) == {(1, 0)}
+
+
+def test_equal_radii_contact_is_owned_by_the_lower_id():
+    table = _table([0, 20], [0, 0], [10, 10], ids=[7, 3])
+    assert _pairs(find_contacts(table)) == {(1, 0)}
+
+
+def test_large_particle_finds_small_far_neighbour():
+    # The small one searches only 2 * 2 px; the big one must find it.
+    table = _table([0, 101], [0, 0], [100, 2])  # d = 101 <= 102
+    assert _pairs(find_contacts(table)) == {(0, 1)}
+
+
+def test_contacts_match_brute_force():
+    rng = np.random.default_rng(0)
+    n = 300
+    table = _table(
+        rng.uniform(0, 150, n),
+        rng.uniform(0, 150, n),
+        rng.lognormal(np.log(4), 0.5, n),
+    )
+    assert _pairs(find_contacts(table)) == _brute_force_pairs(table)
+
+
+def test_contacts_match_brute_force_on_half_pixel_grid():
+    # HCT gives centres and radii on a 0.5 px grid: many pairs touch
+    # exactly, which the KD-tree's own rounding must not drop.
+    rng = np.random.default_rng(1)
+    n = 300
+    table = _table(
+        rng.integers(0, 120, n) / 2,
+        rng.integers(0, 120, n) / 2,
+        rng.integers(2, 12, n) / 2,
+    )
+    expected = _brute_force_pairs(table)
+    xy, r = table[["x", "y"]].to_numpy(), table["r"].to_numpy()
+    tangent = [
+        (a, b)
+        for a, b in expected
+        if np.hypot(*(xy[a] - xy[b])) == r[a] + r[b]
+    ]
+    assert tangent, "the grid should produce exactly touching pairs"
+    assert _pairs(find_contacts(table)) == expected
+
+
+@pytest.mark.parametrize("n", [0, 1])
+def test_no_contacts_without_a_pair(n: int):
+    contacts = find_contacts(_table([0] * n, [0] * n, [5] * n))
+    assert contacts.larger.dtype == np.intp
+    assert len(contacts.larger) == len(contacts.smaller) == 0
