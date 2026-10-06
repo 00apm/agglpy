@@ -9,7 +9,10 @@ neutral; a user's usual settings come from the Phase 3 config.
 
 import math
 import numbers
+from collections.abc import Iterable
 from dataclasses import dataclass
+
+import numpy as np
 
 from agglpy.errors import ParamsError
 
@@ -43,6 +46,32 @@ def _positive(name: str, value: object) -> float:
     return number
 
 
+def _flag(name: str, value: object) -> bool:
+    """Return ``value`` as a bool; only True/False are accepted.
+
+    Text such as ``"no"`` is rejected instead of being read as true.
+    """
+    if not isinstance(value, bool | np.bool_):
+        raise ParamsError(f"{name} must be True or False, got {value!r}")
+    return bool(value)
+
+
+def _sequence(name: str, value: object) -> tuple[object, ...]:
+    """Return ``value`` as a tuple; text and non-iterables are rejected."""
+    if isinstance(value, str) or not isinstance(value, Iterable):
+        raise ParamsError(f"{name} must be a sequence, got {value!r}")
+    return tuple(value)
+
+
+def _set(obj: object, name: str, value: object) -> None:
+    """Store a normalised value on a frozen dataclass.
+
+    Validated values are stored as plain Python types (a NumPy scalar
+    becomes int or float), so ``asdict`` gives a plain record.
+    """
+    object.__setattr__(obj, name, value)
+
+
 @dataclass(frozen=True)
 class HCTRange:
     """One Hough Circle Transform pass over a range of diameters (px).
@@ -72,9 +101,10 @@ class HCTRange:
             raise ParamsError(
                 f"need 1 <= d_min < d_max, got d_min={d_min}, d_max={d_max}"
             )
-        _positive("dist2R", self.dist2R)
-        _positive("param1", self.param1)
-        _positive("param2", self.param2)
+        _set(self, "d_min", d_min)
+        _set(self, "d_max", d_max)
+        for name in ("dist2R", "param1", "param2"):
+            _set(self, name, _positive(name, getattr(self, name)))
 
 
 @dataclass(frozen=True)
@@ -88,7 +118,7 @@ class HCTParams:
     ranges: tuple[HCTRange, ...]
 
     def __post_init__(self) -> None:
-        ranges = tuple(self.ranges)
+        ranges = _sequence("ranges", self.ranges)
         if not ranges:
             raise ParamsError("HCTParams needs at least one HCTRange")
         for item in ranges:
@@ -96,8 +126,7 @@ class HCTParams:
                 raise ParamsError(
                     f"ranges must contain HCTRange objects, got {item!r}"
                 )
-        # frozen: the normalised value is set through object.__setattr__
-        object.__setattr__(self, "ranges", ranges)
+        _set(self, "ranges", ranges)
 
 
 @dataclass(frozen=True)
@@ -113,14 +142,14 @@ class ClaheParams:
     tile_grid: tuple[int, int]
 
     def __post_init__(self) -> None:
-        _positive("clip_limit", self.clip_limit)
-        grid = tuple(self.tile_grid)
-        if len(grid) != 2:
-            raise ParamsError(f"tile_grid needs 2 values, got {grid!r}")
-        for size in grid:
-            if _integer("tile_grid", size) < 1:
-                raise ParamsError(f"tile_grid values must be >= 1: {grid}")
-        object.__setattr__(self, "tile_grid", grid)
+        _set(self, "clip_limit", _positive("clip_limit", self.clip_limit))
+        values = _sequence("tile_grid", self.tile_grid)
+        if len(values) != 2:
+            raise ParamsError(f"tile_grid needs 2 values, got {values!r}")
+        grid = tuple(_integer("tile_grid", size) for size in values)
+        if min(grid) < 1:
+            raise ParamsError(f"tile_grid values must be >= 1: {grid}")
+        _set(self, "tile_grid", grid)
 
 
 @dataclass(frozen=True)
@@ -140,7 +169,9 @@ class RollingBallParams:
     presmooth: bool = True
 
     def __post_init__(self) -> None:
-        _positive("radius", self.radius)
+        _set(self, "radius", _positive("radius", self.radius))
+        for name in ("light_background", "presmooth"):
+            _set(self, name, _flag(name, getattr(self, name)))
 
 
 @dataclass(frozen=True)
@@ -164,11 +195,22 @@ class PreprocessParams:
         crop = _number("crop_ratio", self.crop_ratio)
         if not 0.0 <= crop < 1.0:
             raise ParamsError(f"need 0 <= crop_ratio < 1, got {crop}")
+        _set(self, "crop_ratio", crop)
         if self.median_blur is not None:
             kernel = _integer("median_blur", self.median_blur)
             if kernel < 3 or kernel % 2 == 0:
                 raise ParamsError(
                     f"median_blur must be odd and >= 3, got {kernel}"
+                )
+            _set(self, "median_blur", kernel)
+        for name, cls in (
+            ("clahe", ClaheParams),
+            ("rolling_ball", RollingBallParams),
+        ):
+            value = getattr(self, name)
+            if value is not None and not isinstance(value, cls):
+                raise ParamsError(
+                    f"{name} must be a {cls.__name__} or None, got {value!r}"
                 )
 
 
@@ -192,3 +234,4 @@ class AnalysisParams:
             raise ParamsError(
                 f"need 0 <= collector_threshold <= 1, got {value}"
             )
+        _set(self, "collector_threshold", value)

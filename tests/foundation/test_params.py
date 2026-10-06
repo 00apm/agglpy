@@ -2,7 +2,9 @@
 
 import dataclasses
 
+import numpy as np
 import pytest
+import yaml
 
 from agglpy.errors import ParamsError
 from agglpy.params import (
@@ -149,3 +151,71 @@ def test_asdict_gives_a_plain_record() -> None:
             },
         )
     }
+
+
+def test_values_are_stored_as_plain_python_types() -> None:
+    # Values taken from a DataFrame are NumPy scalars; the record
+    # (asdict, D-021) must still be plain data that YAML can write.
+    hct = HCTRange(
+        np.int64(5), np.int64(25), param1=200, param2=np.float64(15)
+    )
+    pre = PreprocessParams(
+        crop_ratio=0,
+        median_blur=np.int64(5),
+        clahe=ClaheParams(np.float64(2.0), np.array([8, 8])),
+        rolling_ball=RollingBallParams(np.int64(50), np.bool_(False)),
+    )
+    analysis = AnalysisParams(np.float64(0.5))
+
+    assert [type(v) for v in dataclasses.astuple(hct)] == [
+        int,
+        int,
+        float,
+        float,
+        float,
+    ]
+    assert type(pre.crop_ratio) is float and type(pre.median_blur) is int
+    assert pre.clahe is not None and pre.rolling_ball is not None
+    assert type(pre.clahe.clip_limit) is float
+    assert [type(v) for v in pre.clahe.tile_grid] == [int, int]
+    assert type(pre.rolling_ball.radius) is float
+    assert type(pre.rolling_ball.light_background) is bool
+    assert type(analysis.collector_threshold) is float
+    yaml.safe_dump(dataclasses.asdict(hct))
+    yaml.safe_dump(dataclasses.asdict(pre))
+
+
+@pytest.mark.parametrize("field", ["light_background", "presmooth"])
+@pytest.mark.parametrize("value", ["no", 1, None])
+def test_rolling_ball_flags_must_be_bool(field: str, value: object) -> None:
+    with pytest.raises(ParamsError, match=field):
+        RollingBallParams(radius=5, **{field: value})
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("clahe", {"clip_limit": 2.0, "tile_grid": (8, 8)}),
+        ("rolling_ball", 50),
+    ],
+)
+def test_nested_params_must_have_their_class(
+    field: str, value: object
+) -> None:
+    with pytest.raises(ParamsError, match=field):
+        PreprocessParams(**{field: value})
+
+
+@pytest.mark.parametrize(
+    ("build", "field"),
+    [
+        (lambda: HCTParams(ranges=HCTRange(5, 25)), "ranges"),
+        (lambda: HCTParams(ranges=None), "ranges"),
+        (lambda: ClaheParams(2.0, 8), "tile_grid"),
+    ],
+)
+def test_non_sequence_is_a_params_error(build: object, field: str) -> None:
+    # YAML typo `tile_grid: 8`: a ParamsError naming the field, not a
+    # bare TypeError from tuple().
+    with pytest.raises(ParamsError, match=field):
+        build()  # type: ignore[operator]
