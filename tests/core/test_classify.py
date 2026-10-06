@@ -16,6 +16,7 @@ from support.synthetic.adapters import (
     ADAPTERS,
     REAL_PIXEL_SIZE,
     expect_known_failure,
+    skip_unless_supported,
 )
 from support.synthetic.cases import CLASSIFICATION, Case
 
@@ -39,6 +40,7 @@ def test_particle_types(
     pixel_size: float,
     tmp_path: Path,
 ):
+    skip_unless_supported(adapter, "classify")
     expect_known_failure(request, adapter, "classify", case, pixel_size)
     result = ADAPTERS[adapter](case, tmp_path, pixel_size=pixel_size)
     assert result.particle_types() == dict(case.types), case.note
@@ -52,6 +54,7 @@ def test_agglomerate_types(
     pixel_size: float,
     tmp_path: Path,
 ):
+    skip_unless_supported(adapter, "classify")
     expect_known_failure(request, adapter, "classify", case, pixel_size)
     result = ADAPTERS[adapter](case, tmp_path, pixel_size=pixel_size)
     assert result.agglomerate_types() == case.agglomerate_types(), case.note

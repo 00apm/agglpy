@@ -16,6 +16,7 @@ from support.synthetic.adapters import (
     REAL_PIXEL_SIZE,
     STATS,
     expect_known_failure,
+    skip_unless_supported,
 )
 from support.synthetic.cases import SUMMARY, Case, make_case
 
@@ -67,6 +68,7 @@ def test_psd_bins(
 ):
     """Edges run from start to end inclusive: periods bins, or one bin
     per step (a step in decades for log bins)."""
+    skip_unless_supported(adapter, "psd_bins")
     expect_known_failure(request, adapter, "psd_bins", _bins_case(name))
     edges = STATS[adapter].psd_bins(*args)
     assert len(edges) == len(expected)
@@ -74,6 +76,7 @@ def test_psd_bins(
 
 
 def test_psd_bins_log_needs_positive_start(adapter: str):
+    skip_unless_supported(adapter, "psd_bins")
     with pytest.raises(ValueError):
         STATS[adapter].psd_bins(0, 1e-5, 2, True, False)
 
@@ -84,6 +87,7 @@ def test_distribution(adapter: str):
     first edge is dropped, a value equal to the last edge is kept. Values
     outside the bins are dropped, and the normalized columns refer to
     the binned values only (7 here, not 9)."""
+    skip_unless_supported(adapter, "distribution")
     bins = STATS[adapter].psd_bins(0, 40, 4, False, False)  # 0 10 20 30 40
     values = [0, 5, 10, 15, 20, 20, 35, 40, 45]
     dist = STATS[adapter].distribution(values, bins)
@@ -133,6 +137,7 @@ def test_summary(
     pixel_size: float,
     tmp_path: Path,
 ):
+    skip_unless_supported(adapter, "summary")
     expect_known_failure(request, adapter, "summary", case, pixel_size)
     result = ADAPTERS[adapter](case, tmp_path, pixel_size=pixel_size)
     for name, value in case.summary.items():

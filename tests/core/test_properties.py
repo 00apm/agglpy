@@ -13,7 +13,11 @@ from pathlib import Path
 
 import pytest
 
-from support.synthetic.adapters import ADAPTERS, REAL_PIXEL_SIZE
+from support.synthetic.adapters import (
+    ADAPTERS,
+    REAL_PIXEL_SIZE,
+    skip_unless_supported,
+)
 from support.synthetic.cases import PROPERTIES, Case
 
 # Small enough to see members that add 3.75e-10 of the volume (the
@@ -31,6 +35,7 @@ PIXEL_SIZES = [1.0, REAL_PIXEL_SIZE]
 def test_agglomerate_properties(
     adapter: str, case: Case, pixel_size: float, tmp_path: Path
 ):
+    skip_unless_supported(adapter, "properties")
     result = ADAPTERS[adapter](case, tmp_path, pixel_size=pixel_size)
     actual = result.agglomerate_properties()
     for members, expected in case.properties.items():
