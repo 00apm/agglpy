@@ -8,6 +8,7 @@ Phase 2 adds the new core and the same cases become the unit tests of
 """
 
 import sys
+import warnings
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -15,7 +16,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from agglpy.group import Contacts, find_agglomerates, find_contacts
+from agglpy.errors import DuplicateParticlesWarning
+from agglpy.group import (
+    Contacts,
+    find_agglomerates,
+    find_contacts,
+    find_enclosed,
+)
 from agglpy.tables import validate_particles
 
 from support.synthetic.adapters import (
@@ -257,3 +264,46 @@ def test_agglomerates_of_empty_table():
     assert ids.dtype == np.int64
     assert ids.name == "agglomerate_id"
     assert len(ids) == 0
+
+
+def _enclosed(table: pd.DataFrame) -> list[bool]:
+    return find_enclosed(table, find_contacts(table)).tolist()
+
+
+def test_small_particle_inside_large_is_enclosed():
+    assert _enclosed(_table([0, 2], [0, 0], [10, 4])) == [False, True]
+
+
+def test_internally_tangent_particle_is_enclosed():
+    # d = 6 = 10 - 4: touches the big circle's outline from inside.
+    assert _enclosed(_table([0, 6], [0, 0], [10, 4])) == [False, True]
+
+
+def test_overlapping_particle_is_not_enclosed():
+    assert _enclosed(_table([0, 7], [0, 0], [10, 4])) == [False, False]
+
+
+def test_concentric_small_inside_large_gives_no_warning():
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        assert _enclosed(_table([0, 0], [0, 0], [10, 4])) == [False, True]
+
+
+def test_exact_duplicate_flags_only_higher_id():
+    table = _table([5, 5], [5, 5], [8, 8], ids=[2, 1])
+    with pytest.warns(DuplicateParticlesWarning, match=r"\(1, 2\)"):
+        assert _enclosed(table) == [True, False]  # id 2 is enclosed
+
+
+def test_near_identical_enclosed_pair_warns():
+    # The real D7-019 pair: same centre, R = 30.5 and 29.4.
+    table = _table([43.5, 43.5], [109.5, 109.5], [30.5, 29.4])
+    with pytest.warns(DuplicateParticlesWarning, match="near-identical"):
+        assert _enclosed(table) == [False, True]
+
+
+def test_enclosed_of_empty_table():
+    flags = find_enclosed(_table([], [], []), _contacts())
+    assert flags.dtype == bool
+    assert flags.name == "enclosed"
+    assert len(flags) == 0

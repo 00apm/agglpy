@@ -13,6 +13,7 @@ them all.
 """
 
 import itertools
+import warnings
 from typing import NamedTuple
 
 import numpy as np
@@ -22,9 +23,13 @@ from scipy.sparse import coo_matrix
 from scipy.sparse.csgraph import connected_components
 from scipy.spatial import cKDTree
 
+from agglpy.errors import DuplicateParticlesWarning
+from agglpy.tables import find_duplicates
+
 # Widens the candidate search a little, so rounding inside the KD-tree
 # can't drop a pair that touches exactly; the exact test decides.
 _SEARCH_MARGIN = 1e-9
+_MAX_LISTED = 10
 
 
 class Contacts(NamedTuple):
@@ -120,6 +125,68 @@ def find_agglomerates(
     rank[np.argsort(smallest)] = np.arange(count)
     return pd.Series(
         rank[labels], index=particles.index, name="agglomerate_id"
+    )
+
+
+def find_enclosed(particles: pd.DataFrame, contacts: Contacts) -> pd.Series:
+    """Flag particles lying completely inside a larger particle.
+
+    A particle is enclosed when its circle, outline included, is inside
+    the circle of a particle it touches: ``d <= r_large - r_small``.
+    For two identical circles only the one with the higher id is
+    enclosed.
+
+    Args:
+        particles: A validated particle table.
+        contacts: Its contacts (``find_contacts``).
+
+    Returns:
+        ``enclosed`` (bool) per particle, on the table's index.
+
+    Warns:
+        DuplicateParticlesWarning: If an enclosed particle and the one
+            enclosing it are near-identical (see
+            ``tables.find_duplicates``): a detection error that is
+            counted as an enclosed particle.
+    """
+    enclosed = np.zeros(len(particles), dtype=bool)
+    if len(contacts.larger):
+        xy = particles[["x", "y"]].to_numpy(dtype=np.float64)
+        r = particles["r"].to_numpy(dtype=np.float64)
+        larger, smaller = contacts
+        # Contacts are oriented: only the smaller member can be inside.
+        inside = _distance(xy, larger, smaller) <= r[larger] - r[smaller]
+        enclosed[smaller[inside]] = True
+        if inside.any():
+            _warn_enclosed_duplicates(
+                particles, larger[inside], smaller[inside]
+            )
+    return pd.Series(enclosed, index=particles.index, name="enclosed")
+
+
+def _warn_enclosed_duplicates(
+    particles: pd.DataFrame,
+    larger: NDArray[np.intp],
+    smaller: NDArray[np.intp],
+) -> None:
+    # A circle enclosed by a near-identical one is a detection error
+    # (D-038); "near-identical" means what tables.find_duplicates says.
+    ids = particles["id"].to_numpy()
+    enclosed_pairs = {
+        (int(min(a, b)), int(max(a, b)))
+        for a, b in zip(ids[larger], ids[smaller], strict=True)
+    }
+    pairs = sorted(enclosed_pairs.intersection(find_duplicates(particles)))
+    if not pairs:
+        return
+    listed = ", ".join(map(str, pairs[:_MAX_LISTED]))
+    more = len(pairs) - _MAX_LISTED
+    suffix = f" and {more} more" if more > 0 else ""
+    warnings.warn(
+        f"{len(pairs)} enclosed particle(s) lie inside a near-identical "
+        f"circle (id pairs): {listed}{suffix}; each counts as enclosed",
+        DuplicateParticlesWarning,
+        stacklevel=3,
     )
 
 
