@@ -8,8 +8,13 @@ column    dtype    meaning
 id        int64    particle id, unique within one image
 x, y      float64  centre (px), finite
 r         float64  radius (px), finite and > 0
-source    object   who made the circle: "hct", "manual", "edited", …
+source    object   where the table came from: "hct", "manual", …
 ========  =======  ==================================================
+
+``source`` is known for certain when a table is read. Which circles a
+manual correction kept, edited or added is not stored: ImageJ
+renumbers circles, so it can only be inferred by matching geometry
+(D-036).
 
 Analysis adds columns later (agglomerate id, type, enclosed flag).
 An empty table is valid: zero particles is a result (D-022).
@@ -140,7 +145,9 @@ def find_duplicates(
     Two circles are duplicates when their centres are at most
     ``xy_tol`` px apart and their radii differ by at most
     ``r_rel_tol`` times the larger radius. A small circle inside a
-    large one is not a duplicate.
+    large one is not a duplicate. The result is an indicator: it
+    depends on the tolerances, whose defaults are first guesses until
+    they are calibrated on corrected images.
 
     Args:
         table: A particle table (columns ``id, x, y, r``).
