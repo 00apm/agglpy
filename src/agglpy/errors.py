@@ -68,3 +68,22 @@ class AgglomerateStructureError(Exception):
     """
 
     pass
+
+
+# --- New code (Phase 2). Legacy exceptions above are deleted in 2.9. ---
+
+
+class AgglpyError(Exception):
+    """Base class of every error the new agglpy code raises on purpose."""
+
+
+class ParamsError(AgglpyError, ValueError):
+    """Raised when a parameter value is invalid."""
+
+
+class ParticleTableError(AgglpyError, ValueError):
+    """Raised when a particle table does not match its schema."""
+
+
+class DuplicateParticlesWarning(UserWarning):
+    """Warns about near-identical circles: a detection mistake."""

@@ -23,7 +23,7 @@ defaults:
 
 jobs:
   lint:
-    name: ruff
+    name: lint (ruff, import-linter)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -31,10 +31,30 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
-      # pinned to the version used locally; bump it deliberately
-      - run: python -m pip install "ruff==0.16.7"
-      - run: ruff check agglpy tests
-      - run: ruff format --check agglpy tests
+      # pinned to the versions used locally; bump them deliberately
+      - run: python -m pip install "ruff==0.16.7" "import-linter==2.15"
+      - run: ruff check src tests
+      - run: ruff format --check src tests
+      # import-linter reads the package from the source tree; no
+      # dependencies needed
+      - run: python -m pip install -e . --no-deps
+      - run: lint-imports
+
+  mypy:
+    name: mypy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      # legacy modules are silenced in pyproject.toml (deleted in 2.9);
+      # new code must be clean, so this job blocks
+      - run: python -m pip install -e ".[typing]"
+      - run: mypy src/agglpy
 
   test:
     name: test (${{ matrix.os }}, py${{ matrix.python }})

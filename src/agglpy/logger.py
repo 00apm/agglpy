@@ -1,5 +1,8 @@
+import copy
 import logging.config
+import warnings
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -8,8 +11,9 @@ logger: logging.Logger = logging.getLogger("agglpy")
 logger.addHandler(logging.NullHandler())
 
 
-# Config used only for endpoint interface (currently jupyter notebook)
-ENDPOINT_DEFAULT_LOGGER_CONFIG = {
+# Config used only for endpoint interface (currently jupyter notebook).
+# Never mutated: setup functions work on a deep copy.
+ENDPOINT_DEFAULT_LOGGER_CONFIG: dict[str, Any] = {
     "version": 1,
     "disable_existing_loggers": False,
     "formatters": {
@@ -69,27 +73,28 @@ def setup_notebook_logger(
         logs_path (Path): Path where the log file should be created.
     """
 
-    # If logger_config.yml exists, load it; otherwise, create it with the default config
+    config: dict[str, Any]
     if log_cfg_path.exists():
-        # Load configuration from existing YAML file
-        with open(log_cfg_path, "r") as file:
+        with open(log_cfg_path, encoding="utf-8") as file:
             try:
                 config = yaml.safe_load(file)
             except yaml.YAMLError as exc:
-                print(f"Error loading YAML configuration file: {exc}")
+                warnings.warn(
+                    f"Could not read the logger config {log_cfg_path}: "
+                    f"{exc}. Logging is not configured.",
+                    stacklevel=2,
+                )
                 return
     else:
-        # Create the YAML file with the default configuration
         log_cfg_path.parent.mkdir(parents=True, exist_ok=True)
-        config = ENDPOINT_DEFAULT_LOGGER_CONFIG
+        config = copy.deepcopy(ENDPOINT_DEFAULT_LOGGER_CONFIG)
 
-        # Set the log filename
         if log_path.is_dir():
             log_path = log_path / "agglpy.log"
 
         config["handlers"]["file"]["filename"] = str(log_path)
 
-        with open(log_cfg_path, "w") as file:
+        with open(log_cfg_path, "w", encoding="utf-8") as file:
             yaml.dump(
                 config,
                 file,
@@ -99,9 +104,12 @@ def setup_notebook_logger(
             )
 
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    # Apply the configuration
     try:
         logging.config.dictConfig(config)
-        print(f"Logger configured using config at: {log_cfg_path}")
-    except Exception as e:
-        print(f"Failed to configure logger: {e}")
+    except (ValueError, TypeError, AttributeError, ImportError) as exc:
+        warnings.warn(
+            f"Could not apply the logger config {log_cfg_path}: {exc}",
+            stacklevel=2,
+        )
+        return
+    logger.info(f"Logger configured using config at: {log_cfg_path}")

@@ -53,7 +53,7 @@ typing = [
     "types-pyyaml >= 6.0.12.20240917",
     "types-tqdm >= 4.66.0.20240417",
 ]
-lint = ["ruff >= 0.7.0, < 1"]
+lint = ["ruff >= 0.7.0, < 1", "import-linter >= 2.15, < 3"]
 dist = ["tox >= 4.21.0, < 5"]
 dev = ["agglpy[test,typing,lint,dist,notebook]"]
 
@@ -81,14 +81,28 @@ select = [
     "I",    # isort: import order
     "N",    # pep8-naming
     "RUF",  # ruff-specific rules
+    "T20",  # no print() in library code
 ]
 ignore = [
-    "N",     # postponed to Phase 2: renaming would break the public API
     # Postponed to the docstring rewrite (roadmap 7.1): long strings,
     # comments and docstrings the formatter cannot wrap are fixed then
     "E501",
     "W505",
 ]
+
+[tool.ruff.lint.per-file-ignores]
+# Frozen legacy code (D-013), deleted in roadmap 2.9 together with these
+# lines. New modules get PEP 8 names and no print() from the start.
+"src/agglpy/aggl.py" = ["N"]
+"src/agglpy/auxiliary.py" = ["N"]
+"src/agglpy/cfg.py" = ["T20"]
+"src/agglpy/dir_structure.py" = ["N"]
+"src/agglpy/img_ds.py" = ["N", "T20"]
+"src/agglpy/img_process.py" = ["N"]
+"src/agglpy/manager.py" = ["N"]
+"tests/legacy/*" = ["N"]
+# The golden runner is rewritten on the new pipeline in 2.8.
+"tests/golden/test_golden.py" = ["N"]
 
 [tool.ruff.lint.pycodestyle]
 max-doc-length = 72         # PEP 8: 72 for comments and docstrings (W505)
@@ -130,6 +144,49 @@ module = [
     "agglpy.typing",
 ]
 ignore_errors = true
+
+# SciPy ships no type information; scipy-stubs would have to follow the
+# scipy version range (floor 1.13), so scipy objects are typed as Any.
+[[tool.mypy.overrides]]
+module = ["scipy.*"]
+ignore_missing_imports = true
+
+[tool.importlinter]
+root_package = "agglpy"
+include_external_packages = true
+
+# Each later Phase 2 step adds its new modules to source_modules.
+[[tool.importlinter.contracts]]
+name = "New code never imports the legacy modules (D-019)"
+type = "forbidden"
+source_modules = [
+    "agglpy.errors",
+    "agglpy.logger",
+    "agglpy.params",
+    "agglpy.tables",
+]
+forbidden_modules = [
+    "agglpy.aggl",
+    "agglpy.auxiliary",
+    "agglpy.cfg",
+    "agglpy.defaults",
+    "agglpy.dir_structure",
+    "agglpy.img_ds",
+    "agglpy.img_process",
+    "agglpy.manager",
+    "agglpy.typing",
+]
+
+[[tool.importlinter.contracts]]
+name = "Foundation never imports plotting or progress bars (rules 1, 4)"
+type = "forbidden"
+source_modules = [
+    "agglpy.errors",
+    "agglpy.logger",
+    "agglpy.params",
+    "agglpy.tables",
+]
+forbidden_modules = ["matplotlib", "tqdm"]
 
 [build-system]
 requires = ["setuptools==69"]
