@@ -172,18 +172,22 @@ def _warn_enclosed_duplicates(
     # A circle enclosed by a near-identical one is a detection error
     # (D-038); "near-identical" means what tables.find_duplicates says.
     ids = particles["id"].to_numpy()
-    enclosed_pairs = {
-        (int(min(a, b)), int(max(a, b)))
+    # Pair as find_duplicates orders it -> id of its enclosed member.
+    enclosed_by_pair = {
+        (int(min(a, b)), int(max(a, b))): int(b)
         for a, b in zip(ids[larger], ids[smaller], strict=True)
     }
-    pairs = sorted(enclosed_pairs.intersection(find_duplicates(particles)))
+    pairs = sorted(enclosed_by_pair.keys() & set(find_duplicates(particles)))
     if not pairs:
         return
+    # Count particles, not pairs: three identical circles are 3 pairs
+    # but only 2 enclosed particles.
+    count = len({enclosed_by_pair[p] for p in pairs})
     listed = ", ".join(map(str, pairs[:_MAX_LISTED]))
     more = len(pairs) - _MAX_LISTED
     suffix = f" and {more} more" if more > 0 else ""
     warnings.warn(
-        f"{len(pairs)} enclosed particle(s) lie inside a near-identical "
+        f"{count} enclosed particle(s) lie inside a near-identical "
         f"circle (id pairs): {listed}{suffix}; each counts as enclosed",
         DuplicateParticlesWarning,
         stacklevel=3,

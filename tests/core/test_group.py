@@ -317,6 +317,13 @@ def test_near_identical_enclosed_pair_warns():
         assert _enclosed(table) == [False, True]
 
 
+def test_duplicate_warning_counts_enclosed_particles_not_pairs():
+    # Three identical circles: 3 pairs, but only ids 2 and 3 enclosed.
+    table = _table([5, 5, 5], [5, 5, 5], [8, 8, 8])
+    with pytest.warns(DuplicateParticlesWarning, match=r"^2 enclosed"):
+        assert _enclosed(table) == [False, True, True]
+
+
 def test_enclosed_of_empty_table():
     flags = find_enclosed(_table([], [], []), _contacts())
     assert flags.dtype == bool
