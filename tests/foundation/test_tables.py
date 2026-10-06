@@ -142,3 +142,21 @@ def test_duplicate_warning_can_be_switched_off() -> None:
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         validate_particles(t, warn_duplicates=False)
+
+
+@pytest.mark.parametrize(
+    ("args", "ids"),
+    [
+        (([10, 50], [10], [5, 5]), None),  # lengths differ
+        (([10, 50], [10, 50], [5, 5]), [1]),  # ids too short
+        (([[10, 50]], [[10, 50]], [[5, 5]]), None),  # 2-D
+        ((10.0, 10.0, 5.0), None),  # scalars
+        ((["a"], [10], [5]), None),  # text
+    ],
+)
+def test_make_particles_bad_input_is_a_table_error(
+    args: tuple, ids: list | None
+) -> None:
+    # A frontend catching AgglpyError must catch these too.
+    with pytest.raises(ParticleTableError):
+        make_particles(*args, ids=ids)

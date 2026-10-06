@@ -57,15 +57,27 @@ def make_particles(
     Raises:
         ParticleTableError: If the values break the schema.
     """
-    x_arr = np.asarray(x, dtype=float)
-    n = len(x_arr)
-    id_arr = np.arange(1, n + 1) if ids is None else np.asarray(ids)
+    try:
+        columns = {
+            name: np.asarray(values, dtype=float)
+            for name, values in (("x", x), ("y", y), ("r", r))
+        }
+    except (ValueError, TypeError) as exc:
+        raise ParticleTableError(f"x, y and r must be numeric: {exc}") from exc
+    n = len(columns["x"]) if columns["x"].ndim == 1 else -1
+    columns["id"] = np.arange(1, n + 1) if ids is None else np.asarray(ids)
+    shapes = {name: values.shape for name, values in columns.items()}
+    if any(shape != (n,) for shape in shapes.values()):
+        raise ParticleTableError(
+            f"x, y, r and ids must be 1-D and of equal length, got shapes "
+            f"{shapes}"
+        )
     table = pd.DataFrame(
         {
-            "id": id_arr,
-            "x": x_arr,
-            "y": np.asarray(y, dtype=float),
-            "r": np.asarray(r, dtype=float),
+            "id": columns["id"],
+            "x": columns["x"],
+            "y": columns["y"],
+            "r": columns["r"],
             "source": [source] * n,
         }
     )
