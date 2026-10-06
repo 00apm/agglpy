@@ -25,6 +25,32 @@ Adapter = Callable[..., Result]
 # Runs a circle case: (case, tmp_path, pixel_size=...) -> Result
 ADAPTERS: dict[str, Adapter] = {"legacy": run_legacy}
 
+# Each check, with the roadmap item that brings it to the new core.
+CHECKS: dict[str, str] = {
+    "grouping": "2.3",
+    "idj": "2.3",
+    "classify": "2.4",
+    "properties": "2.4",
+    "psd_bins": "2.5",
+    "distribution": "2.5",
+    "summary": "2.5",
+}
+
+# What each implementation can do so far; tests skip the other checks.
+SUPPORTED_CHECKS: dict[str, frozenset[str]] = {"legacy": frozenset(CHECKS)}
+
+
+def skip_unless_supported(adapter: str, check: str) -> None:
+    """Skip the running test if ``adapter`` can't do ``check`` yet.
+
+    A feature that is not built yet is not a bug, so this is a skip,
+    not an xfail.
+    """
+    if check not in CHECKS:
+        raise ValueError(f"unknown check {check!r}")
+    if check not in SUPPORTED_CHECKS[adapter]:
+        pytest.skip(f"{adapter}: {check} comes in roadmap {CHECKS[check]}")
+
 
 @dataclass(frozen=True)
 class StatsFunctions:
@@ -40,7 +66,8 @@ class StatsFunctions:
     distribution: Callable[[list[float], np.ndarray], pd.DataFrame]
 
 
-# Same keys as ADAPTERS, so the ``adapter`` fixture selects both.
+# Binning functions per implementation; an implementation without them
+# skips the psd_bins and distribution checks (skip_unless_supported).
 STATS: dict[str, StatsFunctions] = {
     "legacy": StatsFunctions(legacy_psd_bins, legacy_distribution)
 }

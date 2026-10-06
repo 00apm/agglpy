@@ -17,6 +17,7 @@ from support.synthetic.adapters import (
     ADAPTERS,
     REAL_PIXEL_SIZE,
     expect_known_failure,
+    skip_unless_supported,
 )
 from support.synthetic.cases import (
     DOUBLETS,
@@ -61,6 +62,7 @@ def test_grouping(
     pixel_size: float,
     tmp_path: Path,
 ):
+    skip_unless_supported(adapter, "grouping")
     expect_known_failure(request, adapter, "grouping", case, pixel_size)
     result = ADAPTERS[adapter](case, tmp_path, pixel_size=pixel_size)
     assert result.groups() == case.groups, case.note
@@ -74,6 +76,7 @@ def test_idj(
     pixel_size: float,
     tmp_path: Path,
 ):
+    skip_unless_supported(adapter, "idj")
     expect_known_failure(request, adapter, "idj", case, pixel_size)
     result = ADAPTERS[adapter](case, tmp_path, pixel_size=pixel_size)
     assert result.idj_keys() == case.idj, case.note
@@ -86,6 +89,8 @@ def test_result_does_not_depend_on_order_or_position(
 ):
     """Input order, position (incl. negative coordinates, i.e. outside
     the image), mirroring and swapped axes must not change the result."""
+    skip_unless_supported(adapter, "grouping")
+    skip_unless_supported(adapter, "idj")
     result = ADAPTERS[adapter](transform(case), tmp_path)
     assert result.groups() == case.groups, case.note
     assert result.idj_keys() == case.idj, case.note
@@ -95,6 +100,7 @@ def test_result_does_not_depend_on_order_or_position(
 def test_long_chain_is_one_agglomerate(
     request: pytest.FixtureRequest, adapter: str, tmp_path: Path
 ):
+    skip_unless_supported(adapter, "grouping")
     expect_known_failure(request, adapter, "grouping", LONG_CHAIN)
     result = ADAPTERS[adapter](LONG_CHAIN, tmp_path)
     assert result.groups() == LONG_CHAIN.groups, LONG_CHAIN.note
