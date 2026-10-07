@@ -31,8 +31,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from agglpy.img_ds import ImgDataSet
-from agglpy.manager import Manager
+from agglpy._legacy.img_ds import ImgDataSet
+from agglpy._legacy.manager import Manager
 
 from support.paths import DATA_DIR
 

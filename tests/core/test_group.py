@@ -4,7 +4,7 @@ Synthetic cases from ``support.synthetic.cases`` with hand-worked
 answers, run once per implementation in
 ``support.synthetic.adapters.ADAPTERS``. Today that is the legacy code;
 Phase 2 adds the new core and the same cases become the unit tests of
-``agglpy.group``.
+``agglpy.core.group``.
 """
 
 import sys
@@ -16,14 +16,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from agglpy.errors import DuplicateParticlesWarning, ParticleTableError
-from agglpy.group import (
+from agglpy.core.group import (
     Contacts,
     find_agglomerates,
     find_contacts,
     find_enclosed,
     group,
 )
+from agglpy.errors import DuplicateParticlesWarning, ParticleTableError
 from agglpy.tables import validate_particles
 
 from support.synthetic.adapters import (
@@ -121,7 +121,7 @@ def test_long_chain_is_one_agglomerate(
 
 
 # ---------------------------------------------------------------------
-# Unit tests of agglpy.group (one run, no adapter)
+# Unit tests of agglpy.core.group (one run, no adapter)
 # ---------------------------------------------------------------------
 
 

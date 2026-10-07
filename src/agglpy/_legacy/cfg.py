@@ -6,12 +6,12 @@ from typing import IO, Any, Dict, List, Mapping, Tuple, Union, cast
 
 import yaml
 
-from agglpy.auxiliary import (
+from agglpy._legacy.auxiliary import (
     txt_is_default,
     txt_is_default_or_none,
     txt_is_none_plus,
 )
-from agglpy.defaults import (
+from agglpy._legacy.defaults import (
     DEFAULT_IMAGE_SETTINGS_SCHEMA,
     DEFAULT_IMAGE_SETTINGS_VALUES,
     DEFAULT_SETTINGS,
@@ -21,13 +21,13 @@ from agglpy.defaults import (
     STR_NONE,
     SUPPORTED_IMG_FORMATS,
 )
-from agglpy.errors import SettingsStructureError
-from agglpy.logger import logger
-from agglpy.typing import (
+from agglpy._legacy.typing import (
     ImageSettingsTypedDict,
     YamlRawSettingsTypedDict,
     YamlSettingsTypedDict,
 )
+from agglpy.errors import SettingsStructureError
+from agglpy.logger import logger
 
 
 class _SettingsLoader(yaml.SafeLoader):

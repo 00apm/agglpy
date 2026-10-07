@@ -15,8 +15,8 @@ import cv2
 import numpy as np
 import pandas as pd
 
-from agglpy.img_ds import ImgDataSet
-from agglpy.manager import Manager, PSD_space
+from agglpy._legacy.img_ds import ImgDataSet
+from agglpy._legacy.manager import Manager, PSD_space
 
 from .cases import Case
 from .result import Result

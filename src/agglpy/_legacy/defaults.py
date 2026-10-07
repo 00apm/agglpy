@@ -1,7 +1,7 @@
 # Type definitions for type checking
 from typing import Any, List, Mapping, Tuple
 
-from agglpy.typing import (
+from agglpy._legacy.typing import (
     HctParameter,
     ImageRawSettingsTypedDict,
     PPSouceCsvType,

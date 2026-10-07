@@ -6,8 +6,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from agglpy.cfg import load_manager_settings
-from agglpy.img_ds import ImgDataSet
+from agglpy._legacy.cfg import load_manager_settings
+from agglpy._legacy.img_ds import ImgDataSet
 
 
 @pytest.fixture
@@ -44,7 +44,7 @@ def test_detect_primary_particles_is_repeatable(
             index=pd.Index([0], name="ID"),
         )
 
-    monkeypatch.setattr("agglpy.img_ds.HCT_multi", fake_HCT_multi)
+    monkeypatch.setattr("agglpy._legacy.img_ds.HCT_multi", fake_HCT_multi)
 
     d7_017.detect_primary_particles(export_csv=False, export_img=False)
     d7_017.detect_primary_particles(export_csv=False, export_img=False)
