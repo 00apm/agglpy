@@ -77,11 +77,12 @@ def particle_properties(table: pd.DataFrame) -> pd.DataFrame:
         run; every other column, the row order and the index are kept.
 
     Raises:
-        ParticleTableError: If ``r`` is missing.
+        ParticleTableError: If ``r`` is missing, not numeric, not
+            finite or not > 0.
     """
     _require(table, ("r",))
+    r = _radii(table)
     out = table.copy()
-    r = out["r"].to_numpy(dtype=np.float64)
     out["D"] = 2 * r
     out["area"] = np.pi * r**2
     out["volume"] = _sphere_volume(r)
@@ -127,18 +128,23 @@ def agglomerate_properties(table: pd.DataFrame) -> pd.DataFrame:
         An empty particle table gives an empty table with every column.
 
     Raises:
-        ParticleTableError: If a needed column is missing.
+        ParticleTableError: If a needed column is missing; ``x, y, r``
+            are not finite numbers or ``r <= 0``; ``agglomerate_id``
+            does not hold integers; ``enclosed`` is not True / False.
     """
     _require(table, _AGGLOMERATE_INPUT)
-    x = table["x"].to_numpy(dtype=np.float64)
-    y = table["y"].to_numpy(dtype=np.float64)
-    r = table["r"].to_numpy(dtype=np.float64)
-    enclosed = table["enclosed"].to_numpy(dtype=bool)
+    # A table fresh from find_agglomerates is clean, but one read back
+    # from a file or merged by hand may not be: a NaN in ``enclosed``
+    # would count as True and silently inflate the with-hidden values.
+    x = _finite(table, "x")
+    y = _finite(table, "y")
+    r = _radii(table)
+    enclosed = _flags(table, "enclosed")
     # Renumber the agglomerates 0 ... k-1 ([7, 3, 7] -> ids [3, 7],
     # codes [1, 0, 1]): each property is then one array operation over
     # all agglomerates, not a Python loop (thousands per image).
     ids, codes = np.unique(
-        table["agglomerate_id"].to_numpy(dtype=np.int64), return_inverse=True
+        _integers(table, "agglomerate_id"), return_inverse=True
     )
     groups = _Groups(codes, len(ids), r)
 
@@ -465,3 +471,48 @@ def _require(table: pd.DataFrame, columns: tuple[str, ...]) -> None:
     missing = [c for c in columns if c not in table.columns]
     if missing:
         raise ParticleTableError(f"missing columns: {missing}")
+
+
+def _finite(table: pd.DataFrame, column: str) -> NDArray[np.float64]:
+    try:
+        values = pd.to_numeric(table[column], errors="raise")
+    except (ValueError, TypeError) as exc:
+        raise ParticleTableError(
+            f"column {column!r} must be numeric: {exc}"
+        ) from exc
+    array = values.to_numpy(dtype=np.float64, na_value=np.nan)
+    if not np.isfinite(array).all():
+        raise ParticleTableError(f"column {column!r} must be finite")
+    return array
+
+
+def _radii(table: pd.DataFrame) -> NDArray[np.float64]:
+    r = _finite(table, "r")
+    if (r <= 0).any():
+        raise ParticleTableError("column 'r' must be > 0")
+    return r
+
+
+def _integers(table: pd.DataFrame, column: str) -> NDArray[np.int64]:
+    if pd.api.types.is_integer_dtype(table[column]):
+        return table[column].to_numpy(dtype=np.int64)
+    # Floats are accepted when they are whole numbers (e.g. 3.0 after
+    # a CSV round trip); 0.5 or NaN would be cut or crash silently.
+    values = _finite(table, column)
+    if (values != np.round(values)).any():
+        raise ParticleTableError(f"column {column!r} must hold integers")
+    return values.astype(np.int64)
+
+
+def _flags(table: pd.DataFrame, column: str) -> NDArray[np.bool_]:
+    # Only real True / False: casting would turn NaN, "False" or 2
+    # into True without a word.
+    values = table[column]
+    if values.isna().any() or (
+        len(values)
+        and pd.api.types.infer_dtype(values, skipna=False) != "boolean"
+    ):
+        raise ParticleTableError(
+            f"column {column!r} must hold True / False, without gaps"
+        )
+    return values.to_numpy(dtype=bool)

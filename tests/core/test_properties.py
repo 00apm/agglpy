@@ -187,6 +187,78 @@ def test_agglomerate_properties_needs_its_columns():
         agglomerate_properties(table)
 
 
+def _bare(**columns) -> pd.DataFrame:
+    """Two agglomerates (A + B touching, C alone), columns overridable."""
+    table = {
+        "x": [0.0, 14.0, 100.0],
+        "y": [0.0, 0.0, 0.0],
+        "r": [10.0, 4.0, 5.0],
+        "agglomerate_id": [0, 0, 1],
+        "enclosed": [False, False, False],
+    }
+    table.update(columns)
+    return pd.DataFrame(table)
+
+
+@pytest.mark.parametrize(
+    "enclosed",
+    [
+        pd.Series([False, np.nan, False], dtype=object),  # NaN -> True
+        ["False", "False", "True"],  # any non-empty string -> True
+        [0, 1, 0],
+        pd.Series([False, pd.NA, False], dtype="boolean"),
+    ],
+    ids=["nan", "strings", "ints", "missing"],
+)
+def test_agglomerate_properties_rejects_a_non_boolean_enclosed(enclosed):
+    with pytest.raises(ParticleTableError, match="'enclosed'"):
+        agglomerate_properties(_bare(enclosed=enclosed))
+
+
+def test_agglomerate_properties_accepts_python_bools_in_an_object_column():
+    enclosed = pd.Series([False, True, False], dtype=object)
+    out = agglomerate_properties(_bare(enclosed=enclosed))
+    assert out["enclosed_count"].tolist() == [1, 0]
+
+
+@pytest.mark.parametrize(
+    "ids", [[0.0, 0.5, 1.0], [0, np.nan, 1], ["a", "a", "b"]]
+)
+def test_agglomerate_properties_rejects_non_integer_ids(ids):
+    with pytest.raises(ParticleTableError, match="'agglomerate_id'"):
+        agglomerate_properties(_bare(agglomerate_id=ids))
+
+
+def test_agglomerate_properties_accepts_integral_float_ids():
+    out = agglomerate_properties(_bare(agglomerate_id=[0.0, 0.0, 1.0]))
+    assert out["agglomerate_id"].tolist() == [0, 1]
+    assert out["agglomerate_id"].dtype == np.int64
+
+
+@pytest.mark.parametrize(
+    ("column", "values", "message"),
+    [
+        ("r", [10.0, np.nan, 5.0], "'r' must be finite"),
+        ("r", [10.0, -4.0, 5.0], "'r' must be > 0"),
+        ("r", [10.0, 0.0, 5.0], "'r' must be > 0"),
+        ("x", [0.0, np.inf, 100.0], "'x' must be finite"),
+        ("y", ["0", "a", "0"], "'y' must be numeric"),
+    ],
+)
+def test_agglomerate_properties_rejects_bad_geometry(column, values, message):
+    with pytest.raises(ParticleTableError, match=message):
+        agglomerate_properties(_bare(**{column: values}))
+
+
+@pytest.mark.parametrize(
+    ("r", "message"),
+    [([1.0, np.nan], "'r' must be finite"), ([1.0, -1.0], "'r' must be > 0")],
+)
+def test_particle_properties_rejects_bad_radii(r, message):
+    with pytest.raises(ParticleTableError, match=message):
+        particle_properties(pd.DataFrame({"r": r}))
+
+
 def test_empty_table_has_every_column_and_dtype():
     empty = agglomerate_properties(_particles([], [], []))
     one = agglomerate_properties(_particles([0], [0], [1]))
