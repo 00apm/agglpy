@@ -14,7 +14,11 @@ import pandas as pd
 import pytest
 
 from agglpy.core.agglomerates import find_agglomerates
-from agglpy.core.properties import agglomerate_properties, particle_properties
+from agglpy.core.properties import (
+    DIMENSIONS,
+    agglomerate_properties,
+    particle_properties,
+)
 from agglpy.errors import DuplicateParticlesWarning, ParticleTableError
 from agglpy.tables import make_particles
 
@@ -302,3 +306,71 @@ def test_area_of_a_ring_leaves_out_the_hole():
     x, y, r = 50 * np.cos(angle), 50 * np.sin(angle), np.full(24, 8.0)
     p = _one(x, y, r)
     assert p["area"] == pytest.approx(_pixel_area(x, y, r, 0.05), rel=1e-3)
+
+
+def test_one_circle_feret():
+    p = _one([3], [4], [10])
+    assert (p["D_feret_x"], p["D_feret_y"], p["D_feret_max"]) == (20, 20, 20)
+
+
+def test_example_feret():
+    p = _one(*ABC)
+    assert (p["D_feret_x"], p["D_feret_y"], p["D_feret_max"]) == (28, 20, 28)
+
+
+def test_diagonal_pair_feret():
+    p = _one([0, 6], [0, 8], [10, 10])  # d = 10
+    assert p["D_feret_x"] == 26  # 16 - (-10)
+    assert p["D_feret_y"] == 28  # 18 - (-10)
+    assert p["D_feret_max"] == 30  # d + r + r
+
+
+def test_long_chain_feret_max():
+    # 100 members: the large-agglomerate path (pruning)
+    n = 100
+    p = _one(2 * np.arange(n), np.zeros(n), np.ones(n))
+    assert p["member_count"] == n
+    assert p["D_feret_max"] == 2 * n
+    assert (p["D_feret_x"], p["D_feret_y"]) == (2 * n, 2)
+
+
+def _brute_feret_max(table: pd.DataFrame) -> list[float]:
+    out = []
+    for _, members in table.groupby("agglomerate_id"):
+        x, y, r = (members[c].to_numpy() for c in ("x", "y", "r"))
+        span = np.hypot(x[:, None] - x, y[:, None] - y) + r[:, None] + r
+        out.append(float(span.max()))
+    return out
+
+
+@pytest.mark.parametrize("seed", range(3))
+def test_feret_max_matches_brute_force(seed: int):
+    rng = np.random.default_rng(seed)
+    n = 1500
+    side = 7 * math.sqrt(n)  # dense: many small, some large agglomerates
+    table = _particles(
+        rng.uniform(0, side, n),
+        rng.uniform(0, side, n),
+        rng.lognormal(np.log(8), 0.35, n) / 2,
+    )
+    out = agglomerate_properties(table)
+    assert out["member_count"].max() > 64, "needs a large agglomerate"
+    expected = _brute_feret_max(table)
+    assert out["D_feret_max"].tolist() == pytest.approx(expected, rel=1e-12)
+
+
+def test_columns_in_spec_order():
+    out = agglomerate_properties(_particles([0], [0], [1]))
+    assert list(out.columns) == ["agglomerate_id", *DIMENSIONS]
+
+
+def test_dimensions_cover_exactly_the_property_columns():
+    table = _particles(*ABC)
+    added = set(particle_properties(table).columns) - set(table.columns)
+    agglomerate = set(agglomerate_properties(table).columns)
+    assert set(DIMENSIONS) == added | (agglomerate - {"agglomerate_id"})
+
+
+def test_dimensions_are_read_only():
+    with pytest.raises(TypeError):
+        DIMENSIONS["D"] = 2  # type: ignore[index]

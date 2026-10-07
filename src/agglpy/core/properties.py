@@ -10,7 +10,12 @@ whose projection is its detected circle. Enclosed particles are members
 everywhere: they count in every sum, count and statistic; only the
 ``*_with_hidden`` values count them a second time
 (``docs/methodology.md``, section 7).
+
+``DIMENSIONS`` gives the length exponent of every property column, for
+the one conversion from px to physical units.
 """
+
+from types import MappingProxyType
 
 import numpy as np
 import pandas as pd
@@ -19,7 +24,43 @@ from numpy.typing import NDArray
 from agglpy.core.agglomerates import find_contacts
 from agglpy.errors import ParticleTableError
 
+# Length exponent of each property column: 0 count or ratio, 1 length
+# (px), 2 area (px²), 3 volume (px³). D, area and volume mean the same
+# for a particle and an agglomerate.
+DIMENSIONS: MappingProxyType[str, int] = MappingProxyType(
+    {
+        "member_count": 0,
+        "enclosed_count": 0,
+        "volume": 3,
+        "D": 1,
+        "D_mean": 1,
+        "D_std": 1,
+        "D_largest": 1,
+        "size_ratio": 0,
+        "volume_with_hidden": 3,
+        "D_with_hidden": 1,
+        "member_count_with_hidden": 0,
+        "x_com": 1,
+        "y_com": 1,
+        "rg": 1,
+        "area": 2,
+        "D_pa": 1,
+        "D_feret_x": 1,
+        "D_feret_y": 1,
+        "D_feret_max": 1,
+    }
+)
+
 _AGGLOMERATE_INPUT = ("x", "y", "r", "agglomerate_id", "enclosed")
+
+# Agglomerates up to this size get their max Feret diameter from all
+# member pairs at once; larger ones are pruned first.
+_ALL_PAIRS_SIZE = 64
+# Elements per temporary array in the pair loops (8 MB of float64).
+_CHUNK = 2**20
+# Directions searched for the first max Feret estimate of a large
+# agglomerate; any number works, the pruning keeps the result exact.
+_DIRECTIONS = 64
 
 
 def particle_properties(table: pd.DataFrame) -> pd.DataFrame:
@@ -70,9 +111,11 @@ def agglomerate_properties(table: pd.DataFrame) -> pd.DataFrame:
     - ``area``: projected area, the exact area of the union of the
       member circles (overlaps counted once), not the sum of member
       areas; ``D_pa``: diameter of the circle with that area.
+    - ``D_feret_x``, ``D_feret_y``: Feret diameter along the image x
+      and y axis; ``D_feret_max``: largest Feret diameter.
 
-    ``area`` describes the circle model, not the agglomerate's outline
-    on the image.
+    ``area`` and the Feret diameters describe the circle model, not the
+    agglomerate's outline on the image.
 
     Args:
         table: The particle table from ``find_agglomerates``; only
@@ -105,6 +148,13 @@ def agglomerate_properties(table: pd.DataFrame) -> pd.DataFrame:
     columns.update(x_com=x_com, y_com=y_com, rg=rg)
     area = _union_area(groups, x, y, r, x_com, y_com)
     columns.update(area=area, D_pa=np.sqrt(4 * area / np.pi))
+    # Along a fixed axis, a union of circles reaches exactly from the
+    # lowest edge (c - r) to the highest (c + r): no search needed.
+    columns.update(
+        D_feret_x=groups.max(x + r) - groups.min(x - r),
+        D_feret_y=groups.max(y + r) - groups.min(y - r),
+        D_feret_max=_feret_max(groups, x, y, r),
+    )
     return pd.DataFrame(columns)
 
 
@@ -136,6 +186,14 @@ class _Groups:
         return np.bincount(
             self.codes, weights=values, minlength=self.k
         ).astype(np.float64)
+
+    def max(self, values: NDArray[np.float64]) -> NDArray[np.float64]:
+        out = np.full(self.k, -np.inf)
+        np.maximum.at(out, self.codes, values)
+        return out
+
+    def min(self, values: NDArray[np.float64]) -> NDArray[np.float64]:
+        return -self.max(-values)
 
 
 def _sizes(
@@ -307,6 +365,88 @@ def _covered_arcs(
         np.concatenate(starts),
         np.concatenate(ends),
     )
+
+
+def _feret_max(
+    groups: _Groups,
+    x: NDArray[np.float64],
+    y: NDArray[np.float64],
+    r: NDArray[np.float64],
+) -> NDArray[np.float64]:
+    """Largest Feret diameter: max of ``d_ij + r_i + r_j`` over pairs.
+
+    The pair ``i = j`` is included (``2r``). Small agglomerates take all
+    pairs at once, grouped by size; large ones are pruned first.
+    """
+    out = np.zeros(groups.k)
+    xs, ys, rs = x[groups.order], y[groups.order], r[groups.order]
+    # Agglomerates of equal size stack into one (n, size, size) array:
+    # thousands of small agglomerates take a few NumPy calls, no loop.
+    for size in np.unique(groups.count):
+        same_size = np.flatnonzero(groups.count == size)
+        if size > _ALL_PAIRS_SIZE:
+            for g in same_size:
+                one = slice(groups.starts[g], groups.starts[g] + size)
+                out[g] = _pruned_feret_max(xs[one], ys[one], rs[one])
+            continue
+        # One block of (agglomerates, size, size) pairs per chunk.
+        step = max(1, _CHUNK // int(size * size))
+        for first in range(0, len(same_size), step):
+            chunk = same_size[first : first + step]
+            rows = groups.starts[chunk][:, None] + np.arange(size)
+            out[chunk] = _pair_max_rows(xs[rows], ys[rows], rs[rows])
+    return out
+
+
+def _pruned_feret_max(
+    x: NDArray[np.float64], y: NDArray[np.float64], r: NDArray[np.float64]
+) -> float:
+    # A first estimate from the members furthest out in a few
+    # directions: an exact value of some pair, so a lower bound.
+    angle = np.linspace(0, np.pi, _DIRECTIONS, endpoint=False)
+    along = x[:, None] * np.cos(angle) + y[:, None] * np.sin(angle)
+    ends = np.concatenate(
+        [
+            np.argmax(along + r[:, None], axis=0),
+            np.argmin(along - r[:, None], axis=0),
+        ]
+    )
+    candidates = np.unique(ends)
+    low = _pair_max(x[candidates], y[candidates], r[candidates])
+    # Triangle inequality: d_ij + r_i + r_j <= reach_i + reach_j, with
+    # reach = distance from the bounding box centre + r. A member whose
+    # reach plus the largest reach can't beat the estimate can't be in
+    # a longer pair. The tiny margin covers rounding.
+    cx = (np.max(x + r) + np.min(x - r)) / 2
+    cy = (np.max(y + r) + np.min(y - r)) / 2
+    reach = np.sqrt((x - cx) ** 2 + (y - cy) ** 2) + r
+    keep = reach + reach.max() >= low * (1 - 1e-9)
+    return max(low, _pair_max(x[keep], y[keep], r[keep]))
+
+
+def _pair_max(
+    x: NDArray[np.float64], y: NDArray[np.float64], r: NDArray[np.float64]
+) -> float:
+    """Max of ``d_ij + r_i + r_j`` over all pairs, in chunks of rows."""
+    best = 0.0
+    step = max(1, _CHUNK // len(x))
+    for i in range(0, len(x), step):
+        dx = x[i : i + step, None] - x
+        dy = y[i : i + step, None] - y
+        span = np.sqrt(dx * dx + dy * dy) + r[i : i + step, None] + r
+        best = max(best, float(span.max()))
+    return best
+
+
+def _pair_max_rows(
+    x: NDArray[np.float64], y: NDArray[np.float64], r: NDArray[np.float64]
+) -> NDArray[np.float64]:
+    """``_pair_max`` for each row of (agglomerates, members) arrays."""
+    dx = x[:, :, None] - x[:, None, :]
+    dy = y[:, :, None] - y[:, None, :]
+    span = np.sqrt(dx * dx + dy * dy) + r[:, :, None] + r[:, None, :]
+    best: NDArray[np.float64] = span.reshape(len(x), -1).max(axis=1)
+    return best
 
 
 def _sphere_volume(r: NDArray[np.float64]) -> NDArray[np.float64]:
