@@ -1,17 +1,21 @@
-"""Agglomerate properties: volume, volume-equivalent D, member
-statistics and the with-hidden values.
+"""Particle and agglomerate properties (``agglpy.core.properties``).
 
-Definitions and cases in ``support.synthetic.cases.PROPERTIES``, values
-worked out by hand. Centre of mass and radius of gyration are not
-checked here (their definition is an open question; the golden tests
-keep today's values). Phase 2 turns this file into the unit tests of
-``agglpy.properties``.
+The 1.4 synthetic cases (``support.synthetic.cases.PROPERTIES``, values
+worked out by hand) run once per implementation; the unit tests below
+run the core directly, on cases worked out in the 2.4 plan.
 """
 
 import math
+import warnings
 from pathlib import Path
 
+import pandas as pd
 import pytest
+
+from agglpy.core.agglomerates import find_agglomerates
+from agglpy.core.properties import particle_properties
+from agglpy.errors import DuplicateParticlesWarning, ParticleTableError
+from agglpy.tables import make_particles
 
 from support.synthetic.adapters import (
     ADAPTERS,
@@ -47,3 +51,52 @@ def test_agglomerate_properties(
                 assert got == pytest.approx(value, rel=RTOL, abs=0), (
                     f"{case.name}: {name}"
                 )
+
+
+# ---------------------------------------------------------------------
+# Unit tests of agglpy.core.properties (one run, no adapter)
+# ---------------------------------------------------------------------
+
+
+def _particles(x, y, r) -> pd.DataFrame:
+    """Particles grouped into agglomerates; duplicates allowed."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DuplicateParticlesWarning)
+        return find_agglomerates(make_particles(x, y, r))
+
+
+def sphere(r: float) -> float:
+    return 4 / 3 * math.pi * r**3
+
+
+def test_particle_properties_values():
+    out = particle_properties(_particles([0, 100], [0, 0], [1, 2.5]))
+    assert out["D"].tolist() == [2, 5]
+    assert out["area"].tolist() == [math.pi, math.pi * 2.5**2]
+    assert out["volume"].tolist() == [sphere(1), sphere(2.5)]
+
+
+def test_particle_properties_keeps_columns_rows_and_index():
+    table = _particles([0, 100, 200], [0, 0, 0], [1, 2, 3])
+    table["composition"] = ["Fe", "Si", "Fe"]
+    table.index = [30, 10, 20]
+    before = table.copy()
+    out = particle_properties(table)
+    pd.testing.assert_frame_equal(table, before)  # input untouched
+    assert list(out.columns) == [*table.columns, "D", "area", "volume"]
+    assert list(out.index) == [30, 10, 20]
+    pd.testing.assert_frame_equal(out[table.columns], table)
+
+
+def test_particle_properties_rerun_replaces_its_columns():
+    once = particle_properties(_particles([0], [0], [1]))
+    once["r"] = 2.0  # e.g. a corrected radius
+    again = particle_properties(once)
+    assert list(again.columns) == list(once.columns)
+    assert again.loc[0, "D"] == 4
+    pd.testing.assert_frame_equal(particle_properties(again), again)
+
+
+def test_particle_properties_needs_r():
+    with pytest.raises(ParticleTableError, match="'r'"):
+        particle_properties(pd.DataFrame({"x": [0.0]}))
