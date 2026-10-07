@@ -221,3 +221,84 @@ def test_example_centre_of_mass_and_rg():
         + 8 * ((2 - xc) ** 2 + 3 / 5 * 4)
     )
     assert p["rg"] == pytest.approx(math.sqrt(inertia / 1072), rel=1e-12)
+
+
+def test_one_circle_area():
+    p = _one([3], [4], [10])
+    assert p["area"] == pytest.approx(100 * math.pi, rel=1e-12)
+    assert p["D_pa"] == pytest.approx(20, rel=1e-12)
+
+
+def test_tangent_circles_area_is_the_sum():
+    p = _one([0, 14], [0, 0], [10, 4])
+    assert p["area"] == pytest.approx(116 * math.pi, rel=1e-12)
+
+
+def test_overlapping_circles_area_counts_the_lens_once():
+    p = _one([0, 10], [0, 0], [10, 10])
+    # lens of two circles r = 10 at distance 10
+    lens = 2 * 100 * math.acos(10 / 20) - 5 * math.sqrt(400 - 100)
+    assert p["area"] == pytest.approx(200 * math.pi - lens, rel=1e-12)
+
+
+def test_enclosed_circle_adds_no_area():
+    p = _one(*ABC)
+    assert p["area"] == pytest.approx(116 * math.pi, rel=1e-12)
+    assert p["D_pa"] == pytest.approx(math.sqrt(464), rel=1e-12)
+
+
+def test_identical_circles_area_counts_once():
+    p = _one([5, 5], [5, 5], [8, 8])
+    assert p["area"] == pytest.approx(64 * math.pi, rel=1e-12)
+
+
+def test_circle_covered_by_two_others_adds_no_area():
+    # C lies inside the union of A and B, but inside neither alone.
+    alone = _one([0, 12], [0, 0], [10, 10])
+    p = _one([0, 12, 6], [0, 0, 0], [10, 10, 7.5])
+    assert p["area"] == pytest.approx(alone["area"], rel=1e-12)
+
+
+def test_area_does_not_depend_on_position():
+    near = _one([0, 10, 3], [0, 0, 9], [10, 10, 4])
+    far = _one([5000, 5010, 5003], [7000, 7000, 7009], [10, 10, 4])
+    assert far["area"] == pytest.approx(near["area"], rel=1e-12)
+
+
+def test_nearly_tangent_circles_area():
+    # 1e-9 px of overlap: the arc half-angle is close to 0; rounding
+    # must not give NaN or a jump.
+    p = _one([0, 14 - 1e-9], [0, 0], [10, 4])
+    assert p["area"] == pytest.approx(116 * math.pi, rel=1e-9)
+
+
+def _pixel_area(x, y, r, h: float) -> float:
+    """Union area counted on a grid of spacing h (cell centres)."""
+    x, y, r = map(np.asarray, (x, y, r))
+    gx = np.arange((x - r).min() + h / 2, (x + r).max(), h)
+    gy = np.arange((y - r).min() + h / 2, (y + r).max(), h)
+    px, py = np.meshgrid(gx, gy)
+    inside = np.zeros(px.shape, dtype=bool)
+    for xi, yi, ri in zip(x, y, r, strict=True):
+        inside |= (px - xi) ** 2 + (py - yi) ** 2 <= ri * ri
+    return float(inside.sum()) * h * h
+
+
+@pytest.mark.parametrize("seed", range(5))
+def test_area_matches_a_pixel_count(seed: int):
+    rng = np.random.default_rng(seed)
+    x, y, r = (
+        rng.uniform(0, 30, 12),
+        rng.uniform(0, 30, 12),
+        rng.uniform(2, 8, 12),
+    )
+    # circles that overlap share an agglomerate, so areas add up
+    total = agglomerate_properties(_particles(x, y, r))["area"].sum()
+    assert total == pytest.approx(_pixel_area(x, y, r, 0.05), rel=1e-3)
+
+
+def test_area_of_a_ring_leaves_out_the_hole():
+    angle = np.linspace(0, 2 * np.pi, 24, endpoint=False)
+    x, y, r = 50 * np.cos(angle), 50 * np.sin(angle), np.full(24, 8.0)
+    p = _one(x, y, r)
+    assert p["area"] == pytest.approx(_pixel_area(x, y, r, 0.05), rel=1e-3)

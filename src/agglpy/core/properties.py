@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 
+from agglpy.core.agglomerates import find_contacts
 from agglpy.errors import ParticleTableError
 
 _AGGLOMERATE_INPUT = ("x", "y", "r", "agglomerate_id", "enclosed")
@@ -66,6 +67,12 @@ def agglomerate_properties(table: pd.DataFrame) -> pd.DataFrame:
     - ``rg``: radius of gyration of the member spheres with their
       heights unknown, so a lower bound of the 3D value; exact for one
       sphere (D-040).
+    - ``area``: projected area, the exact area of the union of the
+      member circles (overlaps counted once), not the sum of member
+      areas; ``D_pa``: diameter of the circle with that area.
+
+    ``area`` describes the circle model, not the agglomerate's outline
+    on the image.
 
     Args:
         table: The particle table from ``find_agglomerates``; only
@@ -96,6 +103,8 @@ def agglomerate_properties(table: pd.DataFrame) -> pd.DataFrame:
     columns.update(_sizes(groups, r, enclosed))
     x_com, y_com, rg = _centre_of_mass(groups, x, y, r)
     columns.update(x_com=x_com, y_com=y_com, rg=rg)
+    area = _union_area(groups, x, y, r, x_com, y_com)
+    columns.update(area=area, D_pa=np.sqrt(4 * area / np.pi))
     return pd.DataFrame(columns)
 
 
@@ -193,6 +202,111 @@ def _centre_of_mass(
     # height offsets would add more, so this is a lower bound.
     inertia = groups.sum(mass * (dx * dx + dy * dy + 3 / 5 * r * r))
     return x_com, y_com, np.sqrt(inertia / total)
+
+
+def _union_area(
+    groups: _Groups,
+    x: NDArray[np.float64],
+    y: NDArray[np.float64],
+    r: NDArray[np.float64],
+    x_com: NDArray[np.float64],
+    y_com: NDArray[np.float64],
+) -> NDArray[np.float64]:
+    """Exact area of the union of each agglomerate's member circles.
+
+    Green's theorem: the area is a sum over the parts of each circle's
+    outline that lie outside every other circle. Each circle starts
+    with its full outline (area πr²); the parts other circles cover are
+    subtracted, each covered angle once.
+    """
+    n = len(r)
+    circle, start, end = _covered_arcs(groups.codes, x, y, r)
+
+    # Sort the arcs circle by circle, by start angle. Each arc counts
+    # only beyond the furthest end of the arcs before it on its circle,
+    # so overlapping covered parts are subtracted once.
+    order = np.lexsort((start, circle))
+    circle, start, end = circle[order], start[order], end[order]
+    # Ends lie in [0, 2π]; adding 8 per circle keeps a running max from
+    # reaching into the next circle.
+    offset = 8.0 * circle
+    reached = np.maximum.accumulate(offset + end) - offset
+    before = np.empty_like(reached)
+    before[1:] = reached[:-1]
+    first = np.ones(len(circle), dtype=bool)
+    first[1:] = circle[1:] != circle[:-1]
+    before[first] = -np.inf
+    a = np.maximum(start, before)
+    b = np.maximum(end, before)
+
+    # Green's theorem, ½∮(x dy - y dx), over the arc a…b of the circle.
+    # Centres relative to the agglomerate's centre of mass keep the
+    # terms small (only here: the contact search needs image positions).
+    rr = r[circle]
+    cx = (x - x_com[groups.codes])[circle]
+    cy = (y - y_com[groups.codes])[circle]
+    covered = 0.5 * (
+        rr * rr * (b - a)
+        + cx * rr * (np.sin(b) - np.sin(a))
+        - cy * rr * (np.cos(b) - np.cos(a))
+    )
+    outside = np.pi * r * r - np.bincount(circle, weights=covered, minlength=n)
+    return groups.sum(outside)
+
+
+def _covered_arcs(
+    codes: NDArray[np.intp],
+    x: NDArray[np.float64],
+    y: NDArray[np.float64],
+    r: NDArray[np.float64],
+) -> tuple[NDArray[np.intp], NDArray[np.float64], NDArray[np.float64]]:
+    """Arcs of each circle's outline covered by another circle.
+
+    Returns (circle, start, end) with ``0 <= start <= end <= 2π``; an
+    arc across angle 0 is split in two.
+    """
+    n = len(r)
+    contacts = find_contacts(
+        pd.DataFrame({"id": np.arange(n), "x": x, "y": y, "r": r})
+    )
+    # Only members of one agglomerate cover each other.
+    same = codes[contacts.larger] == codes[contacts.smaller]
+    big, small = contacts.larger[same], contacts.smaller[same]
+    dx: NDArray[np.float64] = x[small] - x[big]
+    dy: NDArray[np.float64] = y[small] - y[big]
+    d = np.sqrt(dx * dx + dy * dy)
+
+    # The smaller circle inside the larger one: its whole outline is
+    # covered (identical circles: the one Contacts lists as smaller).
+    inside = d <= r[big] - r[small]
+    # Outlines crossing: each covers an arc of the other. Tangent
+    # circles touch in one point and cover nothing.
+    crossing = ~inside & (d < r[big] + r[small])
+    n_inside = int(inside.sum())
+    circles = [small[inside]]
+    starts = [np.zeros(n_inside)]
+    ends = [np.full(n_inside, 2 * np.pi)]
+    for own, other, sign in ((big, small, 1.0), (small, big, -1.0)):
+        own, other = own[crossing], other[crossing]
+        dist = d[crossing]
+        # Direction to the other centre, ± the half-angle of the arc
+        # (law of cosines; clipped against rounding near tangency).
+        towards = np.arctan2(sign * dy[crossing], sign * dx[crossing])
+        cos_half = (r[own] ** 2 + dist**2 - r[other] ** 2) / (
+            2 * r[own] * dist
+        )
+        half = np.arccos(np.clip(cos_half, -1.0, 1.0))
+        start = np.mod(towards - half, 2 * np.pi)
+        end = start + 2 * half
+        wraps = end > 2 * np.pi
+        circles += [own, own[wraps]]
+        starts += [start, np.zeros(int(wraps.sum()))]
+        ends += [np.minimum(end, 2 * np.pi), end[wraps] - 2 * np.pi]
+    return (
+        np.concatenate(circles),
+        np.concatenate(starts),
+        np.concatenate(ends),
+    )
 
 
 def _sphere_volume(r: NDArray[np.float64]) -> NDArray[np.float64]:
