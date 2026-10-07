@@ -1,5 +1,5 @@
 """Agglomerate properties: volume, volume-equivalent D, member
-statistics and the dsom values.
+statistics and the with-hidden values.
 
 Definitions and cases in ``support.synthetic.cases.PROPERTIES``, values
 worked out by hand. Centre of mass and radius of gyration are not

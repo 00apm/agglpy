@@ -29,8 +29,8 @@ class Case:
         name: Short id, used as the pytest id.
         circles: The particles of the case.
         groups: Expected agglomerates, as a partition of the circle keys.
-        idj: Keys of the particles expected to be internally disjoint
-            (lying completely inside another particle).
+        enclosed: Keys of the particles expected to be enclosed (lying
+            completely inside another particle; old name ``idj``).
         threshold: ``collector_threshold`` for classification.
         types: Expected particle type per key; empty if the case doesn't
             check classification.
@@ -44,7 +44,7 @@ class Case:
     name: str
     circles: tuple[Circle, ...]
     groups: frozenset[frozenset[str]]
-    idj: frozenset[str] = field(default_factory=frozenset)
+    enclosed: frozenset[str] = field(default_factory=frozenset)
     threshold: float = 0.0
     types: Mapping[str, str] = field(default_factory=dict)
     properties: Mapping[frozenset[str], Mapping[str, float]] = field(
@@ -74,7 +74,7 @@ def make_case(
     name: str,
     circles: Iterable[tuple[str, float, float, float]],
     groups: Iterable[Iterable[str]],
-    idj: Iterable[str] = (),
+    enclosed: Iterable[str] = (),
     threshold: float = 0.0,
     types: Mapping[str, str] | None = None,
     properties: Mapping[Iterable[str], Mapping[str, float]] | None = None,
@@ -100,7 +100,7 @@ def make_case(
         name,
         circle_objs,
         group_sets,
-        frozenset(idj),
+        frozenset(enclosed),
         threshold,
         types,
         props,
@@ -162,29 +162,29 @@ DOUBLETS: list[Case] = [
         "doublet_concentric",
         [("a", 0, 0, _R), ("b", 0, 0, _r)],
         groups=[["a", "b"]],
-        idj=["b"],
-        note="Smaller circle with the same centre: inside, idj.",
+        enclosed=["b"],
+        note="Smaller circle with the same centre: inside, enclosed.",
     ),
     make_case(
         "doublet_inside",
         [("a", 0, 0, _R), ("b", 2, 0, _r)],
         groups=[["a", "b"]],
-        idj=["b"],
-        note="dist = 2 < R - r: completely inside, idj.",
+        enclosed=["b"],
+        note="dist = 2 < R - r: completely inside, enclosed.",
     ),
     make_case(
         "doublet_inside_1px_from_tangent",
         [("a", 0, 0, _R), ("b", _R - _r - 1, 0, _r)],
         groups=[["a", "b"]],
-        idj=["b"],
-        note="dist = R - r - 1: inside, idj.",
+        enclosed=["b"],
+        note="dist = R - r - 1: inside, enclosed.",
     ),
     make_case(
         "doublet_internally_tangent",
         [("a", 0, 0, _R), ("b", _R - _r, 0, _r)],
         groups=[["a", "b"]],
-        idj=["b"],
-        note="dist == R - r: touches the edge from inside, still idj.",
+        enclosed=["b"],
+        note="dist == R - r: touches the edge from inside, still enclosed.",
     ),
     make_case(
         "doublet_crossing_edge",
@@ -192,7 +192,7 @@ DOUBLETS: list[Case] = [
         groups=[["a", "b"]],
         note=(
             "dist = R - r + 1: centre inside the big circle, but the small "
-            "one crosses its edge. Grouped, not idj."
+            "one crosses its edge. Grouped, not enclosed."
         ),
     ),
 ]
@@ -303,10 +303,10 @@ STRUCTURES: list[Case] = [
             ],
             ["gap_1px"],
         ],
-        idj=["inside"],
+        enclosed=["inside"],
         note=(
             "Large collector with small particles: tangent, overlapping, "
-            "inside (idj), 1 px away (separate), and one connected only "
+            "inside (enclosed), 1 px away (separate), and one connected only "
             "through another small particle."
         ),
     ),
@@ -412,7 +412,7 @@ CLASSIFICATION.append(
         "polydisperse_collector",
         [(c.key, c.x, c.y, c.r) for c in _POLY.circles],
         groups=_POLY.groups,
-        idj=_POLY.idj,
+        enclosed=_POLY.enclosed,
         threshold=0.5,
         types={
             "big": "collector",
@@ -444,14 +444,15 @@ def volume_equivalent_d(volume: float) -> float:
 # Agglomerate properties, by definition:
 #   volume             sum of the member sphere volumes
 #   D                  diameter of one sphere with that volume
-#   members_D_mean/std mean / sample std (n - 1) of the member diameters;
+#   D_mean / D_std     mean / sample std (n - 1) of the member diameters;
 #                      std is NaN for a single member
-#   idj_count          members lying completely inside another member
-#   *_dsom             "dark side of the moon": a member seen completely
-#                      inside another one's outline is assumed to have a
-#                      twin hidden on the far side, so each idj member
-#                      counts twice: volume_dsom = volume + idj volume,
-#                      members_count_dsom = members_count + idj_count
+#   enclosed_count     members lying completely inside another member
+#   *_with_hidden      a member seen completely inside another one's
+#                      outline is assumed to have a twin hidden on the
+#                      far side (old name dsom), so each enclosed member
+#                      counts twice: volume_with_hidden = volume +
+#                      enclosed volume, member_count_with_hidden =
+#                      member_count + enclosed_count
 PROPERTIES: list[Case] = [
     make_case(
         "single",
@@ -459,15 +460,15 @@ PROPERTIES: list[Case] = [
         groups=[["a"]],
         properties={
             ("a",): {
-                "members_count": 1,
+                "member_count": 1,
                 "volume": sphere(10),
                 "D": 20,
-                "members_D_mean": 20,
-                "members_D_std": math.nan,
-                "idj_count": 0,
-                "volume_dsom": sphere(10),
-                "D_dsom": 20,
-                "members_count_dsom": 1,
+                "D_mean": 20,
+                "D_std": math.nan,
+                "enclosed_count": 0,
+                "volume_with_hidden": sphere(10),
+                "D_with_hidden": 20,
+                "member_count_with_hidden": 1,
             }
         },
         note="One particle: D is its own diameter, std undefined.",
@@ -478,15 +479,15 @@ PROPERTIES: list[Case] = [
         groups=[["a", "b"]],
         properties={
             ("a", "b"): {
-                "members_count": 2,
+                "member_count": 2,
                 "volume": 2 * sphere(10),
                 "D": 20 * 2 ** (1 / 3),  # twice the volume
-                "members_D_mean": 20,
-                "members_D_std": 0,
-                "idj_count": 0,
-                "volume_dsom": 2 * sphere(10),
-                "D_dsom": 20 * 2 ** (1 / 3),
-                "members_count_dsom": 2,
+                "D_mean": 20,
+                "D_std": 0,
+                "enclosed_count": 0,
+                "volume_with_hidden": 2 * sphere(10),
+                "D_with_hidden": 20 * 2 ** (1 / 3),
+                "member_count_with_hidden": 2,
             }
         },
         note="Two equal spheres: D = d * 2^(1/3), not 2d.",
@@ -497,15 +498,15 @@ PROPERTIES: list[Case] = [
         groups=[["a", "b"]],
         properties={
             ("a", "b"): {
-                "members_count": 2,
+                "member_count": 2,
                 "volume": sphere(10) + sphere(5),
                 "D": 2 * 1125 ** (1 / 3),  # r³ = 1000 + 125
-                "members_D_mean": 15,
-                "members_D_std": 10 / math.sqrt(2),  # std(20, 10), n - 1
-                "idj_count": 0,
-                "volume_dsom": sphere(10) + sphere(5),
-                "D_dsom": 2 * 1125 ** (1 / 3),
-                "members_count_dsom": 2,
+                "D_mean": 15,
+                "D_std": 10 / math.sqrt(2),  # std(20, 10), n - 1
+                "enclosed_count": 0,
+                "volume_with_hidden": sphere(10) + sphere(5),
+                "D_with_hidden": 2 * 1125 ** (1 / 3),
+                "member_count_with_hidden": 2,
             }
         },
         note="Overlap doesn't reduce the volume: spheres are summed.",
@@ -514,24 +515,24 @@ PROPERTIES: list[Case] = [
         "one_inside",
         [("a", 0, 0, 10), ("b", 2, 0, 4)],
         groups=[["a", "b"]],
-        idj=["b"],
+        enclosed=["b"],
         properties={
             ("a", "b"): {
-                "members_count": 2,
+                "member_count": 2,
                 "volume": sphere(10) + sphere(4),
                 "D": 2 * 1064 ** (1 / 3),  # r³ = 1000 + 64
-                "members_D_mean": 14,
-                "members_D_std": 12 / math.sqrt(2),  # std(20, 8), n - 1
-                "idj_count": 1,
-                "volume_dsom": sphere(10) + 2 * sphere(4),
-                "D_dsom": 2 * 1128 ** (1 / 3),  # r³ = 1000 + 2 * 64
-                "members_count_dsom": 3,
+                "D_mean": 14,
+                "D_std": 12 / math.sqrt(2),  # std(20, 8), n - 1
+                "enclosed_count": 1,
+                "volume_with_hidden": sphere(10) + 2 * sphere(4),
+                "D_with_hidden": 2 * 1128 ** (1 / 3),  # r³ = 1000 + 2 * 64
+                "member_count_with_hidden": 3,
             }
         },
-        note="The inside particle counts once more in the dsom values.",
+        note="The inside particle counts once more in the with-hidden values.",
     ),
     make_case(
-        "polydisperse_small_members_count",
+        "polydisperse_small_member_count",
         [
             ("big", 0, 0, 1000),
             ("t1", 1000.5, 0, 0.5),
@@ -539,22 +540,22 @@ PROPERTIES: list[Case] = [
             ("in", 500, 0, 0.5),
         ],
         groups=[["big", "t1", "t2", "in"]],
-        idj=["in"],
+        enclosed=["in"],
         properties={
             ("big", "t1", "t2", "in"): {
-                "members_count": 4,
+                "member_count": 4,
                 # small spheres add 3.75e-10 of the volume: rtol must be
                 # well below that for this case to mean anything
                 "volume": sphere(1000) + 3 * sphere(0.5),
                 "D": 2 * (1000**3 + 3 * 0.5**3) ** (1 / 3),
-                "members_D_mean": (2000 + 3 * 1) / 4,
-                "members_D_std": math.sqrt(
+                "D_mean": (2000 + 3 * 1) / 4,
+                "D_std": math.sqrt(
                     ((2000 - 500.75) ** 2 + 3 * (1 - 500.75) ** 2) / 3
                 ),
-                "idj_count": 1,
-                "volume_dsom": sphere(1000) + 4 * sphere(0.5),
-                "D_dsom": 2 * (1000**3 + 4 * 0.5**3) ** (1 / 3),
-                "members_count_dsom": 5,
+                "enclosed_count": 1,
+                "volume_with_hidden": sphere(1000) + 4 * sphere(0.5),
+                "D_with_hidden": 2 * (1000**3 + 4 * 0.5**3) ** (1 / 3),
+                "member_count_with_hidden": 5,
             }
         },
         note="Tiny members (D ratio 2000) still add to volume and D.",

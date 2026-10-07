@@ -30,7 +30,7 @@ ADAPTERS: dict[str, Adapter] = {"legacy": run_legacy, "core": run_core}
 # Each check, with the roadmap item that brings it to the new core.
 CHECKS: dict[str, str] = {
     "grouping": "2.3",
-    "idj": "2.3",
+    "enclosed": "2.3",
     "classify": "2.4",
     "properties": "2.4",
     "psd_bins": "2.5",
@@ -41,7 +41,7 @@ CHECKS: dict[str, str] = {
 # What each implementation can do so far; tests skip the other checks.
 SUPPORTED_CHECKS: dict[str, frozenset[str]] = {
     "legacy": frozenset(CHECKS),
-    "core": frozenset({"grouping", "idj"}),
+    "core": frozenset({"grouping", "enclosed"}),
 }
 
 
@@ -99,7 +99,7 @@ KNOWN_FAILURES: dict[tuple[str, str, str, float], KnownFailure] = {
         KnownFailure(_SCALING)
     ),
     # 6 * 2.5e-9 = 1.5000000000000002e-08 > 10 * 2.5e-9 - 4 * 2.5e-9
-    ("legacy", "idj", "doublet_internally_tangent", REAL_PIXEL_SIZE): (
+    ("legacy", "enclosed", "doublet_internally_tangent", REAL_PIXEL_SIZE): (
         KnownFailure(_SCALING)
     ),
     # 14 * 2.5e-9 / (20 * 2.5e-9) = 0.7000000000000001 > 0.7
