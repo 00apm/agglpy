@@ -41,7 +41,7 @@ CHECKS: dict[str, str] = {
 # What each implementation can do so far; tests skip the other checks.
 SUPPORTED_CHECKS: dict[str, frozenset[str]] = {
     "legacy": frozenset(CHECKS),
-    "core": frozenset({"grouping", "enclosed"}),
+    "core": frozenset({"grouping", "enclosed", "properties"}),
 }
 
 

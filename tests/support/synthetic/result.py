@@ -16,7 +16,7 @@ class Result:
 
     An adapter fills only what its supported checks read
     (``adapters.SUPPORTED_CHECKS``); the core adapter leaves
-    ``agglomerates`` and ``summary`` empty until 2.4 / 2.5.
+    ``summary`` empty until 2.5.
 
     Attributes:
         particles: One row per circle, indexed by the case key. Columns:
