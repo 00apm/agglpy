@@ -93,13 +93,7 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 # Frozen legacy code (D-013), deleted in roadmap 2.9 together with these
 # lines. New modules get PEP 8 names and no print() from the start.
-"src/agglpy/aggl.py" = ["N"]
-"src/agglpy/auxiliary.py" = ["N"]
-"src/agglpy/cfg.py" = ["T20"]
-"src/agglpy/dir_structure.py" = ["N"]
-"src/agglpy/img_ds.py" = ["N", "T20"]
-"src/agglpy/img_process.py" = ["N"]
-"src/agglpy/manager.py" = ["N"]
+"src/agglpy/_legacy/*" = ["N", "T20"]
 "tests/legacy/*" = ["N"]
 # The golden runner is rewritten on the new pipeline in 2.8.
 "tests/golden/test_golden.py" = ["N"]
@@ -132,17 +126,7 @@ disallow_untyped_defs = true
 # Legacy modules are frozen (D-013) and deleted in roadmap 2.9: mypy
 # still reads them, but reports errors only in the code that stays.
 [[tool.mypy.overrides]]
-module = [
-    "agglpy.aggl",
-    "agglpy.auxiliary",
-    "agglpy.cfg",
-    "agglpy.defaults",
-    "agglpy.dir_structure",
-    "agglpy.img_ds",
-    "agglpy.img_process",
-    "agglpy.manager",
-    "agglpy.typing",
-]
+module = ["agglpy._legacy.*"]
 ignore_errors = true
 
 # SciPy ships no type information; scipy-stubs would have to follow the
@@ -155,7 +139,8 @@ ignore_missing_imports = true
 root_package = "agglpy"
 include_external_packages = true
 
-# Each Phase 2 step adds its new modules to both contracts' source_modules.
+# A subpackage (agglpy.core, …) covers every module in it; a new
+# top-level module is added to both contracts' source_modules.
 [[tool.importlinter.contracts]]
 name = "New code never imports the legacy modules (D-019)"
 type = "forbidden"
@@ -166,17 +151,7 @@ source_modules = [
     "agglpy.params",
     "agglpy.tables",
 ]
-forbidden_modules = [
-    "agglpy.aggl",
-    "agglpy.auxiliary",
-    "agglpy.cfg",
-    "agglpy.defaults",
-    "agglpy.dir_structure",
-    "agglpy.img_ds",
-    "agglpy.img_process",
-    "agglpy.manager",
-    "agglpy.typing",
-]
+forbidden_modules = ["agglpy._legacy"]
 
 [[tool.importlinter.contracts]]
 name = "Foundation and core never import plotting or progress bars (rules 1, 4)"

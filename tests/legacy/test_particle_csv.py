@@ -5,13 +5,13 @@ from pathlib import Path
 
 import pytest
 
-from agglpy.errors import ParticleCsvStructureError
-from agglpy.img_ds import (
+from agglpy._legacy.img_ds import (
     load_agglpy_csv,
     load_agglpy_old_csv,
     load_imagej_csv,
     recognize_particle_csv,
 )
+from agglpy.errors import ParticleCsvStructureError
 
 # Minimal valid content per format: (loader, header, one data row)
 AGGLPY = (load_agglpy_csv, "ID,X,Y,R", "0,100,100,30")

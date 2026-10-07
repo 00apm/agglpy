@@ -10,16 +10,19 @@ import numpy.typing as npt
 import pandas as pd
 from tqdm import tqdm
 
-from agglpy.auxiliary import (
+from agglpy._legacy.auxiliary import (
     get_ceil,
     get_floor,
 )
-from agglpy.cfg import load_manager_settings
-from agglpy.dir_structure import find_datasets_paths, validate_mgr_dirstruct
+from agglpy._legacy.cfg import load_manager_settings
+from agglpy._legacy.dir_structure import (
+    find_datasets_paths,
+    validate_mgr_dirstruct,
+)
+from agglpy._legacy.img_ds import ImgDataSet
+from agglpy._legacy.typing import YamlSettingsTypedDict
 from agglpy.errors import DirectoryStructureError
-from agglpy.img_ds import ImgDataSet
 from agglpy.logger import logger
-from agglpy.typing import YamlSettingsTypedDict
 
 
 class Manager:

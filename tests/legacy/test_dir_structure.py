@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from agglpy.dir_structure import (
+from agglpy._legacy.dir_structure import (
     init_mgr_dirstruct,
     is_mgr_dirstruct,
     validate_mgr_dirstruct,

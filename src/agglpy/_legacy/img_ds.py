@@ -21,13 +21,19 @@ import numpy.typing as npt
 import pandas as pd
 from scipy import spatial as spsp
 
-from agglpy.aggl import Agglomerate, Particle
-from agglpy.auxiliary import RGB_convert_to256, RGB_shader, read_tiff_tags
-from agglpy.defaults import (
+from agglpy._legacy.aggl import Agglomerate, Particle
+from agglpy._legacy.auxiliary import (
+    RGB_convert_to256,
+    RGB_shader,
+    read_tiff_tags,
+)
+from agglpy._legacy.defaults import (
     HCT_PARAMETERS,
     PREPROCESS_FUNCTIONS,
     VALID_PARTICLE_CSV_DATA,
 )
+from agglpy._legacy.img_process import HCT_multi, crop_img, preprocess_img
+from agglpy._legacy.typing import ImageSettingsTypedDict, PPSouceCsvType
 from agglpy.errors import (
     DirectoryStructureError,
     ImgDataSetBufferError,
@@ -35,9 +41,7 @@ from agglpy.errors import (
     ImgDataSetStructureError,
     ParticleCsvStructureError,
 )
-from agglpy.img_process import HCT_multi, crop_img, preprocess_img
 from agglpy.logger import logger
-from agglpy.typing import ImageSettingsTypedDict, PPSouceCsvType
 
 
 class ImgDataSet:

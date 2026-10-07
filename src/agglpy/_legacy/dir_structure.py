@@ -3,15 +3,18 @@ import shutil
 from pathlib import Path
 from typing import List, Optional
 
-from agglpy.cfg import (
+from agglpy._legacy.cfg import (
     create_settings,
     find_valid_settings,
     load_manager_settings,
 )
-from agglpy.defaults import DEFAULT_SETTINGS_FILENAME, SUPPORTED_IMG_FORMATS
+from agglpy._legacy.defaults import (
+    DEFAULT_SETTINGS_FILENAME,
+    SUPPORTED_IMG_FORMATS,
+)
+from agglpy._legacy.typing import YamlSettingsTypedDict
 from agglpy.errors import DirectoryStructureError, SettingsStructureError
 from agglpy.logger import logger
-from agglpy.typing import YamlSettingsTypedDict
 
 
 def init_mgr_dirstruct(

@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from agglpy.cfg import (
+from agglpy._legacy.cfg import (
     create_settings,
     create_settings_dict,
     find_all_images,
@@ -12,7 +12,7 @@ from agglpy.cfg import (
     load_yaml,
     validate_settings,
 )
-from agglpy.defaults import DEFAULT_SETTINGS_SCHEMA
+from agglpy._legacy.defaults import DEFAULT_SETTINGS_SCHEMA
 from agglpy.errors import SettingsStructureError
 
 

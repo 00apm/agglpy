@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from agglpy.manager import Manager, PSD_space
+from agglpy._legacy.manager import Manager, PSD_space
 
 
 def test_manager_init_without_data_sets(input_multi_wdir: Path):
