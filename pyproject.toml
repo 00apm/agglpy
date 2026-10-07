@@ -97,7 +97,7 @@ ignore = [
 "tests/legacy/*" = ["N"]
 # The golden runner is rewritten on the new pipeline in 2.8.
 "tests/golden/test_golden.py" = ["N"]
-# Recipes are scripts for users: they print their results.
+# Recipes are notebook-style scripts for users (D-045); they may print.
 "examples/*" = ["T20"]
 
 [tool.ruff.lint.pycodestyle]

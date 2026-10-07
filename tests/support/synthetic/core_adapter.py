@@ -16,6 +16,9 @@ from agglpy.core.properties import agglomerate_properties
 
 from .cases import Case
 from .result import Result
+
+# Importing the recipe also runs its small example cells (percent
+# format, D-045): a few circles, no output.
 from examples.agglomerate_types import agglomerate_types
 
 
