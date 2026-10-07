@@ -8,8 +8,8 @@ table, ``agglomerate_id``. ``enclosed`` marks a particle lying
 completely inside a larger particle (old name ``idj``).
 
 The functions take a validated particle table
-(``tables.validate_particles``) and never modify it; ``group`` runs
-them all.
+(``tables.validate_particles``) and never modify it;
+``find_agglomerates`` runs them all.
 """
 
 import itertools
@@ -86,7 +86,7 @@ def find_contacts(particles: pd.DataFrame) -> Contacts:
     return Contacts(larger[touching], smaller[touching])
 
 
-def find_agglomerates(
+def label_agglomerates(
     particles: pd.DataFrame, contacts: Contacts
 ) -> pd.Series:
     """Give each particle the id of the agglomerate it belongs to.
@@ -205,7 +205,7 @@ def _distance(
     return np.sqrt(dx * dx + dy * dy)
 
 
-def group(particles: pd.DataFrame) -> pd.DataFrame:
+def find_agglomerates(particles: pd.DataFrame) -> pd.DataFrame:
     """Group particles into agglomerates and flag enclosed particles.
 
     Args:
@@ -226,6 +226,6 @@ def group(particles: pd.DataFrame) -> pd.DataFrame:
     # made; only the one about enclosed duplicates comes from here.
     table = validate_particles(particles, warn_duplicates=False)
     contacts = find_contacts(table)
-    table["agglomerate_id"] = find_agglomerates(table, contacts)
+    table["agglomerate_id"] = label_agglomerates(table, contacts)
     table["enclosed"] = find_enclosed(table, contacts)
     return table
