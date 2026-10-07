@@ -3,7 +3,8 @@
 | Folder | What it tests | Kind | Lifetime |
 |---|---|---|---|
 | `foundation/` | the foundation modules of the new architecture: `test_params.py` → `agglpy.params`, `test_tables.py` → `agglpy.tables`, `test_logger.py` → `agglpy.logger` | unit tests | permanent |
-| `core/` | one file per core module of the new architecture (`test_agglomerates.py` → `agglpy.core.agglomerates`, `test_classify.py` → `agglpy.core.classify`, `test_properties.py` → `agglpy.core.properties`, `test_stats.py` → `agglpy.core.stats`) | unit tests on hand-made data, answers worked out by hand | permanent |
+| `core/` | one file per core module of the new architecture (`test_agglomerates.py` → `agglpy.core.agglomerates`, `test_properties.py` → `agglpy.core.properties`, `test_classify.py` → the recipe `examples/agglomerate_types.py` (no classification in the library), `test_stats.py` → `agglpy.core.stats` (2.5)) | unit tests on hand-made data, answers worked out by hand | permanent |
+| `recipes/` | the recipes in `examples/` (repo root): their functions, and each one run as a script | unit tests on hand-made data | permanent |
 | `golden/` | the whole analysis on two real SEM images (D7-017, D7-019), compared with recorded results | end-to-end, marked `slow` | permanent (runner changes in Phase 2) |
 | `legacy/` | the v0.4 API: `Manager`, `ImgDataSet`, settings, folder layout, CSV importers | unit / integration | deleted with the legacy code (roadmap 2.9); CSV importer tests move to the new `io` module (2.2) |
 | `support/` | helpers, **no tests**: data paths, synthetic cases, the neutral `Result`, adapters (legacy and core) | — | `synthetic/legacy_adapter.py` deleted in 2.9 |
@@ -17,7 +18,7 @@
 - `result.py`: the neutral result every adapter returns (planned particle table columns).
 - `transforms.py`: order / position / mirror / axis-swap transformations that must not change a result.
 - `legacy_adapter.py`: runs a case through the v0.4 `ImgDataSet` code.
-- `core_adapter.py`: runs a case through the new core (`agglpy.core.agglomerates`, later classify / properties).
+- `core_adapter.py`: runs a case through the new core (`agglpy.core.agglomerates`, `agglpy.core.properties`; types through the recipe).
 - `adapters.py`: `ADAPTERS` (run a circle case through an implementation), `STATS` (its binning functions, called
   directly) and `KNOWN_FAILURES`.
 
@@ -37,4 +38,5 @@ pytest tests/golden --force-regen   # after an INTENDED change of results; revie
 ```
 
 Test files live in folders without `__init__.py`; `pyproject.toml` sets `--import-mode=importlib` and
-`pythonpath = ["tests"]`, so helpers are imported as `from support.… import …`.
+`pythonpath = ["tests", "."]`, so helpers are imported as `from support.… import …` and recipes as
+`from examples.… import …`.

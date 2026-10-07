@@ -89,25 +89,37 @@ A particle with no connections becomes a single-particle "agglomerate." These ar
 
 Codebase: `aggl.py` (`Particle`/`Agglomerate` construction and classification into `"collector" | "attached2coll" | "separate" | "similar"`, driven by `Manager.collector_threshold`).
 
-## 7. Hidden primary particles: idj and dsom
+## 7. Hidden primary particles: enclosed particles and the with-hidden values
 
 An SEM image shows only one side of each particle. Primary particles deposited on the far side of a larger particle (in particular of a collector) are not visible, so the number and volume of primary particles in an agglomerate are underestimated. agglpy gives a simple estimate of what is hidden.
 
-**Internally disjoint (idj) particles.** A primary particle $P_j$ whose circle lies completely inside the circle of another particle $P_i$,
+**Enclosed particles.** A primary particle $P_j$ whose circle lies completely inside the circle of another particle $P_i$,
 
 $$s \le r_{P_i} - r_{P_j},$$
 
-is seen in front of $P_i$, i.e. on its visible side. Such particles are flagged as *idj*. (Partly overlapping particles, at the outline of the larger one, are not idj.)
+is seen in front of $P_i$, i.e. on its visible side. Such particles are flagged as *enclosed*. (Partly overlapping particles, at the outline of the larger one, are not enclosed.)
 
-**Dark side of the moon (dsom) correction.** If deposition has no preferred direction (random, chaotic deposition), primary particles are spread uniformly over the whole surface of the larger particle. The hidden side then carries, statistically, the same particles as the visible side. The visible-side particles are the idj ones, so each idj particle is counted twice:
+**With-hidden values.** If deposition has no preferred direction (random, chaotic deposition), primary particles are spread uniformly over the whole surface of the larger particle. The hidden side then carries, statistically, the same particles as the visible side. The visible-side particles are the enclosed ones, so each enclosed particle is counted twice:
 
-$$V_{dsom} = V + \sum_{j \in idj} V_{P_j}, \qquad N_{dsom} = N + N_{idj}, \qquad D_{dsom} = \left(\frac{6 V_{dsom}}{\pi}\right)^{1/3},$$
+$$V_{hidden} = V + \sum_{j \in enclosed} V_{P_j}, \qquad N_{hidden} = N + N_{enclosed}, \qquad D_{hidden} = \left(\frac{6 V_{hidden}}{\pi}\right)^{1/3},$$
 
-where $V$ is the summed volume of all member spheres (idj ones included once), $N$ the member count and $D_{dsom}$ the volume-equivalent diameter of the corrected agglomerate.
+where $V$ is the summed volume of all member spheres (enclosed ones included once), $N$ the member count and $D_{hidden}$ the volume-equivalent diameter of the corrected agglomerate.
 
-This is a deliberately simple estimate. It assumes isotropic deposition and ignores particles hidden behind the outline (only the idj particles are doubled). More precise estimates may exist and could replace it.
+This is a deliberately simple estimate. It assumes isotropic deposition and ignores particles hidden behind the outline (only the enclosed particles are doubled). More precise estimates may exist and could replace it.
 
-Codebase: `img_ds.py` (`_find_all_intersecting` flags idj), `aggl.py` (`Agglomerate.calc_extended_param(include_dsom=True)`). The names `idj` and `dsom` are shortcuts and will get descriptive names when this code is rewritten.
+Codebase: `agglpy.core.agglomerates.find_enclosed` flags enclosed particles; `agglpy.core.properties.agglomerate_properties` gives `enclosed_count`, `volume_with_hidden`, `D_with_hidden` and `member_count_with_hidden`. agglpy 0.4 called them `idj` and `*_dsom`.
+
+## 8. Agglomerate size and shape
+
+All agglomerate properties describe the circle model: each primary particle is a sphere whose projection is its detected circle. They are computed in pixels and converted to physical units once, where images are pooled.
+
+**Size.** $D$ is the volume-equivalent diameter, $D = (6V/\pi)^{1/3}$ with $V$ the summed member volume; it is the basis of the agglomerate size distribution. `D_mean`, `D_std`, `D_largest` and `size_ratio` (second largest / largest member diameter) describe the members.
+
+**Projected area.** `area` is the exact area of the union of the member circles: overlaps count once, an enclosed particle adds nothing. It is computed geometrically (the uncovered arcs of each circle, Green's theorem), not on a pixel grid and not on the image, so it describes the circle model, not the agglomerate's outline as the image shows it. $D_{pa} = \sqrt{4A/\pi}$ is the diameter of the circle with the same area.
+
+**Feret diameters.** `D_feret_x` and `D_feret_y` are the widths along the image axes, exact for circles; over many randomly oriented agglomerates a fixed direction gives the classical statistical diameter (Walton, 1948). `D_feret_max` is the largest width in any direction, $\max (d_{ij} + r_i + r_j)$ over member pairs.
+
+**Centre of mass and radius of gyration** (`x_com`, `y_com`, `rg`): members weighted by volume. The centre of mass is the exact projection of the 3D one; `rg` leaves out the unknown height differences, so it is a lower bound of the 3D radius of gyration (exact for a single sphere).
 
 ## Output
 
@@ -119,3 +131,5 @@ agglpy is implemented in Python, built on OpenCV, NumPy, Pandas, and SciPy.
 
 
 ## References
+
+- Walton, W. H. (1948). Feret's statistical diameter as a measure of particle size. *Nature*, 162, 329–330.
