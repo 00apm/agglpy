@@ -212,26 +212,3 @@ class PreprocessParams:
                 raise ParamsError(
                     f"{name} must be a {cls.__name__} or None, got {value!r}"
                 )
-
-
-@dataclass(frozen=True)
-class AnalysisParams:
-    """Parameters of agglomerate classification.
-
-    Attributes:
-        collector_threshold: If the second-largest member's diameter
-            divided by the largest member's diameter is at or below
-            this value, the agglomerate is a collector (its largest
-            particle collected the others); otherwise all members are
-            similar. 0 <= threshold <= 1.
-    """
-
-    collector_threshold: float = 0.5
-
-    def __post_init__(self) -> None:
-        value = _number("collector_threshold", self.collector_threshold)
-        if not 0.0 <= value <= 1.0:
-            raise ParamsError(
-                f"need 0 <= collector_threshold <= 1, got {value}"
-            )
-        _set(self, "collector_threshold", value)
