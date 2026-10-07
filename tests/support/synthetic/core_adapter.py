@@ -1,4 +1,4 @@
-"""Run synthetic cases through the new core (``agglpy.core.group``, …).
+"""Run synthetic cases through the new core (``core.agglomerates``, …).
 
 The core works in px, so a case goes in as it is. The adapter fills
 only what the core can do so far (``adapters.SUPPORTED_CHECKS``) and
@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from agglpy.core.group import group
+from agglpy.core.agglomerates import find_agglomerates
 
 from .cases import Case
 from .result import Result
@@ -38,7 +38,7 @@ def run_core(
             "source": "synthetic",
         }
     )
-    grouped = group(table)  # rows stay in input order
+    grouped = find_agglomerates(table)  # rows stay in input order
     particles = pd.DataFrame(
         {
             "x": grouped["x"].to_numpy(),
