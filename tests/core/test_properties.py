@@ -9,11 +9,12 @@ import math
 import warnings
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 
 from agglpy.core.agglomerates import find_agglomerates
-from agglpy.core.properties import particle_properties
+from agglpy.core.properties import agglomerate_properties, particle_properties
 from agglpy.errors import DuplicateParticlesWarning, ParticleTableError
 from agglpy.tables import make_particles
 
@@ -100,3 +101,97 @@ def test_particle_properties_rerun_replaces_its_columns():
 def test_particle_properties_needs_r():
     with pytest.raises(ParticleTableError, match="'r'"):
         particle_properties(pd.DataFrame({"x": [0.0]}))
+
+
+def _one(x, y, r) -> pd.Series:
+    """Properties of the only agglomerate of these circles."""
+    table = agglomerate_properties(_particles(x, y, r))
+    assert len(table) == 1
+    return table.iloc[0]
+
+
+# Spec example: A r=10, B r=4 touching A's outline, C r=2 inside A.
+ABC = ([0, 14, 2], [0, 0, 0], [10, 4, 2])
+
+
+def test_one_circle_sizes():
+    p = _one([3], [4], [10])
+    assert p["member_count"] == 1
+    assert p["enclosed_count"] == 0
+    assert p["volume"] == pytest.approx(sphere(10), rel=1e-12)
+    assert p["D"] == pytest.approx(20, rel=1e-12)
+    assert p["D_mean"] == 20
+    assert math.isnan(p["D_std"])
+    assert p["D_largest"] == 20
+    assert math.isnan(p["size_ratio"])
+    assert p["volume_with_hidden"] == p["volume"]
+    assert p["D_with_hidden"] == p["D"]
+    assert p["member_count_with_hidden"] == 1
+
+
+def test_example_sizes():
+    p = _one(*ABC)
+    assert p["member_count"] == 3
+    assert p["enclosed_count"] == 1
+    assert p["volume"] == pytest.approx(sphere(10) + sphere(4) + sphere(2))
+    assert p["volume"] == pytest.approx(4490.4, abs=0.1)
+    assert p["D"] == pytest.approx(2 * 1072 ** (1 / 3))  # r³ sum
+    assert p["D"] == pytest.approx(20.47, abs=0.01)
+    assert p["D_mean"] == pytest.approx(32 / 3)  # (20 + 8 + 4) / 3
+    # deviations 28/3, -8/3, -20/3 from the mean; n - 1 = 2
+    assert p["D_std"] == pytest.approx(math.sqrt(1248 / 9 / 2))
+    assert p["D_largest"] == 20
+    assert p["size_ratio"] == 0.4  # 8 / 20
+    assert p["member_count_with_hidden"] == 4
+    assert p["volume_with_hidden"] == pytest.approx(p["volume"] + sphere(2))
+    assert p["volume_with_hidden"] == pytest.approx(4523.9, abs=0.1)
+    assert p["D_with_hidden"] == pytest.approx(2 * 1080 ** (1 / 3))
+
+
+def test_equal_members_have_zero_std():
+    assert _one([0, 20], [0, 0], [10, 10])["D_std"] == 0
+
+
+def test_one_row_per_agglomerate_sorted_by_id():
+    table = pd.DataFrame(
+        {
+            "x": [0.0, 100.0, 14.0],
+            "y": [0.0, 0.0, 0.0],
+            "r": [10.0, 3.0, 4.0],
+            "agglomerate_id": [7, 3, 7],
+            "enclosed": [False, False, False],
+        },
+        index=[5, 6, 7],
+    )
+    out = agglomerate_properties(table)
+    assert out.columns[0] == "agglomerate_id"
+    assert out["agglomerate_id"].tolist() == [3, 7]
+    assert out["member_count"].tolist() == [1, 2]
+    assert list(out.index) == [0, 1]
+
+
+def test_agglomerate_properties_does_not_modify_its_input():
+    table = _particles(*ABC)
+    before = table.copy()
+    agglomerate_properties(table)
+    pd.testing.assert_frame_equal(table, before)
+
+
+def test_agglomerate_properties_needs_its_columns():
+    table = _particles(*ABC).drop(columns="enclosed")
+    with pytest.raises(ParticleTableError, match="enclosed"):
+        agglomerate_properties(table)
+
+
+def test_empty_table_has_every_column_and_dtype():
+    empty = agglomerate_properties(_particles([], [], []))
+    one = agglomerate_properties(_particles([0], [0], [1]))
+    assert len(empty) == 0
+    pd.testing.assert_series_equal(empty.dtypes, one.dtypes)
+    for name in (
+        "agglomerate_id",
+        "member_count",
+        "enclosed_count",
+        "member_count_with_hidden",
+    ):
+        assert empty[name].dtype == np.int64
