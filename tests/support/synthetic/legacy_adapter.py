@@ -74,7 +74,7 @@ def run_legacy(
             "r": p["D"] / 2 / pixel_size,
             "agglomerate_id": p["affiliation"],
             "type": p["type"],
-            "idj": p["idj"].astype(bool),
+            "enclosed": p["idj"].astype(bool),
         }
     )
     particles.index = particles.index.map(key_by_id)
@@ -87,15 +87,15 @@ def run_legacy(
         {
             "members": [frozenset(members[name]) for name in agl.index],
             "type": agl["type"],
-            "members_count": agl["members_count"],
+            "member_count": agl["members_count"],
             "volume": agl["volume"] / px3,
             "D": agl["D"] / px,
-            "members_D_mean": agl["members_Dmean"] / px,
-            "members_D_std": agl["members_Dstdev"] / px,
-            "idj_count": agl["idj_members_count"],
-            "volume_dsom": agl["volume_dsom"] / px3,
-            "D_dsom": agl["D_dsom"] / px,
-            "members_count_dsom": agl["members_count_dsom"],
+            "D_mean": agl["members_Dmean"] / px,
+            "D_std": agl["members_Dstdev"] / px,
+            "enclosed_count": agl["idj_members_count"],
+            "volume_with_hidden": agl["volume_dsom"] / px3,
+            "D_with_hidden": agl["D_dsom"] / px,
+            "member_count_with_hidden": agl["members_count_dsom"],
         },
         index=agl.index.rename("agglomerate_id"),
     )

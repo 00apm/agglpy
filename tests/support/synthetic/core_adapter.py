@@ -1,8 +1,10 @@
-"""Run synthetic cases through the new core (``core.agglomerates``, …).
+"""Run synthetic cases through the new core (``agglpy.core``).
 
-The core works in px, so a case goes in as it is. The adapter fills
-only what the core can do so far (``adapters.SUPPORTED_CHECKS``) and
-grows with 2.4 (types, agglomerate properties) and 2.5 (summary).
+The core works in px, so a case goes in as it is. The library has no
+classification (D-042): agglomerate types come from the recipe in
+``examples/agglomerate_types.py``. The adapter fills only what the
+core can do so far (``adapters.SUPPORTED_CHECKS``); the summary comes
+with 2.5.
 """
 
 from pathlib import Path
@@ -10,9 +12,14 @@ from pathlib import Path
 import pandas as pd
 
 from agglpy.core.agglomerates import find_agglomerates
+from agglpy.core.properties import agglomerate_properties
 
 from .cases import Case
 from .result import Result
+
+# Importing the recipe also runs its small example cells (percent
+# format, D-045): a few circles, no output.
+from examples.agglomerate_types import agglomerate_types
 
 
 def run_core(
@@ -25,8 +32,8 @@ def run_core(
     Args:
         case: The synthetic case.
         tmp_path: Not used: the core writes no files.
-        pixel_size: Not used yet: the core works in px; physical units
-            come in at the output (2.5).
+        pixel_size: Not used: the core works in px; physical units
+            come in where images are pooled (2.8).
     """
     keys = [c.key for c in case.circles]
     table = pd.DataFrame(
@@ -38,16 +45,28 @@ def run_core(
             "source": "synthetic",
         }
     )
-    grouped = find_agglomerates(table)  # rows stay in input order
+    found = find_agglomerates(table)  # rows stay in input order
     particles = pd.DataFrame(
         {
-            "x": grouped["x"].to_numpy(),
-            "y": grouped["y"].to_numpy(),
-            "r": grouped["r"].to_numpy(),
-            "agglomerate_id": grouped["agglomerate_id"].to_numpy(),
-            # Result keeps the case vocabulary (idj) until 2.4.
-            "idj": grouped["enclosed"].to_numpy(),
+            "x": found["x"].to_numpy(),
+            "y": found["y"].to_numpy(),
+            "r": found["r"].to_numpy(),
+            "agglomerate_id": found["agglomerate_id"].to_numpy(),
+            "enclosed": found["enclosed"].to_numpy(),
         },
         index=pd.Index(keys),
     )
-    return Result(particles=particles, agglomerates=pd.DataFrame(), summary={})
+    agglomerates = agglomerate_properties(found).set_index("agglomerate_id")
+    members = particles.groupby("agglomerate_id").groups
+    agglomerates.insert(
+        0, "members", [frozenset(members[i]) for i in agglomerates.index]
+    )
+    agglomerates["type"] = agglomerate_types(agglomerates, case.threshold)
+    # Particle types as agglpy 0.4 gave them (tests only): in a collector
+    # agglomerate the largest member is the collector and the others
+    # are attached to it; otherwise a particle has its agglomerate's type.
+    particle_type = particles["agglomerate_id"].map(agglomerates["type"])
+    largest = particles.groupby("agglomerate_id")["r"].transform("max")
+    attached = (particle_type == "collector") & (particles["r"] < largest)
+    particles["type"] = particle_type.mask(attached, "attached2coll")
+    return Result(particles=particles, agglomerates=agglomerates, summary={})

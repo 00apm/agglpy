@@ -16,18 +16,18 @@ class Result:
 
     An adapter fills only what its supported checks read
     (``adapters.SUPPORTED_CHECKS``); the core adapter leaves
-    ``agglomerates`` and ``summary`` empty until 2.4 / 2.5.
+    ``summary`` empty until 2.5.
 
     Attributes:
         particles: One row per circle, indexed by the case key. Columns:
             ``x, y, r`` (px), ``agglomerate_id`` (any label; only equality
-            within one result matters), ``type``, ``idj`` (bool).
+            within one result matters), ``type``, ``enclosed`` (bool).
         agglomerates: One row per agglomerate, indexed by
             ``agglomerate_id``. Columns: ``members`` (frozenset of keys),
             ``type``, and the properties in px / px³ named as in
-            ``cases.PROPERTIES`` (``volume``, ``D``, ``members_count``,
-            ``members_D_mean``, ``members_D_std``, ``idj_count`` and the
-            ``*_dsom`` values).
+            ``cases.PROPERTIES`` (``volume``, ``D``, ``member_count``,
+            ``D_mean``, ``D_std``, ``enclosed_count`` and the
+            ``*_with_hidden`` values).
         summary: Per-image summary metrics (names in
             ``cases.SUMMARY``; diameters in px).
     """
@@ -41,9 +41,9 @@ class Result:
         by_label = self.particles.groupby("agglomerate_id").groups
         return frozenset(frozenset(keys) for keys in by_label.values())
 
-    def idj_keys(self) -> frozenset[str]:
-        """Keys of the particles flagged as internally disjoint."""
-        flagged = self.particles.index[self.particles["idj"].astype(bool)]
+    def enclosed_keys(self) -> frozenset[str]:
+        """Keys of the particles flagged as enclosed."""
+        flagged = self.particles.index[self.particles["enclosed"].astype(bool)]
         return frozenset(flagged)
 
     def particle_types(self) -> dict[str, str]:

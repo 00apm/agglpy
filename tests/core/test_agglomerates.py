@@ -1,4 +1,4 @@
-"""Grouping of primary particles into agglomerates, and idj detection.
+"""Grouping of primary particles into agglomerates, and enclosed particles.
 
 Synthetic cases from ``support.synthetic.cases`` with hand-worked
 answers, run once per implementation in
@@ -83,17 +83,17 @@ def test_grouping(
 
 
 @pytest.mark.parametrize(("case", "pixel_size"), RUNS)
-def test_idj(
+def test_enclosed(
     request: pytest.FixtureRequest,
     adapter: str,
     case: Case,
     pixel_size: float,
     tmp_path: Path,
 ):
-    skip_unless_supported(adapter, "idj")
-    expect_known_failure(request, adapter, "idj", case, pixel_size)
+    skip_unless_supported(adapter, "enclosed")
+    expect_known_failure(request, adapter, "enclosed", case, pixel_size)
     result = ADAPTERS[adapter](case, tmp_path, pixel_size=pixel_size)
-    assert result.idj_keys() == case.idj, case.note
+    assert result.enclosed_keys() == case.enclosed, case.note
 
 
 @pytest.mark.parametrize("transform", TRANSFORMS.values(), ids=TRANSFORMS)
@@ -104,10 +104,10 @@ def test_result_does_not_depend_on_order_or_position(
     """Input order, position (incl. negative coordinates, i.e. outside
     the image), mirroring and swapped axes must not change the result."""
     skip_unless_supported(adapter, "grouping")
-    skip_unless_supported(adapter, "idj")
+    skip_unless_supported(adapter, "enclosed")
     result = ADAPTERS[adapter](transform(case), tmp_path)
     assert result.groups() == case.groups, case.note
-    assert result.idj_keys() == case.idj, case.note
+    assert result.enclosed_keys() == case.enclosed, case.note
 
 
 @pytest.mark.usefixtures("default_recursion_limit")

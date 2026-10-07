@@ -8,7 +8,6 @@ import yaml
 
 from agglpy.errors import ParamsError
 from agglpy.params import (
-    AnalysisParams,
     ClaheParams,
     HCTParams,
     HCTRange,
@@ -126,17 +125,6 @@ def test_rolling_ball_needs_positive_radius() -> None:
         RollingBallParams(radius=0)
 
 
-@pytest.mark.parametrize("threshold", [0.0, 0.5, 1.0])
-def test_collector_threshold_in_range(threshold: float) -> None:
-    assert AnalysisParams(threshold).collector_threshold == threshold
-
-
-@pytest.mark.parametrize("threshold", [-0.1, 1.1])
-def test_collector_threshold_out_of_range(threshold: float) -> None:
-    with pytest.raises(ParamsError):
-        AnalysisParams(threshold)
-
-
 def test_asdict_gives_a_plain_record() -> None:
     # The Phase 3 detection record stores params this way (D-021).
     record = dataclasses.asdict(HCTParams(ranges=(HCTRange(5, 25),)))
@@ -165,7 +153,6 @@ def test_values_are_stored_as_plain_python_types() -> None:
         clahe=ClaheParams(np.float64(2.0), np.array([8, 8])),
         rolling_ball=RollingBallParams(np.int64(50), np.bool_(False)),
     )
-    analysis = AnalysisParams(np.float64(0.5))
 
     assert [type(v) for v in dataclasses.astuple(hct)] == [
         int,
@@ -180,7 +167,6 @@ def test_values_are_stored_as_plain_python_types() -> None:
     assert [type(v) for v in pre.clahe.tile_grid] == [int, int]
     assert type(pre.rolling_ball.radius) is float
     assert type(pre.rolling_ball.light_background) is bool
-    assert type(analysis.collector_threshold) is float
     yaml.safe_dump(dataclasses.asdict(hct))
     yaml.safe_dump(dataclasses.asdict(pre))
 
