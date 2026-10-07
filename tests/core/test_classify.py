@@ -4,8 +4,9 @@ Rule under test: an agglomerate is a collector when the diameter ratio
 of its second largest to its largest particle is ``<= threshold``. The
 largest particle is then the collector and all others attached2coll;
 otherwise all members are similar. A single particle is separate.
-Cases in ``support.synthetic.cases.CLASSIFICATION``; Phase 2 turns this
-file into the unit tests of ``agglpy.classify``.
+Cases in ``support.synthetic.cases.CLASSIFICATION``. The library has no
+classification (D-042): for the core, the rule is the recipe in
+``examples/agglomerate_types.py`` applied to ``size_ratio``.
 """
 
 from pathlib import Path

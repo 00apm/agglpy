@@ -97,13 +97,16 @@ ignore = [
 "tests/legacy/*" = ["N"]
 # The golden runner is rewritten on the new pipeline in 2.8.
 "tests/golden/test_golden.py" = ["N"]
+# Recipes are scripts for users: they print their results.
+"examples/*" = ["T20"]
 
 [tool.ruff.lint.pycodestyle]
 max-doc-length = 72         # PEP 8: 72 for comments and docstrings (W505)
 
 [tool.ruff.lint.isort]
-# test helpers (tests/support), imported via pytest's pythonpath
-known-local-folder = ["support"]
+# test helpers (tests/support) and recipes (examples/), imported via
+# pytest's pythonpath
+known-local-folder = ["support", "examples"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
@@ -111,9 +114,10 @@ convention = "google"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # Test files live in subfolders without __init__.py (tests/README.md);
-# helpers are imported from tests/ as `support.…`.
+# helpers are imported from tests/ as `support.…`, recipes from the repo
+# root as `examples.…`.
 addopts = ["--import-mode=importlib"]
-pythonpath = ["tests"]
+pythonpath = ["tests", "."]
 markers = [
     "slow: runs on real images, takes seconds (deselect with -m 'not slow')",
 ]
