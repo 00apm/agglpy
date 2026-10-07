@@ -145,8 +145,8 @@ include_external_packages = true
 name = "New code never imports the legacy modules (D-019)"
 type = "forbidden"
 source_modules = [
+    "agglpy.core",
     "agglpy.errors",
-    "agglpy.group",
     "agglpy.logger",
     "agglpy.params",
     "agglpy.tables",
@@ -157,8 +157,8 @@ forbidden_modules = ["agglpy._legacy"]
 name = "Foundation and core never import plotting or progress bars (rules 1, 4)"
 type = "forbidden"
 source_modules = [
+    "agglpy.core",
     "agglpy.errors",
-    "agglpy.group",
     "agglpy.logger",
     "agglpy.params",
     "agglpy.tables",

@@ -1,4 +1,4 @@
-"""Run synthetic cases through the new core (``agglpy.group``, …).
+"""Run synthetic cases through the new core (``agglpy.core.group``, …).
 
 The core works in px, so a case goes in as it is. The adapter fills
 only what the core can do so far (``adapters.SUPPORTED_CHECKS``) and
@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from agglpy.group import group
+from agglpy.core.group import group
 
 from .cases import Case
 from .result import Result
