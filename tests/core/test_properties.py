@@ -195,3 +195,29 @@ def test_empty_table_has_every_column_and_dtype():
         "member_count_with_hidden",
     ):
         assert empty[name].dtype == np.int64
+
+
+def test_one_circle_centre_of_mass_and_rg():
+    p = _one([3], [4], [10])
+    assert (p["x_com"], p["y_com"]) == (3, 4)
+    assert p["rg"] == pytest.approx(math.sqrt(3 / 5) * 10, rel=1e-12)
+
+
+def test_two_equal_circles_centre_of_mass_and_rg():
+    p = _one([0, 20], [0, 0], [10, 10])
+    assert (p["x_com"], p["y_com"]) == (10, 0)
+    # each sphere: d = 10 from the CoM, plus its own (3/5) r²
+    assert p["rg"] == pytest.approx(math.sqrt(100 + 60), rel=1e-12)
+
+
+def test_example_centre_of_mass_and_rg():
+    p = _one(*ABC)
+    xc = (14 * 64 + 2 * 8) / 1072  # masses r³ = 1000, 64, 8
+    assert p["x_com"] == pytest.approx(xc, rel=1e-12)
+    assert p["y_com"] == 0
+    inertia = (
+        1000 * (xc**2 + 3 / 5 * 100)
+        + 64 * ((14 - xc) ** 2 + 3 / 5 * 16)
+        + 8 * ((2 - xc) ** 2 + 3 / 5 * 4)
+    )
+    assert p["rg"] == pytest.approx(math.sqrt(inertia / 1072), rel=1e-12)

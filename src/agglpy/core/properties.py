@@ -62,6 +62,10 @@ def agglomerate_properties(table: pd.DataFrame) -> pd.DataFrame:
     - ``volume_with_hidden``, ``D_with_hidden``,
       ``member_count_with_hidden``: enclosed members counted twice,
       for the particles hidden on the far side (methodology, section 7).
+    - ``x_com``, ``y_com``: volume-weighted centre of mass.
+    - ``rg``: radius of gyration of the member spheres with their
+      heights unknown, so a lower bound of the 3D value; exact for one
+      sphere (D-040).
 
     Args:
         table: The particle table from ``find_agglomerates``; only
@@ -76,6 +80,8 @@ def agglomerate_properties(table: pd.DataFrame) -> pd.DataFrame:
         ParticleTableError: If a needed column is missing.
     """
     _require(table, _AGGLOMERATE_INPUT)
+    x = table["x"].to_numpy(dtype=np.float64)
+    y = table["y"].to_numpy(dtype=np.float64)
     r = table["r"].to_numpy(dtype=np.float64)
     enclosed = table["enclosed"].to_numpy(dtype=bool)
     # Renumber the agglomerates 0 ... k-1 ([7, 3, 7] -> ids [3, 7],
@@ -88,6 +94,8 @@ def agglomerate_properties(table: pd.DataFrame) -> pd.DataFrame:
 
     columns: dict[str, NDArray[np.generic]] = {"agglomerate_id": ids}
     columns.update(_sizes(groups, r, enclosed))
+    x_com, y_com, rg = _centre_of_mass(groups, x, y, r)
+    columns.update(x_com=x_com, y_com=y_com, rg=rg)
     return pd.DataFrame(columns)
 
 
@@ -166,6 +174,25 @@ def _sizes(
         "D_with_hidden": _equivalent_diameter(with_hidden),
         "member_count_with_hidden": count + enclosed_count,
     }
+
+
+def _centre_of_mass(
+    groups: _Groups,
+    x: NDArray[np.float64],
+    y: NDArray[np.float64],
+    r: NDArray[np.float64],
+) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
+    # Mass ∝ volume ∝ r³ (D-040).
+    mass = r**3
+    total = groups.sum(mass)
+    x_com = groups.sum(mass * x) / total
+    y_com = groups.sum(mass * y) / total
+    dx = x - x_com[groups.codes]
+    dy = y - y_com[groups.codes]
+    # Each sphere adds its own (3/5)r² about its centre; the unknown
+    # height offsets would add more, so this is a lower bound.
+    inertia = groups.sum(mass * (dx * dx + dy * dy + 3 / 5 * r * r))
+    return x_com, y_com, np.sqrt(inertia / total)
 
 
 def _sphere_volume(r: NDArray[np.float64]) -> NDArray[np.float64]:
