@@ -13,7 +13,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from agglpy.core.agglomerates import find_agglomerates
+from agglpy.core import properties
+from agglpy.core.agglomerates import find_agglomerates, find_contacts
 from agglpy.core.properties import (
     DIMENSIONS,
     agglomerate_properties,
@@ -346,6 +347,32 @@ def test_nearly_tangent_circles_area():
     # must not give NaN or a jump.
     p = _one([0, 14 - 1e-9], [0, 0], [10, 4])
     assert p["area"] == pytest.approx(116 * math.pi, rel=1e-9)
+
+
+@pytest.mark.parametrize("gap", [0.0, 1e-9])
+def test_nearly_internally_tangent_circle_area(gap: float):
+    # B (r = 4) touches A's outline from inside (gap 0: enclosed) or
+    # pokes 1e-9 px out of it: no NaN, no jump from A's area.
+    p = _one([0, 6 + gap], [0, 0], [10, 4])
+    assert p["area"] == pytest.approx(100 * math.pi, rel=1e-9)
+
+
+def test_contact_search_gets_image_positions(monkeypatch):
+    # Review Focus 1: centres shifted to each agglomerate's centre of
+    # mass would pile every agglomerate onto the origin. The area stays
+    # right but the contact search gets ~1000x slower, so only a check
+    # of the call itself catches it.
+    seen = []
+
+    def spy(particles: pd.DataFrame):
+        seen.append(particles[["x", "y"]].to_numpy().copy())
+        return find_contacts(particles)
+
+    monkeypatch.setattr(properties, "find_contacts", spy)
+    table = _particles([0, 14, 500], [0, 0, 300], [10, 4, 5])
+    agglomerate_properties(table)
+    assert len(seen) == 1
+    np.testing.assert_array_equal(seen[0], table[["x", "y"]].to_numpy())
 
 
 def _pixel_area(x, y, r, h: float) -> float:
