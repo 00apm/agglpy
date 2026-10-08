@@ -27,6 +27,7 @@ from agglpy.core._images import (
     numbers,
     require,
 )
+from agglpy.core.metrics import values_across_images
 from agglpy.errors import ParamsError, TableError, ValuesNotCountedWarning
 from agglpy.params import _integer, _number, _positive
 
@@ -34,6 +35,7 @@ from agglpy.params import _integer, _number, _positive
 # the pixel size misses round edges by an ulp (3 * 0.1 = 0.300...04).
 _EDGE_TOL = 1e-9
 _MAX_LISTED = 10
+_CLASS_COLUMNS = ("left", "mid", "right", "width")
 
 
 def size_classes(
@@ -208,6 +210,46 @@ def distribution(
     )
     labels = groups.labels.iloc[out.pop("_group")].reset_index(drop=True)
     return pd.concat([labels, out], axis=1)
+
+
+def distribution_across_images(
+    images: pd.DataFrame,
+    table: pd.DataFrame,
+    column: str,
+    edges: ArrayLike,
+    by: str | Iterable[str] | None = None,
+    *,
+    closed: str = "right",
+    weights: str | Iterable[str] = (),
+    confidence: float = 0.95,
+) -> pd.DataFrame:
+    """The fraction of each class per image, then mean ± CI over images.
+
+    ``distribution(..., by="image")``, then ``values_across_images``
+    with the class and basis as keys. An image without counted values
+    has NaN fractions: it is left out of the means and of ``n``.
+
+    Args:
+        images, table, column, edges, by, closed, weights: As
+            ``distribution``.
+        confidence: Level of the confidence interval.
+
+    Returns:
+        A long table: the ``by`` columns, ``left, mid, right, width``,
+        ``basis``, ``metric`` (``"fraction"``), ``mean``, ``std``,
+        ``n``, ``ci_low``, ``ci_high``.
+    """
+    per_image = distribution(
+        images, table, column, edges, "image", closed=closed, weights=weights
+    )
+    keys = [*_CLASS_COLUMNS, "basis"]
+    return values_across_images(
+        images,
+        per_image[["image", *keys, "fraction"]],
+        by,
+        keys=keys,
+        confidence=confidence,
+    )
 
 
 def _classes_per_step(
