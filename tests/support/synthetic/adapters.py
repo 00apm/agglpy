@@ -18,7 +18,7 @@ import pytest
 from agglpy.errors import ImgDataSetBufferError
 
 from .cases import Case
-from .core_adapter import run_core
+from .core_adapter import core_distribution, core_size_classes, run_core
 from .legacy_adapter import (
     legacy_distribution,
     legacy_size_classes,
@@ -45,7 +45,7 @@ CHECKS: dict[str, str] = {
 # What each implementation can do so far; tests skip the other checks.
 SUPPORTED_CHECKS: dict[str, frozenset[str]] = {
     "legacy": frozenset(CHECKS),
-    "core": frozenset({"grouping", "enclosed", "classify", "properties"}),
+    "core": frozenset(CHECKS),
 }
 
 
@@ -80,6 +80,7 @@ class StatsFunctions:
 # them skips the size_classes and distribution checks.
 STATS: dict[str, StatsFunctions] = {
     "legacy": StatsFunctions(legacy_size_classes, legacy_distribution),
+    "core": StatsFunctions(core_size_classes, core_distribution),
 }
 
 # Realistic SEM pixel size in metres. Runs at 1.0 keep coordinates in px.

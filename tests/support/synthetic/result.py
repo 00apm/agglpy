@@ -15,8 +15,7 @@ class Result:
     """Outcome of running one case through an implementation.
 
     An adapter fills only what its supported checks read
-    (``adapters.SUPPORTED_CHECKS``); the core adapter leaves
-    ``summary`` empty until 2.5.
+    (``adapters.SUPPORTED_CHECKS``).
 
     Attributes:
         particles: One row per circle, indexed by the case key. Columns:
@@ -28,7 +27,7 @@ class Result:
             ``cases.PROPERTIES`` (``volume``, ``D``, ``member_count``,
             ``D_mean``, ``D_std``, ``enclosed_count`` and the
             ``*_with_hidden`` values).
-        summary: Per-image summary metrics (names in
+        summary: Per-image summary metrics (names as in
             ``cases.SUMMARY``; diameters in px).
     """
 
