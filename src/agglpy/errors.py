@@ -81,9 +81,25 @@ class ParamsError(AgglpyError, ValueError):
     """Raised when a parameter value is invalid."""
 
 
-class ParticleTableError(AgglpyError, ValueError):
+class TableError(AgglpyError, ValueError):
+    """Raised when a table lacks what a function needs from it."""
+
+
+class ParticleTableError(TableError):
     """Raised when a particle table does not match its schema."""
 
 
 class DuplicateParticlesWarning(UserWarning):
     """Warns about near-identical circles: a detection mistake."""
+
+
+class ValuesNotCountedWarning(UserWarning):
+    """Warns that a distribution left values out of its classes.
+
+    The values lie outside the size classes or are NaN; the fractions
+    refer to the counted values only.
+    """
+
+
+class MissingImagesWarning(UserWarning):
+    """Warns that images of the images table have no per-image value."""
