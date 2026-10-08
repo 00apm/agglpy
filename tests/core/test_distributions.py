@@ -9,6 +9,9 @@ plan.
 import numpy as np
 import pytest
 
+from agglpy.core.distributions import size_classes
+from agglpy.errors import ParamsError
+
 from support.synthetic.adapters import (
     STATS,
     expect_known_failure,
@@ -116,3 +119,41 @@ def test_distribution_case(request: pytest.FixtureRequest, adapter: str):
         assert list(dist[column]) == pytest.approx(
             values_expected, rel=RTOL, abs=1e-15
         ), column
+
+
+# ---------------------------------------------------------------------
+# Unit tests of agglpy.core.distributions (one run, no adapter)
+# ---------------------------------------------------------------------
+
+
+def test_log_step_is_a_factor():
+    edges = size_classes(0.1, 0.8, step=2, scale="log")
+    assert edges.tolist() == pytest.approx([0.1, 0.2, 0.4, 0.8], rel=RTOL)
+    assert (edges[0], edges[-1]) == (0.1, 0.8)  # outer edges exact
+
+
+def test_size_classes_are_float_with_exact_ends():
+    edges = size_classes(0, 1, step=0.1)
+    assert edges.dtype == np.float64
+    assert len(edges) == 11
+    assert (edges[0], edges[-1]) == (0, 1)
+
+
+@pytest.mark.parametrize(
+    ("args", "kwargs", "message"),
+    [
+        ((0, 10), {"step": 3}, "does not divide"),
+        ((0, 10), {}, "exactly one"),
+        ((0, 10), {"count": 2, "step": 5}, "exactly one"),
+        ((10, 0), {"count": 2}, "end must be > start"),
+        ((0, 10), {"count": 0}, "count"),
+        ((0, 10), {"count": 2.5}, "count"),
+        ((0, 10), {"step": -1}, "step"),
+        ((1, 10), {"step": 0.5, "scale": "log"}, "factor"),
+        ((0, 10), {"count": 2, "scale": "log"}, "start > 0"),
+        ((1, 10), {"count": 2, "scale": "ln"}, "scale"),
+    ],
+)
+def test_size_classes_reject_bad_arguments(args, kwargs, message):
+    with pytest.raises(ParamsError, match=message):
+        size_classes(*args, **kwargs)
