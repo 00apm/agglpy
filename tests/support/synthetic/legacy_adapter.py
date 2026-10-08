@@ -5,8 +5,9 @@ classes. It is deleted together with them (roadmap 2.9).
 
 The case goes in the way real data does: as an agglpy particle CSV
 next to an image file, loaded by ``ImgDataSet(auto_load=True)``. The
-binning functions are called directly (``legacy_psd_bins``,
-``legacy_distribution``).
+binning functions are called directly (``legacy_size_classes``,
+``legacy_distribution``). Output columns and summary names follow the
+new core; the values are what the legacy code computes.
 """
 
 from pathlib import Path
@@ -103,7 +104,8 @@ def run_legacy(
     # x / 0 -> inf and 0 / 0 -> NaN are intended (cases.SUMMARY); numpy
     # would warn about them in every case without agglomerates
     with np.errstate(divide="ignore", invalid="ignore"):
-        summary = ds.get_summary().iloc[0].to_dict()
+        legacy_summary = ds.get_summary().iloc[0].to_dict()
+    summary = {new: legacy_summary[old] for old, new in _SUMMARY_NAMES.items()}
     for name in _SUMMARY_DIAMETERS:
         summary[name] /= px
     return Result(
@@ -111,9 +113,32 @@ def run_legacy(
     )
 
 
+# Legacy summary name -> core name, for the metrics both compute. ER
+# used the separate (type) singles, which are all singles in these
+# cases, so it equals agglomerated_fraction = 1 - N_pp1 / N_primary.
+_SUMMARY_NAMES = {
+    "N_primary_particle": "N_primary",
+    "N_aerosol_particle": "N_aerosol",
+    "N_pp1": "N_pp1",
+    "N_ppA": "N_ppA",
+    "N_agl": "N_aggl",
+    "Ra": "Ra",
+    "ER": "agglomerated_fraction",
+    "n_ppA": "n_ppA",
+    "n_ppP": "n_ppP",
+    "particle_Dmean": "particle_D_mean",
+    "particle_Dstd": "particle_D_std",
+    "particle_D10": "particle_D10",
+    "particle_D50": "particle_D50",
+    "particle_D90": "particle_D90",
+    "particle_SMD": "particle_SMD",
+    "agl_member_count_std": "aerosol_member_count_std",
+}
+
+
 _SUMMARY_DIAMETERS = (
-    "particle_Dmean",
-    "particle_Dstd",
+    "particle_D_mean",
+    "particle_D_std",
     "particle_D10",
     "particle_D50",
     "particle_D90",
@@ -121,19 +146,28 @@ _SUMMARY_DIAMETERS = (
 )
 
 
-def legacy_psd_bins(
+def legacy_size_classes(
     start: float,
     end: float,
-    periods: float,
-    log: bool = False,
-    step: bool = False,
+    *,
+    count: int | None = None,
+    step: float | None = None,
+    scale: str = "linear",
 ) -> np.ndarray:
-    """Bin edges from ``agglpy.manager.PSD_space``."""
-    return PSD_space(start=start, end=end, periods=periods, log=log, step=step)
+    """Class edges from ``PSD_space``, called the core's way.
+
+    ``PSD_space`` takes ``periods`` (a count, a step, or for log edges
+    a step in decades) with flags; a core log step is a factor.
+    """
+    log = scale == "log"
+    if step is None:
+        return PSD_space(start=start, end=end, periods=count, log=log)
+    periods = np.log10(step) if log else step
+    return PSD_space(start=start, end=end, periods=periods, log=log, step=True)
 
 
 def legacy_distribution(values: list[float], bins: np.ndarray) -> pd.DataFrame:
-    """Binned distribution from ``Manager.generate_PSD``.
+    """Number distribution from ``Manager.generate_PSD``.
 
     ``generate_PSD`` only reads ``batch_res_pDF.D`` and the bins, so a
     Manager is created without its constructor (which needs a working
@@ -151,13 +185,9 @@ def legacy_distribution(values: list[float], bins: np.ndarray) -> pd.DataFrame:
             "right": psd["right"],
             "mid": psd["mid"],
             "width": psd["width"],
-            "count": psd["counts"],
-            "cumulative": psd["cummulative"],
-            "count_norm": psd["counts_norm"],
-            "cumulative_norm": psd["cummulative_norm"],
-            "volume": psd["volume"],
-            "volume_norm": psd["volume_norm"],
-            "volume_cumulative_norm": psd["volume_cummulative_norm"],
+            "amount": psd["counts"],
+            "fraction": psd["counts_norm"],
+            "cumulative": psd["cummulative_norm"],
         }
     ).reset_index(drop=True)
 
