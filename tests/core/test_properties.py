@@ -19,8 +19,13 @@ from agglpy.core.properties import (
     DIMENSIONS,
     agglomerate_properties,
     particle_properties,
+    to_physical,
 )
-from agglpy.errors import DuplicateParticlesWarning, ParticleTableError
+from agglpy.errors import (
+    DuplicateParticlesWarning,
+    ParamsError,
+    ParticleTableError,
+)
 from agglpy.tables import make_particles
 
 from support.synthetic.adapters import (
@@ -497,3 +502,59 @@ def test_dimensions_cover_exactly_the_property_columns():
 def test_dimensions_are_read_only():
     with pytest.raises(TypeError):
         DIMENSIONS["D"] = 2  # type: ignore[index]
+
+
+def test_to_physical_scales_particle_columns():
+    table = particle_properties(_particles(*ABC))
+    out = to_physical(table, 0.5)
+    for column, power in [
+        ("x", 1),
+        ("y", 1),
+        ("r", 1),
+        ("D", 1),
+        ("area", 2),
+        ("volume", 3),
+        ("surface", 2),
+    ]:
+        pd.testing.assert_series_equal(out[column], table[column] * 0.5**power)
+    for column in ("id", "source", "agglomerate_id", "enclosed"):
+        pd.testing.assert_series_equal(out[column], table[column])
+
+
+def test_to_physical_scales_agglomerate_columns_by_dimensions():
+    table = agglomerate_properties(_particles(*ABC))
+    out = to_physical(table, 0.5)
+    for column, power in DIMENSIONS.items():
+        expected = table[column] * 0.5**power if power else table[column]
+        # counts and ratios (power 0) keep their values and dtypes
+        pd.testing.assert_series_equal(out[column], expected)
+    pd.testing.assert_series_equal(
+        out["agglomerate_id"], table["agglomerate_id"]
+    )
+
+
+def test_to_physical_keeps_nan_index_extra_columns_and_input():
+    table = agglomerate_properties(_particles([0, 100], [0, 0], [1, 2]))
+    table.index = [7, 3]
+    table["note"] = ["a", "b"]
+    before = table.copy()
+    out = to_physical(table, 2.0)
+    pd.testing.assert_frame_equal(table, before)  # input untouched
+    assert list(out.index) == [7, 3]
+    assert list(out.columns) == list(table.columns)
+    assert out["D_std"].isna().all()  # one member each: NaN stays NaN
+    assert out["note"].tolist() == ["a", "b"]
+
+
+@pytest.mark.parametrize(
+    "pixel_size", [0, -1.0, math.nan, math.inf, "1", True]
+)
+def test_to_physical_rejects_bad_pixel_size(pixel_size):
+    table = particle_properties(_particles([0], [0], [1]))
+    with pytest.raises(ParamsError, match="pixel_size"):
+        to_physical(table, pixel_size)
+
+
+def test_to_physical_rejects_text_in_a_converted_column():
+    with pytest.raises(ParticleTableError, match="'D'"):
+        to_physical(pd.DataFrame({"D": ["1 um"]}), 2.0)

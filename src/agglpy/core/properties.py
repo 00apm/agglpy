@@ -11,8 +11,9 @@ everywhere: they count in every sum, count and statistic; only the
 ``*_with_hidden`` values count them a second time
 (``docs/methodology.md``, section 7).
 
-``DIMENSIONS`` gives the length exponent of every property column, for
-the one conversion from px to physical units.
+``DIMENSIONS`` gives the length exponent of every property column;
+``to_physical`` uses it for the one conversion from px to physical
+units.
 """
 
 from types import MappingProxyType
@@ -23,6 +24,7 @@ from numpy.typing import NDArray
 
 from agglpy.core.agglomerates import find_contacts
 from agglpy.errors import ParticleTableError
+from agglpy.params import _positive
 
 # Length exponent of each property column: 0 count or ratio, 1 length
 # (px), 2 area (px²), 3 volume (px³). D, area and volume mean the same
@@ -51,6 +53,11 @@ DIMENSIONS: MappingProxyType[str, int] = MappingProxyType(
         "D_feret_y": 1,
         "D_feret_max": 1,
     }
+)
+
+# The particle table's own geometry, converted like the properties.
+_GEOMETRY: MappingProxyType[str, int] = MappingProxyType(
+    {"x": 1, "y": 1, "r": 1}
 )
 
 _AGGLOMERATE_INPUT = ("x", "y", "r", "agglomerate_id", "enclosed")
@@ -170,6 +177,41 @@ def agglomerate_properties(table: pd.DataFrame) -> pd.DataFrame:
         D_feret_max=_feret_max(groups, x, y, r),
     )
     return pd.DataFrame(columns)
+
+
+def to_physical(table: pd.DataFrame, pixel_size: float) -> pd.DataFrame:
+    """Convert a particle or agglomerate table from px to physical units.
+
+    Each built-in column in the table is multiplied by ``pixel_size``
+    to the power of its dimension: ``x, y, r`` and the lengths of
+    ``DIMENSIONS`` by p, areas by p², volumes by p³. Counts, ratios and
+    every other column are left as they are.
+
+    Convert each image with its own pixel size before stacking the
+    tables of several images: metrics and distributions assume one
+    unit for all rows.
+
+    Args:
+        table: The particle table or the agglomerate table of one
+            image, in px.
+        pixel_size: The length of one pixel in the unit wanted, e.g.
+            0.0025 for µm when one pixel is 2.5 nm.
+
+    Returns:
+        A converted copy; columns, rows and index are kept. Converting
+        a table twice scales it twice.
+
+    Raises:
+        ParamsError: If ``pixel_size`` is not a finite number > 0.
+        ParticleTableError: If a column to convert is not numeric.
+    """
+    p = _positive("pixel_size", pixel_size)
+    out = table.copy()
+    for column, power in {**_GEOMETRY, **DIMENSIONS}.items():
+        if power and column in out.columns:
+            # NaN stays NaN (D_std of a single member).
+            out[column] = _numbers(table, column) * p**power
+    return out
 
 
 class _Groups:
@@ -490,14 +532,18 @@ def _require(table: pd.DataFrame, columns: tuple[str, ...]) -> None:
         raise ParticleTableError(f"missing columns: {missing}")
 
 
-def _finite(table: pd.DataFrame, column: str) -> NDArray[np.float64]:
+def _numbers(table: pd.DataFrame, column: str) -> NDArray[np.float64]:
     try:
         values = pd.to_numeric(table[column], errors="raise")
     except (ValueError, TypeError) as exc:
         raise ParticleTableError(
             f"column {column!r} must be numeric: {exc}"
         ) from exc
-    array = values.to_numpy(dtype=np.float64, na_value=np.nan)
+    return values.to_numpy(dtype=np.float64, na_value=np.nan)
+
+
+def _finite(table: pd.DataFrame, column: str) -> NDArray[np.float64]:
+    array = _numbers(table, column)
     if not np.isfinite(array).all():
         raise ParticleTableError(f"column {column!r} must be finite")
     return array
