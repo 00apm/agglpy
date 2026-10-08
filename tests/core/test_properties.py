@@ -80,6 +80,10 @@ def test_particle_properties_values():
     assert out["D"].tolist() == [2, 5]
     assert out["area"].tolist() == [math.pi, math.pi * 2.5**2]
     assert out["volume"].tolist() == [sphere(1), sphere(2.5)]
+    # sphere surface pi * D², not the projected area
+    assert out["surface"].tolist() == pytest.approx(
+        [math.pi * 4, math.pi * 25], rel=1e-15
+    )
 
 
 def test_particle_properties_keeps_columns_rows_and_index():
@@ -89,7 +93,13 @@ def test_particle_properties_keeps_columns_rows_and_index():
     before = table.copy()
     out = particle_properties(table)
     pd.testing.assert_frame_equal(table, before)  # input untouched
-    assert list(out.columns) == [*table.columns, "D", "area", "volume"]
+    assert list(out.columns) == [
+        *table.columns,
+        "D",
+        "area",
+        "volume",
+        "surface",
+    ]
     assert list(out.index) == [30, 10, 20]
     pd.testing.assert_frame_equal(out[table.columns], table)
 
@@ -151,6 +161,20 @@ def test_example_sizes():
     assert p["volume_with_hidden"] == pytest.approx(p["volume"] + sphere(2))
     assert p["volume_with_hidden"] == pytest.approx(4523.9, abs=0.1)
     assert p["D_with_hidden"] == pytest.approx(2 * 1080 ** (1 / 3))
+
+
+def test_example_surface():
+    # 4 pi r² per member: 4 pi (100 + 16 + 4) = 480 pi; the enclosed
+    # C (r = 2) counts once more with its hidden twin: + 16 pi
+    p = _one(*ABC)
+    assert p["surface"] == pytest.approx(480 * math.pi, rel=1e-15)
+    assert p["surface_with_hidden"] == pytest.approx(496 * math.pi, rel=1e-15)
+
+
+def test_one_circle_surface():
+    p = _one([3], [4], [10])
+    assert p["surface"] == pytest.approx(400 * math.pi, rel=1e-15)
+    assert p["surface_with_hidden"] == p["surface"]
 
 
 def test_equal_members_have_zero_std():

@@ -33,6 +33,7 @@ DIMENSIONS: MappingProxyType[str, int] = MappingProxyType(
         "enclosed_count": 0,
         "volume": 3,
         "D": 1,
+        "surface": 2,
         "D_mean": 1,
         "D_std": 1,
         "D_largest": 1,
@@ -40,6 +41,7 @@ DIMENSIONS: MappingProxyType[str, int] = MappingProxyType(
         "volume_with_hidden": 3,
         "D_with_hidden": 1,
         "member_count_with_hidden": 0,
+        "surface_with_hidden": 2,
         "x_com": 1,
         "y_com": 1,
         "rg": 1,
@@ -66,14 +68,15 @@ _DIRECTIONS = 64
 def particle_properties(table: pd.DataFrame) -> pd.DataFrame:
     """Add each particle's size, as a sphere, to the particle table.
 
-    Adds ``D = 2r`` (px), ``area = πr²`` (px², the circle) and
-    ``volume = (4/3)πr³`` (px³, the sphere).
+    Adds ``D = 2r`` (px), ``area = πr²`` (px², the circle),
+    ``volume = (4/3)πr³`` (px³, the sphere) and ``surface = πD²``
+    (px², the sphere's surface, not the projected ``area``).
 
     Args:
         table: A particle table with at least the column ``r``.
 
     Returns:
-        A copy with the three columns, replacing any from an earlier
+        A copy with the four columns, replacing any from an earlier
         run; every other column, the row order and the index are kept.
 
     Raises:
@@ -86,6 +89,7 @@ def particle_properties(table: pd.DataFrame) -> pd.DataFrame:
     out["D"] = 2 * r
     out["area"] = np.pi * r**2
     out["volume"] = _sphere_volume(r)
+    out["surface"] = _sphere_surface(r)
     return out
 
 
@@ -98,13 +102,17 @@ def agglomerate_properties(table: pd.DataFrame) -> pd.DataFrame:
     - ``member_count``, ``enclosed_count``: members, enclosed members.
     - ``volume``: sum of the member sphere volumes; ``D``: diameter of
       one sphere with that volume (the agglomerate's size).
+    - ``surface``: sum of the member sphere surfaces. Spheres touching
+      in one point lose no surface (the model of ``volume``), so for
+      sintered or fused particles this is an upper bound.
     - ``D_mean``, ``D_std``: mean and sample std (n - 1) of the member
       diameters; ``D_std`` is NaN for one member.
     - ``D_largest``: largest member diameter; ``size_ratio``: second
       largest / largest member diameter, NaN for one member.
     - ``volume_with_hidden``, ``D_with_hidden``,
-      ``member_count_with_hidden``: enclosed members counted twice,
-      for the particles hidden on the far side (methodology, section 7).
+      ``member_count_with_hidden``, ``surface_with_hidden``: enclosed
+      members counted twice, for the particles hidden on the far side
+      (methodology, section 7).
     - ``x_com``, ``y_com``: volume-weighted centre of mass.
     - ``rg``: radius of gyration of the member spheres with their
       heights unknown, so a lower bound of the 3D value; exact for one
@@ -215,6 +223,9 @@ def _sizes(
     # Each enclosed member counts once more, for its twin hidden on
     # the far side (methodology, section 7).
     with_hidden = volume + groups.sum(np.where(enclosed, sphere, 0.0))
+    shell = _sphere_surface(r)
+    surface = groups.sum(shell)
+    surface_hidden = surface + groups.sum(np.where(enclosed, shell, 0.0))
 
     # Two passes (mean, then deviations): equal diameters give exactly 0.
     d_mean = groups.sum(d) / count
@@ -239,6 +250,7 @@ def _sizes(
         "enclosed_count": enclosed_count,
         "volume": volume,
         "D": _equivalent_diameter(volume),
+        "surface": surface,
         "D_mean": d_mean,
         "D_std": np.sqrt(variance),
         "D_largest": d_largest,
@@ -246,6 +258,7 @@ def _sizes(
         "volume_with_hidden": with_hidden,
         "D_with_hidden": _equivalent_diameter(with_hidden),
         "member_count_with_hidden": count + enclosed_count,
+        "surface_with_hidden": surface_hidden,
     }
 
 
@@ -457,6 +470,10 @@ def _pair_max_rows(
 
 def _sphere_volume(r: NDArray[np.float64]) -> NDArray[np.float64]:
     return 4 / 3 * np.pi * r**3
+
+
+def _sphere_surface(r: NDArray[np.float64]) -> NDArray[np.float64]:
+    return 4 * np.pi * r**2
 
 
 def _equivalent_diameter(
