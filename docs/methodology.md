@@ -115,15 +115,35 @@ All agglomerate properties describe the circle model: each primary particle is a
 
 **Size.** $D$ is the volume-equivalent diameter, $D = (6V/\pi)^{1/3}$ with $V$ the summed member volume; it is the basis of the agglomerate size distribution. `D_mean`, `D_std`, `D_largest` and `size_ratio` (second largest / largest member diameter) describe the members.
 
+**Surface.** `surface` is the summed sphere surface of the members, $\pi D^2$ each. Spheres touching in one point lose no surface (the model of the volume), so for sintered or fused particles it is an upper bound. `surface_with_hidden` counts enclosed members twice (section 7).
+
 **Projected area.** `area` is the exact area of the union of the member circles: overlaps count once, an enclosed particle adds nothing. It is computed geometrically (the uncovered arcs of each circle, Green's theorem), not on a pixel grid and not on the image, so it describes the circle model, not the agglomerate's outline as the image shows it. $D_{pa} = \sqrt{4A/\pi}$ is the diameter of the circle with the same area.
 
 **Feret diameters.** `D_feret_x` and `D_feret_y` are the widths along the image axes, exact for circles; over many randomly oriented agglomerates a fixed direction gives the classical statistical diameter (Walton, 1948). `D_feret_max` is the largest width in any direction, $\max (d_{ij} + r_i + r_j)$ over member pairs.
 
 **Centre of mass and radius of gyration** (`x_com`, `y_com`, `rg`): members weighted by volume. The centre of mass is the exact projection of the 3D one; `rg` leaves out the unknown height differences, so it is a lower bound of the 3D radius of gyration (exact for a single sphere).
 
+## 9. Population metrics and size distributions
+
+Metrics describe a group of images: one image, a user group (a column of the images table, e.g. a condition) or all images. An image without particles is a result: it keeps its row with zero counts.
+
+**Pooled.** `summary` pools the images of a group: counts are summed, ratios are computed from the summed counts and size descriptors from the pooled particles or agglomerates. Ratios are never means of per-image ratios: two images with $R_a$ = 1/2 (2 particles) and 2/20 (20 particles) pool to 3/22 = 0.136, while the mean of the ratios, 0.30, overstates it.
+
+**Across images.** `summary_across_images` computes each metric per image, then the mean, the sample standard deviation $s$, the number of images $n$ with a value and the confidence interval $\bar{x} \pm t_{(1+c)/2,\,n-1}\, s/\sqrt{n}$ (level $c$, 0.95 by default). Each image weighs equally, so this describes the typical image; with $n = 1$ the spread is undefined (NaN). `values_across_images` does the same for any per-image value.
+
+**Counts and ratios.** $N_{primary}$ primary particles, $N_{aerosol}$ aerosol particles (agglomerates and single particles), $N_{pp1}$ single particles, $N_{ppA} = N_{primary} - N_{pp1}$, $N_{aggl} = N_{aerosol} - N_{pp1}$. The agglomeration ratio $R_a = N_{aggl}/N_{primary}$ is that of Gotoh et al. (1996), when no particle is lost or added between deposition and counting. The agglomerated fraction $1 - N_{pp1}/N_{primary}$ is the number fraction of primary particles bound in agglomerates (called ER in agglpy ≤ 0.4). $n_{ppA} = N_{ppA}/N_{aggl}$ and $n_{ppP} = N_{primary}/N_{aerosol}$ are the mean numbers of primary particles per agglomerate and per aerosol particle.
+
+**Per area.** With the analysed area of each image (field of view), `coverage` is the summed projected area of the agglomerates over the summed field of view (agglomerates never share area, so this is the exact union of all circles), and `N_*_per_area` are the counts per unit area. Circles crossing the image border count in full, so these values are biased high for large agglomerates on small images.
+
+**Size descriptors.** Number-based: mean, sample standard deviation and the quantiles D10, D50, D90 (linear interpolation between sorted values) of the particle diameter and of the agglomerate's volume-equivalent diameter (over all aerosol particles), and the Sauter mean diameter $\sum D^3 / \sum D^2$ of the particles. All metrics use the visible values only; the with-hidden values (section 7) stay properties.
+
+**Size distributions.** `distribution` counts any column over size classes $(a, b]$ (or $[a, b)$), the outer edge included. A value within $10^{-9}$ (relative) of an edge counts as on the edge, because a whole-pixel diameter times the pixel size misses round edges by one rounding step. Values outside the classes and missing values are not counted and are reported. Each class gives the amount (count, or the sum of a weight column such as the real particle volumes), the fraction, the cumulative fraction, the density (fraction / class width) and the log density, fraction / $\log_{10}(b/a)$ ($dN/d\log D$, ISO 9276-1).
+
+**Units.** Properties are computed in pixels; each image is converted to physical units with its own pixel size before images are pooled, so metrics and distributions always see one unit.
+
 ## Output
 
-Per-agglomerate and per-particle results feed into batch-level aggregation (`Manager.generate_pTable` / `generate_aglTable` / `generate_PSD`), producing particle-size-distribution (PSD) statistics binned over `settings.analysis.PSD_space`.
+Per-particle and per-agglomerate tables feed the population metrics and distributions of section 9 (`agglpy.core.metrics`, `agglpy.core.distributions`). agglpy 0.4 produced them in `Manager.generate_summary` and `generate_PSD` over `settings.analysis.PSD_space`.
 
 ## Implementation
 
@@ -132,4 +152,6 @@ agglpy is implemented in Python, built on OpenCV, NumPy, Pandas, and SciPy.
 
 ## References
 
-- Walton, W. H. (1948). Feret's statistical diameter as a measure of particle size. *Nature*, 162, 329–330.
+- Gotoh, K., Karube, K., Masuda, H., Banba, Y., 1996. High-efficiency removal of fine particles deposited on a solid surface. Advanced Powder Technology 7, 219–232.
+- ISO, 1998. ISO 9276-1:1998 Representation of results of particle size analysis — Part 1: Graphical representation. International Organization for Standardization, Geneva.
+- Walton, W.H., 1948. Feret's statistical diameter as a measure of particle size. Nature 162, 329–330.
