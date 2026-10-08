@@ -14,12 +14,14 @@ All metrics use the visible values only, never the ``*_with_hidden``
 properties (D-046).
 """
 
+import warnings
 from collections.abc import Iterable
 from types import MappingProxyType
 
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
+from scipy import stats
 
 from agglpy.core._images import (
     Grouping,
@@ -30,7 +32,8 @@ from agglpy.core._images import (
     numbers,
     require,
 )
-from agglpy.errors import ParamsError
+from agglpy.errors import MissingImagesWarning, ParamsError, TableError
+from agglpy.params import _number
 
 # Built-in metrics by family, in the column order of ``summary``.
 _FAMILIES: MappingProxyType[str, tuple[str, ...]] = MappingProxyType(
@@ -69,6 +72,7 @@ _FAMILIES: MappingProxyType[str, tuple[str, ...]] = MappingProxyType(
 
 
 _QUANTILES = [0.1, 0.5, 0.9]
+_MAX_LISTED = 10
 
 
 def summary(
@@ -194,6 +198,133 @@ def summary(
     return out
 
 
+def summary_across_images(
+    images: pd.DataFrame,
+    particles: pd.DataFrame,
+    agglomerates: pd.DataFrame,
+    by: str | Iterable[str] | None = None,
+    *,
+    metrics: str | Iterable[str] | None = None,
+    confidence: float = 0.95,
+) -> pd.DataFrame:
+    """The built-in metrics per image, then mean ± CI over the images.
+
+    ``summary(..., by="image")``, then ``values_across_images`` over
+    the groups of ``by``. Each image weighs equally: this describes the
+    typical image, not the pooled population (``summary``).
+
+    Args:
+        images, particles, agglomerates, by, metrics: As ``summary``.
+        confidence: Level of the confidence interval.
+
+    Returns:
+        A long table: the ``by`` columns, ``metric``, ``mean``, ``std``,
+        ``n``, ``ci_low``, ``ci_high``; one row per group and metric.
+    """
+    per_image = summary(
+        images, particles, agglomerates, by="image", metrics=metrics
+    ).drop(columns="n_images")
+    return values_across_images(images, per_image, by, confidence=confidence)
+
+
+def values_across_images(
+    images: pd.DataFrame,
+    per_image: pd.DataFrame,
+    by: str | Iterable[str] | None = None,
+    *,
+    keys: str | Iterable[str] = (),
+    confidence: float = 0.95,
+) -> pd.DataFrame:
+    """Mean, std, n and confidence interval of per-image values.
+
+    For each group of images and each value column of ``per_image``:
+    ``mean``, sample ``std``, ``n`` (images with a value) and the
+    t-based interval ``mean ± t(q, n - 1) · std / √n`` with
+    ``q = (1 + confidence) / 2``. Each image weighs equally ("the
+    typical image"); a pooled value of the whole population is
+    ``summary``.
+
+    Rules: one row per image (and ``keys``), repeats raise (a particle
+    or agglomerate table must be aggregated per image first); an image
+    of ``images`` missing from ``per_image`` has NaN values, with a
+    warning; NaN values are left out per column, so ``n`` is per
+    column; ``n = 1`` gives NaN ``std`` and interval.
+
+    Args:
+        images: The images table; the groups come from it.
+        per_image: ``image``, the ``keys`` columns and the value
+            columns: every other column not in ``images`` (columns of
+            the images table describe the image and are not values).
+        by: As ``summary``.
+        keys: Columns that tell several values of one image apart
+            (e.g. size class and basis); they are kept in the output.
+        confidence: Level of the interval, between 0 and 1.
+
+    Returns:
+        A long table: the ``by`` columns, the ``keys``, ``metric`` (the
+        value column's name), ``mean``, ``std``, ``n``, ``ci_low``,
+        ``ci_high``.
+
+    Raises:
+        TableError: If ``per_image`` lacks a column, names an unknown
+            image, repeats an image (and key) or has a value column
+            that is not numeric.
+        ParamsError: If ``confidence`` is not between 0 and 1.
+
+    Warns:
+        MissingImagesWarning: If images of ``images`` have no row.
+    """
+    level = _number("confidence", confidence)
+    if not 0 < level < 1:
+        raise ParamsError(f"confidence must be in (0, 1), got {confidence!r}")
+    check_images(images)
+    groups = group_images(images, by)
+    key_columns = names(keys, "keys")
+    require(per_image, key_columns, "per_image")
+    image_positions(images, per_image, "per_image")
+    _check_one_row_per_image(per_image, key_columns)
+    values = [
+        c
+        for c in per_image.columns
+        if c != "image" and c not in key_columns and c not in images.columns
+    ]
+    for column in values:
+        if not pd.api.types.is_numeric_dtype(per_image[column]):
+            raise TableError(
+                f"per_image: value column {column!r} must be numeric"
+            )
+    _warn_missing_images(images, per_image)
+
+    # Every image with every key combination, so a missing value is NaN
+    # (left out of n), not a row that silently isn't there.
+    grid = images[["image"]].reset_index(drop=True)
+    grid["_group"] = groups.codes
+    if key_columns:
+        combos = per_image[key_columns].drop_duplicates()
+        grid = grid.merge(combos, how="cross")
+    data = grid.merge(
+        per_image[["image", *key_columns, *values]],
+        on=["image", *key_columns],
+        how="left",
+    ).sort_values("_group", kind="stable")
+    grouped = data.groupby(["_group", *key_columns], sort=False, dropna=False)[
+        values
+    ]
+    out = pd.DataFrame(
+        {
+            "mean": grouped.mean().stack(future_stack=True),
+            "std": grouped.std().stack(future_stack=True),
+            "n": grouped.count().stack(future_stack=True),
+        }
+    )
+    out.index = out.index.set_names("metric", level=-1)
+    out = out.reset_index()
+    out["n"] = out["n"].astype(np.int64)
+    out[["ci_low", "ci_high"]] = _interval(out, level)
+    labels = groups.labels.iloc[out.pop("_group")].reset_index(drop=True)
+    return pd.concat([labels, out], axis=1)
+
+
 def _families(metrics: str | Iterable[str] | None) -> list[str]:
     if metrics is None:
         return list(_FAMILIES)
@@ -275,3 +406,44 @@ def _describe(
     return out.reindex(
         index=pd.RangeIndex(k), columns=["mean", "std", *_QUANTILES]
     )
+
+
+def _check_one_row_per_image(
+    per_image: pd.DataFrame, key_columns: list[str]
+) -> None:
+    repeated = per_image.duplicated(["image", *key_columns])
+    if repeated.any():
+        listed = per_image.loc[repeated, "image"].unique().tolist()
+        raise TableError(
+            f"per_image: one row per image"
+            f"{' and key' if key_columns else ''} expected, repeated: "
+            f"{listed[:_MAX_LISTED]}; aggregate a particle or agglomerate "
+            f"table per image first (groupby('image'))"
+        )
+
+
+def _warn_missing_images(
+    images: pd.DataFrame, per_image: pd.DataFrame
+) -> None:
+    missing = images.loc[~images["image"].isin(per_image["image"]), "image"]
+    if len(missing):
+        listed = missing.tolist()[:_MAX_LISTED]
+        more = len(missing) - len(listed)
+        suffix = f" and {more} more" if more > 0 else ""
+        warnings.warn(
+            f"{len(missing)} image(s) have no row in per_image, their "
+            f"values are missing (NaN): {listed}{suffix}; if a value is "
+            f"a count, add those images with 0",
+            MissingImagesWarning,
+            stacklevel=3,
+        )
+
+
+def _interval(out: pd.DataFrame, level: float) -> NDArray[np.float64]:
+    n = out["n"].to_numpy(dtype=np.float64)
+    mean = out["mean"].to_numpy(dtype=np.float64)
+    std = out["std"].to_numpy(dtype=np.float64)
+    # n = 1 has std NaN, so the interval is NaN too (never 0).
+    with np.errstate(divide="ignore", invalid="ignore"):
+        half = stats.t.ppf((1 + level) / 2, n - 1) * std / np.sqrt(n)
+    return np.column_stack([mean - half, mean + half])
