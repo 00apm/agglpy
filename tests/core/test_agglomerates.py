@@ -22,8 +22,14 @@ from agglpy.core.agglomerates import (
     find_contacts,
     find_enclosed,
     label_agglomerates,
+    select_agglomerates,
 )
-from agglpy.errors import DuplicateParticlesWarning, ParticleTableError
+from agglpy.core.metrics import summary
+from agglpy.errors import (
+    DuplicateParticlesWarning,
+    ParticleTableError,
+    TableError,
+)
 from agglpy.tables import validate_particles
 
 from support.synthetic.adapters import (
@@ -381,3 +387,100 @@ def test_find_agglomerates_warns_once_about_duplicates():
 def test_find_agglomerates_rejects_a_broken_table():
     with pytest.raises(ParticleTableError):
         find_agglomerates(pd.DataFrame({"id": [1], "x": [0.0], "y": [0.0]}))
+
+
+# --- select_agglomerates ----------------------------------------------
+
+
+def _feret_scene() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Image A: agglomerates of 1, 3 and 2 members, max Feret 1, 2, 3;
+    image B: one agglomerate with the id 1 as well."""
+    images = pd.DataFrame({"image": ["A", "B"]})
+    particles = pd.DataFrame(
+        {
+            "image": ["A"] * 6 + ["B"] * 2,
+            "agglomerate_id": [0, 1, 1, 1, 2, 2, 1, 1],
+            "D": 1.0,
+        }
+    )
+    agglomerates = pd.DataFrame(
+        {
+            "image": ["A", "A", "A", "B"],
+            "agglomerate_id": [0, 1, 2, 1],
+            "member_count": [1, 3, 2, 2],
+            "D_feret_max": [1.0, 2.0, 3.0, 1.0],
+        }
+    )
+    return images, particles, agglomerates
+
+
+def test_select_agglomerates_keeps_their_particles():
+    images, particles, agglomerates = _feret_scene()
+    mask = (agglomerates["D_feret_max"] > 1.5) & (agglomerates["image"] == "A")
+    p, a = select_agglomerates(particles, agglomerates, mask)
+    assert a["agglomerate_id"].tolist() == [1, 2]
+    # image B's agglomerate 1 is another agglomerate: its particles go
+    assert p.index.tolist() == [1, 2, 3, 4, 5]
+    row = summary(images, p, a, metrics="counts").iloc[0]
+    # the 3- and 2-member agglomerates: N_ppA 5, n_ppA 2.5 (filtering the
+    # agglomerate table alone would keep the single: 6 and 3.0)
+    assert row["N_ppA"] == 5
+    assert summary(images, p, a, metrics="ratios")["n_ppA"].iloc[0] == 2.5
+
+
+def test_select_agglomerates_keeps_index_columns_and_inputs():
+    _, particles, agglomerates = _feret_scene()
+    particles.index = particles.index + 100
+    agglomerates.index = [10, 11, 12, 13]
+    before = particles.copy(), agglomerates.copy()
+    p, a = select_agglomerates(
+        particles, agglomerates, agglomerates["member_count"] == 1
+    )
+    pd.testing.assert_frame_equal(particles, before[0])
+    pd.testing.assert_frame_equal(agglomerates, before[1])
+    assert a.index.tolist() == [10]
+    assert p.index.tolist() == [100]
+    assert list(p.columns) == list(particles.columns)
+
+
+def test_nothing_selected_gives_empty_tables():
+    images, particles, agglomerates = _feret_scene()
+    mask = pd.Series(False, index=agglomerates.index)
+    p, a = select_agglomerates(particles, agglomerates, mask)
+    assert (len(p), len(a)) == (0, 0)
+    # images keep their rows with zero counts
+    out = summary(images, p, a, by="image", metrics="counts")
+    assert out["N_primary"].tolist() == [0, 0]
+
+
+@pytest.mark.parametrize(
+    "mask",
+    [
+        pd.Series([True, False]),  # other rows
+        pd.Series([True] * 4, index=[3, 2, 1, 0]),  # other order
+        np.array([True, False, True, False]),  # not a Series
+    ],
+)
+def test_mask_must_be_aligned_with_the_agglomerates(mask):
+    _, particles, agglomerates = _feret_scene()
+    with pytest.raises(TableError, match="index"):
+        select_agglomerates(particles, agglomerates, mask)
+
+
+@pytest.mark.parametrize(
+    "values", [[1, 0, 1, 0], [True, None, True, False], ["yes"] * 4]
+)
+def test_mask_must_hold_true_or_false(values):
+    _, particles, agglomerates = _feret_scene()
+    mask = pd.Series(values, index=agglomerates.index)
+    with pytest.raises(TableError, match="True / False"):
+        select_agglomerates(particles, agglomerates, mask)
+
+
+def test_select_agglomerates_needs_image_and_id():
+    _, particles, agglomerates = _feret_scene()
+    mask = agglomerates["member_count"] > 1
+    with pytest.raises(TableError, match=r"particles: .*image"):
+        select_agglomerates(
+            particles.drop(columns="image"), agglomerates, mask
+        )

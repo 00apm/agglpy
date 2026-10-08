@@ -9,7 +9,8 @@ completely inside a larger particle (old name ``idj``).
 
 The functions take a validated particle table
 (``tables.validate_particles``) and never modify it;
-``find_agglomerates`` runs them all.
+``find_agglomerates`` runs them all. ``select_agglomerates`` takes a
+consistent subset of the particle and agglomerate tables.
 """
 
 import itertools
@@ -23,7 +24,7 @@ from scipy.sparse import coo_matrix
 from scipy.sparse.csgraph import connected_components
 from scipy.spatial import cKDTree
 
-from agglpy.errors import DuplicateParticlesWarning
+from agglpy.errors import DuplicateParticlesWarning, TableError
 from agglpy.tables import find_duplicates, validate_particles
 
 # Widens the candidate search a little, so rounding inside the KD-tree
@@ -229,3 +230,52 @@ def find_agglomerates(particles: pd.DataFrame) -> pd.DataFrame:
     table["agglomerate_id"] = label_agglomerates(table, contacts)
     table["enclosed"] = find_enclosed(table, contacts)
     return table
+
+
+def select_agglomerates(
+    particles: pd.DataFrame, agglomerates: pd.DataFrame, mask: pd.Series
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Keep the agglomerates where ``mask`` is True, with their particles.
+
+    Filtering the agglomerate table alone would leave the particles of
+    the dropped agglomerates in the particle table, and the metrics,
+    which read both tables, would mix the two (``N_ppA``, ``n_ppA``).
+    A particle stays when its ``(image, agglomerate_id)`` stays.
+
+    Args:
+        particles: Particle table with ``image`` and ``agglomerate_id``.
+        agglomerates: Agglomerate table with the same two columns.
+        mask: True / False per agglomerate, on the agglomerate table's
+            index, e.g. ``agglomerates["D_feret_max"] > 1.5``.
+
+    Returns:
+        ``(particles, agglomerates)``: copies with the kept rows; index
+        and columns unchanged. The images table is not touched, so an
+        image with nothing left still counts (zeros).
+
+    Raises:
+        TableError: If a column is missing, or ``mask`` is not a
+            True / False Series on the agglomerate table's index.
+    """
+    columns = ["image", "agglomerate_id"]
+    for name, table in (
+        ("particles", particles),
+        ("agglomerates", agglomerates),
+    ):
+        missing = [c for c in columns if c not in table.columns]
+        if missing:
+            raise TableError(f"{name}: missing columns: {missing}")
+    if not isinstance(mask, pd.Series) or not mask.index.equals(
+        agglomerates.index
+    ):
+        raise TableError(
+            "mask must be a Series on the agglomerate table's index, "
+            "e.g. agglomerates['D_feret_max'] > 1.5"
+        )
+    if mask.isna().any() or not pd.api.types.is_bool_dtype(mask):
+        raise TableError("mask must hold True / False, without gaps")
+    kept = agglomerates[mask.to_numpy(dtype=bool)]
+    member = pd.MultiIndex.from_frame(particles[columns]).isin(
+        pd.MultiIndex.from_frame(kept[columns])
+    )
+    return particles[member].copy(), kept.copy()
