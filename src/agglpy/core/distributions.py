@@ -143,7 +143,8 @@ def distribution(
     Raises:
         TableError: If a column is missing or not numeric, a weight is
             not finite on a counted value, or an image is unknown.
-        ParamsError: If ``edges`` or ``closed`` is invalid.
+        ParamsError: If ``edges`` or ``closed`` is invalid, or a weight
+            column is called ``"number"`` (the name of the count basis).
 
     Warns:
         ValuesNotCountedWarning: If values were left out.
@@ -151,6 +152,13 @@ def distribution(
     check_images(images)
     groups = group_images(images, by)
     weight_columns = names(weights, "weights")
+    if "number" in weight_columns:
+        # The name of the count basis: a column "number" would replace
+        # the counts by its sums without a sign.
+        raise ParamsError(
+            "weights: 'number' is the count basis, always included; "
+            "rename a column called 'number' to weight by it"
+        )
     bounds = _edges(edges)
     if closed not in ("right", "left"):
         raise ParamsError(f"closed must be 'right' or 'left', got {closed!r}")

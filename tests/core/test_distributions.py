@@ -297,6 +297,13 @@ def test_one_weight_name_is_one_column():
     assert out["basis"].tolist() == ["number", "volume"]
 
 
+def test_weight_named_number_raises():
+    # it would silently replace the number basis by the column's sums
+    images, table = _one_image([5, 5], number=[100.0, 100.0])
+    with pytest.raises(ParamsError, match="number"):
+        distribution(images, table, "v", [0, 10], weights="number")
+
+
 def test_missing_weight_column_raises():
     with pytest.raises(TableError, match="volume"):
         distribution(*_one_image([5]), "v", [0, 10], weights="volume")
