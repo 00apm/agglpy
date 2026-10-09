@@ -557,6 +557,37 @@ def test_keys_tell_values_of_one_image_apart():
     assert out["n"].tolist() == [2, 2]
 
 
+def test_categorical_by_and_keys_give_only_used_values():
+    # pandas would warn (observed default) and add a row for the unused
+    # category "y" / "c" with n = 0
+    images = _images(
+        "A", "B", condition=pd.Categorical(["x", "x"], ["x", "y"])
+    )
+    per_image = pd.DataFrame(
+        {
+            "image": ["A", "B"],
+            "size_class": pd.Categorical(["a", "a"], ["a", "c"]),
+            "v": [1.0, 3.0],
+        }
+    )
+    scene_images, particles, agglomerates = _scene({"A": [1], "B": [2]})
+    scene_images["condition"] = images["condition"]
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        by_group = values_across_images(
+            images, per_image.drop(columns="size_class"), by="condition"
+        )
+        by_key = values_across_images(
+            images[["image"]], per_image, keys="size_class"
+        )
+        pooled = summary(scene_images, particles, agglomerates, by="condition")
+    assert pooled["N_primary"].tolist() == [3]
+    assert by_group["condition"].tolist() == ["x"]
+    assert by_group["n"].tolist() == [2]
+    assert by_key["size_class"].tolist() == ["a"]
+    assert by_key["n"].tolist() == [2]
+
+
 def test_summary_across_images_uses_per_image_metrics():
     images, particles, agglomerates = _scene({**RA_EXAMPLE, "blank": []})
     out = summary_across_images(

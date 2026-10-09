@@ -114,7 +114,11 @@ def group_images(
         return Grouping(columns, one, pd.DataFrame(index=range(1)))
     keyed = images[columns].reset_index(drop=True)
     codes = np.asarray(
-        keyed.groupby(columns, dropna=False, sort=True).ngroup(),
+        # observed=True: only categories that occur (and no pandas
+        # FutureWarning for a categorical column)
+        keyed.groupby(
+            columns, dropna=False, sort=True, observed=True
+        ).ngroup(),
         dtype=np.intp,
     )
     # One row per group, in group order: its first image's values.

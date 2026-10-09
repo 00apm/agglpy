@@ -312,9 +312,10 @@ def values_across_images(
         on=["image", *key_columns],
         how="left",
     ).sort_values("_group", kind="stable")
-    grouped = data.groupby(["_group", *key_columns], sort=False, dropna=False)[
-        values
-    ]
+    # observed=True: no rows for categories of a key that never occur
+    grouped = data.groupby(
+        ["_group", *key_columns], sort=False, dropna=False, observed=True
+    )[values]
     out = pd.DataFrame(
         {
             "mean": grouped.mean().stack(future_stack=True),
