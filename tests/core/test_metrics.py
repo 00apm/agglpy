@@ -388,6 +388,30 @@ def test_rows_of_an_unknown_image_raise():
         summary(images.iloc[:1], particles, agglomerates.iloc[:1])
 
 
+def test_agglomerates_filtered_alone_raise():
+    # aggl[aggl.member_count >= 2] keeps the particles of the singles:
+    # N_ppA 22 instead of 6, without a sign (review of 2.5)
+    images, particles, agglomerates = _scene(RA_EXAMPLE)
+    multi = agglomerates[agglomerates["member_count"] >= 2]
+    with pytest.raises(TableError, match=r"\['B'\].*select_agglomerates"):
+        summary(images, particles, multi)
+
+
+def test_particles_filtered_alone_raise():
+    # a particle subset belongs in distribution, not in summary: here
+    # N_ppA would be negative
+    images, particles, agglomerates = _scene(RA_EXAMPLE)
+    with pytest.raises(TableError, match=r"\['A'\]"):
+        summary(images, particles.iloc[2:], agglomerates, metrics="counts")
+
+
+def test_member_count_gap_raises():
+    images, particles, agglomerates = _scene({"A": [2, 1]})
+    agglomerates["member_count"] = pd.array([2, None], dtype="Int64")
+    with pytest.raises(TableError, match="member_count"):
+        summary(images, particles, agglomerates)
+
+
 def test_missing_columns_raise():
     images, particles, agglomerates = _scene(RA_EXAMPLE)
     with pytest.raises(TableError, match=r"agglomerates: .*member_count"):

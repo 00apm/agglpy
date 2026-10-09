@@ -133,7 +133,11 @@ def summary(
         images included), then the metrics.
 
     Raises:
-        TableError: If a table lacks a column or names an unknown image.
+        TableError: If a table lacks a column or names an unknown image,
+            or the particle and agglomerate tables do not match: in each
+            image, the agglomerates' ``member_count`` must add up to the
+            particle rows (filter both with
+            ``agglomerates.select_agglomerates``).
         ParamsError: If a family name is unknown.
     """
     families = _families(metrics)
@@ -147,13 +151,14 @@ def summary(
         require(agglomerates, ["D"], "agglomerates")
     if "per_area" in families:
         require(agglomerates, ["area"], "agglomerates")
-    # Group of each particle and each agglomerate, via its image.
-    p_group = groups.codes[image_positions(images, particles, "particles")]
-    a_group = groups.codes[
-        image_positions(images, agglomerates, "agglomerates")
-    ]
-    k = groups.k
+    p_image = image_positions(images, particles, "particles")
+    a_image = image_positions(images, agglomerates, "agglomerates")
     members = numbers(agglomerates, "member_count", "agglomerates")
+    _check_members(images, p_image, a_image, members)
+    # Group of each particle and each agglomerate, via its image.
+    p_group = groups.codes[p_image]
+    a_group = groups.codes[a_image]
+    k = groups.k
 
     n_primary = np.bincount(p_group, minlength=k)
     n_aerosol = np.bincount(a_group, minlength=k)
@@ -406,6 +411,29 @@ def _describe(
     return out.reindex(
         index=pd.RangeIndex(k), columns=["mean", "std", *_QUANTILES]
     )
+
+
+def _check_members(
+    images: pd.DataFrame,
+    p_image: NDArray[np.intp],
+    a_image: NDArray[np.intp],
+    members: NDArray[np.float64],
+) -> None:
+    # Every particle is a member of one agglomerate of its image, so the
+    # member counts add up to the particle rows. Tables filtered apart
+    # (only the agglomerates, or only the particles) would give wrong
+    # counts and ratios without a sign; a gap in member_count too.
+    n = len(images)
+    declared = np.bincount(a_image, weights=members, minlength=n)
+    found = np.bincount(p_image, minlength=n)
+    wrong = images["image"].to_numpy()[declared != found].tolist()
+    if wrong:
+        raise TableError(
+            f"particles and agglomerates do not match in images "
+            f"{wrong[:_MAX_LISTED]}: the agglomerates' member_count must "
+            f"add up to the particle rows of each image; filter both "
+            f"tables with select_agglomerates"
+        )
 
 
 def _check_one_row_per_image(
