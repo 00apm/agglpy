@@ -563,22 +563,20 @@ PROPERTIES: list[Case] = [
 ]
 
 
-# Per-image summary metrics (names as in the legacy summary table):
-#   N_primary_particle   particles
-#   N_aerosol_particle   groups, single particles included
-#   N_pp1                groups of one particle
-#   N_ppA                particles in groups of two or more
-#   N_agl                groups of two or more (true agglomerates)
-#   N_collector_agl, N_similar_agl, N_pp1_separate   groups by type
-#   ER       1 - N_pp1_separate / N_primary_particle
-#   Ra       N_agl / N_primary_particle
-#   sep2agl  N_pp1_separate / (N_collector_agl + N_similar_agl)
-#   n_ppA    N_ppA / N_agl (particles per agglomerate)
-#   n_ppP    N_primary_particle / N_aerosol_particle
+# Per-image summary metrics (names as in agglpy.core.metrics.summary):
+#   N_primary    particles
+#   N_aerosol    groups, single particles included
+#   N_pp1        groups of one particle
+#   N_ppA        particles in groups of two or more
+#   N_aggl       groups of two or more (true agglomerates)
+#   Ra           N_aggl / N_primary
+#   agglomerated_fraction   1 - N_pp1 / N_primary (ER in agglpy 0.4)
+#   n_ppA        N_ppA / N_aggl (particles per agglomerate)
+#   n_ppP        N_primary / N_aerosol
 #   particle_D*  mean, sample std, 10/50/90 % quantiles (linear
 #                interpolation between sorted values), Sauter mean
 #                diameter sum(D³) / sum(D²)
-#   agl_member_count_mean / _std   over all groups, singles included
+#   aerosol_member_count_std   over all groups, singles included
 # Division by zero follows numpy: x / 0 = inf, 0 / 0 = NaN.
 SUMMARY: list[Case] = [
     make_case(
@@ -600,29 +598,24 @@ SUMMARY: list[Case] = [
         # D (px) = 20, 40, 60, 20, 8, 20, 10; sorted 8 10 20 20 20 40 60
         # sum D = 178, sum D² = 6564, sum D³ = 305512
         summary={
-            "N_primary_particle": 7,
-            "N_aerosol_particle": 4,
+            "N_primary": 7,
+            "N_aerosol": 4,
             "N_pp1": 2,
             "N_ppA": 5,
-            "N_agl": 2,
-            "N_collector_agl": 1,
-            "N_similar_agl": 1,
-            "N_pp1_separate": 2,
-            "ER": 1 - 2 / 7,
+            "N_aggl": 2,
+            "agglomerated_fraction": 1 - 2 / 7,
             "Ra": 2 / 7,
-            "sep2agl": 2 / 2,
             "n_ppA": 5 / 2,
             "n_ppP": 7 / 4,
-            "particle_Dmean": 178 / 7,
+            "particle_D_mean": 178 / 7,
             # sum (D - mean)² = 6564 - 178² / 7 = 14264 / 7; / (n - 1)
-            "particle_Dstd": math.sqrt(14264 / 42),
+            "particle_D_std": math.sqrt(14264 / 42),
             "particle_D10": 8 + 0.6 * (10 - 8),  # position 0.1 * 6
             "particle_D50": 20,  # position 3
             "particle_D90": 40 + 0.4 * (60 - 40),  # position 5.4
             "particle_SMD": 305512 / 6564,
-            "agl_member_count_mean": 7 / 4,  # counts 3, 2, 1, 1
-            # sum (n - 1.75)² = 1.5625 + 0.0625 + 2 * 0.5625 = 2.75; / 3
-            "agl_member_count_std": math.sqrt(11 / 12),
+            # counts 3 2 1 1, mean 1.75: sum (n - 1.75)² = 2.75; / 3
+            "aerosol_member_count_std": math.sqrt(11 / 12),
         },
         note="Similar triangle, collector pair, two singles; all by hand.",
     ),
@@ -633,30 +626,25 @@ SUMMARY: list[Case] = [
         threshold=0.5,
         # D = 20, 10, 16; sorted 10 16 20
         summary={
-            "N_primary_particle": 3,
-            "N_aerosol_particle": 3,
+            "N_primary": 3,
+            "N_aerosol": 3,
             "N_pp1": 3,
             "N_ppA": 0,
-            "N_agl": 0,
-            "N_collector_agl": 0,
-            "N_similar_agl": 0,
-            "N_pp1_separate": 3,
-            "ER": 0,
+            "N_aggl": 0,
+            "agglomerated_fraction": 0,
             "Ra": 0,
-            "sep2agl": math.inf,  # 3 separate / 0 agglomerates
             "n_ppA": math.nan,  # 0 particles / 0 agglomerates
             "n_ppP": 1,
-            "particle_Dmean": 46 / 3,
+            "particle_D_mean": 46 / 3,
             # sum (D - mean)² = 756 - 46² / 3 = 152 / 3; / (n - 1)
-            "particle_Dstd": math.sqrt(76 / 3),
+            "particle_D_std": math.sqrt(76 / 3),
             "particle_D10": 10 + 0.2 * (16 - 10),  # position 0.2
             "particle_D50": 16,
             "particle_D90": 16 + 0.8 * (20 - 16),  # position 1.8
             "particle_SMD": (8000 + 1000 + 4096) / (400 + 100 + 256),
-            "agl_member_count_mean": 1,
-            "agl_member_count_std": 0,
+            "aerosol_member_count_std": 0,
         },
-        note="No agglomerates: sep2agl is inf, n_ppA is NaN.",
+        note="No agglomerates: Ra is 0, n_ppA is NaN.",
     ),
     make_case(
         "no_particles",
@@ -664,27 +652,22 @@ SUMMARY: list[Case] = [
         groups=[],
         threshold=0.5,
         summary={
-            "N_primary_particle": 0,
-            "N_aerosol_particle": 0,
+            "N_primary": 0,
+            "N_aerosol": 0,
             "N_pp1": 0,
             "N_ppA": 0,
-            "N_agl": 0,
-            "N_collector_agl": 0,
-            "N_similar_agl": 0,
-            "N_pp1_separate": 0,
-            "ER": math.nan,
+            "N_aggl": 0,
+            "agglomerated_fraction": math.nan,
             "Ra": math.nan,
-            "sep2agl": math.nan,
             "n_ppA": math.nan,
             "n_ppP": math.nan,
-            "particle_Dmean": math.nan,
-            "particle_Dstd": math.nan,
+            "particle_D_mean": math.nan,
+            "particle_D_std": math.nan,
             "particle_D10": math.nan,
             "particle_D50": math.nan,
             "particle_D90": math.nan,
             "particle_SMD": math.nan,
-            "agl_member_count_mean": math.nan,
-            "agl_member_count_std": math.nan,
+            "aerosol_member_count_std": math.nan,
         },
         note=(
             "A field of view where nothing was found (low deposition, "

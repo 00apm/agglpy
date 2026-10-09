@@ -11,8 +11,9 @@ everywhere: they count in every sum, count and statistic; only the
 ``*_with_hidden`` values count them a second time
 (``docs/methodology.md``, section 7).
 
-``DIMENSIONS`` gives the length exponent of every property column, for
-the one conversion from px to physical units.
+``DIMENSIONS`` gives the length exponent of every property column;
+``to_physical`` uses it for the one conversion from px to physical
+units.
 """
 
 from types import MappingProxyType
@@ -23,6 +24,7 @@ from numpy.typing import NDArray
 
 from agglpy.core.agglomerates import find_contacts
 from agglpy.errors import ParticleTableError
+from agglpy.params import _positive
 
 # Length exponent of each property column: 0 count or ratio, 1 length
 # (px), 2 area (px²), 3 volume (px³). D, area and volume mean the same
@@ -33,6 +35,7 @@ DIMENSIONS: MappingProxyType[str, int] = MappingProxyType(
         "enclosed_count": 0,
         "volume": 3,
         "D": 1,
+        "surface": 2,
         "D_mean": 1,
         "D_std": 1,
         "D_largest": 1,
@@ -40,6 +43,7 @@ DIMENSIONS: MappingProxyType[str, int] = MappingProxyType(
         "volume_with_hidden": 3,
         "D_with_hidden": 1,
         "member_count_with_hidden": 0,
+        "surface_with_hidden": 2,
         "x_com": 1,
         "y_com": 1,
         "rg": 1,
@@ -49,6 +53,11 @@ DIMENSIONS: MappingProxyType[str, int] = MappingProxyType(
         "D_feret_y": 1,
         "D_feret_max": 1,
     }
+)
+
+# The particle table's own geometry, converted like the properties.
+_GEOMETRY: MappingProxyType[str, int] = MappingProxyType(
+    {"x": 1, "y": 1, "r": 1}
 )
 
 _AGGLOMERATE_INPUT = ("x", "y", "r", "agglomerate_id", "enclosed")
@@ -66,14 +75,15 @@ _DIRECTIONS = 64
 def particle_properties(table: pd.DataFrame) -> pd.DataFrame:
     """Add each particle's size, as a sphere, to the particle table.
 
-    Adds ``D = 2r`` (px), ``area = πr²`` (px², the circle) and
-    ``volume = (4/3)πr³`` (px³, the sphere).
+    Adds ``D = 2r`` (px), ``area = πr²`` (px², the circle),
+    ``volume = (4/3)πr³`` (px³, the sphere) and ``surface = πD²``
+    (px², the sphere's surface, not the projected ``area``).
 
     Args:
         table: A particle table with at least the column ``r``.
 
     Returns:
-        A copy with the three columns, replacing any from an earlier
+        A copy with the four columns, replacing any from an earlier
         run; every other column, the row order and the index are kept.
 
     Raises:
@@ -86,6 +96,7 @@ def particle_properties(table: pd.DataFrame) -> pd.DataFrame:
     out["D"] = 2 * r
     out["area"] = np.pi * r**2
     out["volume"] = _sphere_volume(r)
+    out["surface"] = _sphere_surface(r)
     return out
 
 
@@ -98,13 +109,17 @@ def agglomerate_properties(table: pd.DataFrame) -> pd.DataFrame:
     - ``member_count``, ``enclosed_count``: members, enclosed members.
     - ``volume``: sum of the member sphere volumes; ``D``: diameter of
       one sphere with that volume (the agglomerate's size).
+    - ``surface``: sum of the member sphere surfaces. Spheres touching
+      in one point lose no surface (the model of ``volume``), so for
+      sintered or fused particles this is an upper bound.
     - ``D_mean``, ``D_std``: mean and sample std (n - 1) of the member
       diameters; ``D_std`` is NaN for one member.
     - ``D_largest``: largest member diameter; ``size_ratio``: second
       largest / largest member diameter, NaN for one member.
     - ``volume_with_hidden``, ``D_with_hidden``,
-      ``member_count_with_hidden``: enclosed members counted twice,
-      for the particles hidden on the far side (methodology, section 7).
+      ``member_count_with_hidden``, ``surface_with_hidden``: enclosed
+      members counted twice, for the particles hidden on the far side
+      (methodology, section 7).
     - ``x_com``, ``y_com``: volume-weighted centre of mass.
     - ``rg``: radius of gyration of the member spheres with their
       heights unknown, so a lower bound of the 3D value; exact for one
@@ -164,6 +179,41 @@ def agglomerate_properties(table: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(columns)
 
 
+def to_physical(table: pd.DataFrame, pixel_size: float) -> pd.DataFrame:
+    """Convert a particle or agglomerate table from px to physical units.
+
+    Each built-in column in the table is multiplied by ``pixel_size``
+    to the power of its dimension: ``x, y, r`` and the lengths of
+    ``DIMENSIONS`` by p, areas by p², volumes by p³. Counts, ratios and
+    every other column are left as they are.
+
+    Convert each image with its own pixel size before stacking the
+    tables of several images: metrics and distributions assume one
+    unit for all rows.
+
+    Args:
+        table: The particle table or the agglomerate table of one
+            image, in px.
+        pixel_size: The length of one pixel in the unit wanted, e.g.
+            0.0025 for µm when one pixel is 2.5 nm.
+
+    Returns:
+        A converted copy; columns, rows and index are kept. Converting
+        a table twice scales it twice.
+
+    Raises:
+        ParamsError: If ``pixel_size`` is not a finite number > 0.
+        ParticleTableError: If a column to convert is not numeric.
+    """
+    p = _positive("pixel_size", pixel_size)
+    out = table.copy()
+    for column, power in {**_GEOMETRY, **DIMENSIONS}.items():
+        if power and column in out.columns:
+            # NaN stays NaN (D_std of a single member).
+            out[column] = _numbers(table, column) * p**power
+    return out
+
+
 class _Groups:
     """Members of each agglomerate as positions 0 … k-1 (``codes``).
 
@@ -215,6 +265,9 @@ def _sizes(
     # Each enclosed member counts once more, for its twin hidden on
     # the far side (methodology, section 7).
     with_hidden = volume + groups.sum(np.where(enclosed, sphere, 0.0))
+    shell = _sphere_surface(r)
+    surface = groups.sum(shell)
+    surface_hidden = surface + groups.sum(np.where(enclosed, shell, 0.0))
 
     # Two passes (mean, then deviations): equal diameters give exactly 0.
     d_mean = groups.sum(d) / count
@@ -239,6 +292,7 @@ def _sizes(
         "enclosed_count": enclosed_count,
         "volume": volume,
         "D": _equivalent_diameter(volume),
+        "surface": surface,
         "D_mean": d_mean,
         "D_std": np.sqrt(variance),
         "D_largest": d_largest,
@@ -246,6 +300,7 @@ def _sizes(
         "volume_with_hidden": with_hidden,
         "D_with_hidden": _equivalent_diameter(with_hidden),
         "member_count_with_hidden": count + enclosed_count,
+        "surface_with_hidden": surface_hidden,
     }
 
 
@@ -459,6 +514,10 @@ def _sphere_volume(r: NDArray[np.float64]) -> NDArray[np.float64]:
     return 4 / 3 * np.pi * r**3
 
 
+def _sphere_surface(r: NDArray[np.float64]) -> NDArray[np.float64]:
+    return 4 * np.pi * r**2
+
+
 def _equivalent_diameter(
     volume: NDArray[np.float64],
 ) -> NDArray[np.float64]:
@@ -473,14 +532,18 @@ def _require(table: pd.DataFrame, columns: tuple[str, ...]) -> None:
         raise ParticleTableError(f"missing columns: {missing}")
 
 
-def _finite(table: pd.DataFrame, column: str) -> NDArray[np.float64]:
+def _numbers(table: pd.DataFrame, column: str) -> NDArray[np.float64]:
     try:
         values = pd.to_numeric(table[column], errors="raise")
     except (ValueError, TypeError) as exc:
         raise ParticleTableError(
             f"column {column!r} must be numeric: {exc}"
         ) from exc
-    array = values.to_numpy(dtype=np.float64, na_value=np.nan)
+    return values.to_numpy(dtype=np.float64, na_value=np.nan)
+
+
+def _finite(table: pd.DataFrame, column: str) -> NDArray[np.float64]:
+    array = _numbers(table, column)
     if not np.isfinite(array).all():
         raise ParticleTableError(f"column {column!r} must be finite")
     return array

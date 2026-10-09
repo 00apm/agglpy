@@ -18,8 +18,12 @@ import pytest
 from agglpy.errors import ImgDataSetBufferError
 
 from .cases import Case
-from .core_adapter import run_core
-from .legacy_adapter import legacy_distribution, legacy_psd_bins, run_legacy
+from .core_adapter import core_distribution, core_size_classes, run_core
+from .legacy_adapter import (
+    legacy_distribution,
+    legacy_size_classes,
+    run_legacy,
+)
 from .result import Result
 
 Adapter = Callable[..., Result]
@@ -33,7 +37,7 @@ CHECKS: dict[str, str] = {
     "enclosed": "2.3",
     "classify": "2.4",
     "properties": "2.4",
-    "psd_bins": "2.5",
+    "size_classes": "2.5",
     "distribution": "2.5",
     "summary": "2.5",
 }
@@ -41,7 +45,7 @@ CHECKS: dict[str, str] = {
 # What each implementation can do so far; tests skip the other checks.
 SUPPORTED_CHECKS: dict[str, frozenset[str]] = {
     "legacy": frozenset(CHECKS),
-    "core": frozenset({"grouping", "enclosed", "classify", "properties"}),
+    "core": frozenset(CHECKS),
 }
 
 
@@ -59,22 +63,24 @@ def skip_unless_supported(adapter: str, check: str) -> None:
 
 @dataclass(frozen=True)
 class StatsFunctions:
-    """Binning functions of one implementation, called directly.
+    """Size-class functions of one implementation, called directly.
 
-    ``psd_bins(start, end, periods, log=False, step=False)`` returns the
-    bin edges; ``distribution(values, bins)`` returns one row per bin
-    with ``left, right, mid, width, count, cumulative, count_norm,
-    cumulative_norm, volume, volume_norm, volume_cumulative_norm``.
+    ``size_classes(start, end, *, count=None, step=None,
+    scale="linear")`` returns the class edges (a log ``step`` is the
+    factor between edges); ``distribution(values, edges)`` returns the
+    number distribution of the values, one row per class, with
+    ``left, right, mid, width, amount, fraction, cumulative``.
     """
 
-    psd_bins: Callable[..., np.ndarray]
+    size_classes: Callable[..., np.ndarray]
     distribution: Callable[[list[float], np.ndarray], pd.DataFrame]
 
 
-# Binning functions per implementation; an implementation without them
-# skips the psd_bins and distribution checks (skip_unless_supported).
+# Size-class functions per implementation; an implementation without
+# them skips the size_classes and distribution checks.
 STATS: dict[str, StatsFunctions] = {
-    "legacy": StatsFunctions(legacy_psd_bins, legacy_distribution)
+    "legacy": StatsFunctions(legacy_size_classes, legacy_distribution),
+    "core": StatsFunctions(core_size_classes, core_distribution),
 }
 
 # Realistic SEM pixel size in metres. Runs at 1.0 keep coordinates in px.
@@ -107,13 +113,18 @@ KNOWN_FAILURES: dict[tuple[str, str, str, float], KnownFailure] = {
         KnownFailure(_SCALING)
     ),
     # np.arange(start, end + step, step) can keep end + step as well
-    ("legacy", "psd_bins", "lin_step_metres", 1.0): KnownFailure(
+    ("legacy", "size_classes", "lin_step_metres", 1.0): KnownFailure(
         "linear step bins get an extra edge beyond end through float "
-        "rounding in np.arange (fix in 2.5)"
+        "rounding in np.arange (fixed in the core, 2.5)"
     ),
-    ("legacy", "psd_bins", "lin_step_from_0.1um", 1.0): KnownFailure(
+    ("legacy", "size_classes", "lin_step_from_0.1um", 1.0): KnownFailure(
         "linear step bins get an extra edge beyond end through float "
-        "rounding in np.arange (fix in 2.5)"
+        "rounding in np.arange (fixed in the core, 2.5)"
+    ),
+    # pd.cut(..., include_lowest=False)
+    ("legacy", "distribution", "edges_and_range", 1.0): KnownFailure(
+        "a value equal to the first edge is dropped; the core counts "
+        "the outer edge (2.5)"
     ),
     # the constructor rejects an empty particle table (D-022)
     ("legacy", "summary", "no_particles", 1.0): KnownFailure(
