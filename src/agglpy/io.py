@@ -153,8 +153,18 @@ def read_image_metadata(path: PathLike) -> ImageMetadata:
 
 _TIFF_MAGIC = (b"II*\0", b"MM\0*", b"II+\0", b"MM\0+")  # classic, BigTIFF
 # What tifffile raises on a broken header, across the supported
-# versions (TiffFileError is a ValueError only in newer ones).
-_TIFF_ERRORS = (tifffile.TiffFileError, ValueError, IndexError, struct.error)
+# versions (TiffFileError is a ValueError only in newer ones); a tag
+# of the wrong type gives TypeError, KeyError or OverflowError. Not
+# OSError: a missing or locked file stays a built-in error.
+_TIFF_ERRORS = (
+    tifffile.TiffFileError,
+    ValueError,
+    IndexError,
+    struct.error,
+    TypeError,
+    KeyError,
+    OverflowError,
+)
 _ZEISS_REFERENCE_WIDTH = 1024
 _ZEISS_UNITS = {
     "nm": 1e-9,

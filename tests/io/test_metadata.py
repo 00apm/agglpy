@@ -6,6 +6,7 @@ files of item 2.2 Findings (support.tiffs).
 """
 
 import dataclasses
+import struct
 import warnings
 from pathlib import Path
 
@@ -254,3 +255,21 @@ def test_pixel_size_warning_points_at_the_caller(
     with pytest.warns(PixelSizeWarning) as record:
         read_image_metadata(path)
     assert record[0].filename == __file__
+
+
+def test_tiff_tag_of_the_wrong_type_raises_file_format_error(
+    tmp_path: Path,
+) -> None:
+    # SamplesPerPixel stored as text instead of a number: tifffile
+    # raises a TypeError, which must not escape as itself
+    path = tmp_path / "corrupt.tif"
+    tifffile.imwrite(path, np.zeros((4, 8), np.uint8))
+    data = bytearray(path.read_bytes())
+    ifd = struct.unpack_from("<I", data, 4)[0]
+    for i in range(struct.unpack_from("<H", data, ifd)[0]):
+        entry = ifd + 2 + 12 * i
+        if struct.unpack_from("<H", data, entry)[0] == 277:
+            struct.pack_into("<H", data, entry + 2, 2)  # type ASCII
+    path.write_bytes(bytes(data))
+    with pytest.raises(FileFormatError, match=r"corrupt\.tif"):
+        read_image_metadata(path)
