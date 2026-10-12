@@ -10,6 +10,17 @@ x, y      float64  centre (px), finite
 r         float64  radius (px), finite and > 0
 ========  =======  ==================================================
 
+**Coordinates** (D-051): pixel centres lie at integers, so pixel ``i``
+covers ``[i - 0.5, i + 0.5)`` and an image ``width x height`` covers
+``[-0.5, width - 0.5] x [-0.5, height - 0.5]``, as in OpenCV, NumPy
+indexing, scikit-image and matplotlib ``imshow``. The origin is the
+raw image's origin, whatever region detection used (D-048). ImageJ
+counts from pixel edges (the centre of pixel ``i`` at ``i + 0.5``);
+``agglpy.io`` converts when it reads ImageJ files. A circle reaching
+past an edge, or with its centre outside the image, is valid data
+(a partly visible particle): the schema has no bounds check, and
+``outside_image`` finds the circles that don't overlap the image.
+
 The table carries geometry only. Which particle set an image was
 analysed from is recorded per image by the application, and which
 circles a manual correction kept, edited or added is inferred by
@@ -26,7 +37,12 @@ import pandas as pd
 from numpy.typing import ArrayLike
 from scipy.spatial import cKDTree
 
-from agglpy.errors import DuplicateParticlesWarning, ParticleTableError
+from agglpy.errors import (
+    DuplicateParticlesWarning,
+    ParamsError,
+    ParticleTableError,
+)
+from agglpy.params import _integer
 
 PARTICLE_COLUMNS: tuple[str, ...] = ("id", "x", "y", "r")
 _FLOAT_COLUMNS = ("x", "y", "r")
@@ -176,6 +192,45 @@ def find_duplicates(
         for a, b in zip(ids[i[close]], ids[j[close]], strict=True)
     }
     return sorted(pairs)
+
+
+def outside_image(
+    particles: pd.DataFrame, width: int, height: int
+) -> "pd.Series[bool]":
+    """Mark the circles that don't overlap their image at all.
+
+    A circle is outside when the distance from its centre to the image
+    rectangle ``[-0.5, width - 0.5] x [-0.5, height - 0.5]`` (pixel
+    centres at integers) is larger than ``r``. A circle that only
+    touches the rectangle, is cut by an edge or has its centre outside
+    but still reaches into the image is not outside.
+
+    Args:
+        particles: A particle table (columns ``x, y, r`` in px).
+        width: Image width in px.
+        height: Image height in px.
+
+    Returns:
+        A boolean mask on ``particles.index``: ``particles[~mask]``
+        keeps the circles that overlap the image.
+
+    Raises:
+        ParamsError: If ``width`` or ``height`` is not a positive
+            integer.
+        ParticleTableError: If ``x``, ``y`` or ``r`` is missing.
+    """
+    sizes = {"width": width, "height": height}
+    for name, value in sizes.items():
+        if _integer(name, value) < 1:
+            raise ParamsError(f"{name} must be >= 1, got {value!r}")
+    missing = [c for c in _FLOAT_COLUMNS if c not in particles.columns]
+    if missing:
+        raise ParticleTableError(f"missing columns: {missing}")
+    x, y, r = (particles[c].to_numpy(dtype=float) for c in _FLOAT_COLUMNS)
+    # distance from the centre to the nearest point of the rectangle
+    dx = np.maximum(np.maximum(-0.5 - x, x - (width - 0.5)), 0.0)
+    dy = np.maximum(np.maximum(-0.5 - y, y - (height - 0.5)), 0.0)
+    return pd.Series(np.hypot(dx, dy) > r, index=particles.index)
 
 
 def _as_float(values: pd.Series, column: str) -> pd.Series:
