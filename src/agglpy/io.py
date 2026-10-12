@@ -25,10 +25,18 @@ from typing import Any
 
 import cv2
 import numpy as np
+import pandas as pd
 import tifffile
 from numpy.typing import NDArray
 
-from agglpy.errors import FileFormatError, PixelSizeWarning
+from agglpy.errors import (
+    FileFormatError,
+    NonCircularParticlesWarning,
+    ParamsError,
+    ParticleTableError,
+    PixelSizeWarning,
+)
+from agglpy.tables import validate_particles
 
 PathLike = str | os.PathLike[str]
 
@@ -254,3 +262,192 @@ def _check_square(x: float, y: float | None, path: Path) -> None:
             PixelSizeWarning,
             stacklevel=4,
         )
+
+
+# ---------------------------------------------------------------------
+# Particle files
+# ---------------------------------------------------------------------
+
+# Header columns that recognise each format (all present, case-sensitive).
+_FORMATS: dict[str, tuple[str, ...]] = {
+    "agglpy": ("id", "x", "y", "r"),
+    "imagej": ("Index", "Type", "X", "Y", "Width", "Height"),
+    # Internal: files of earlier agglpy versions, kept so the author's
+    # old data still reads. Found by auto-detection and accepted by
+    # format=, but not documented: v0.4 HCT_multi output (0-based ids)
+    # and the format before it, whose ids restart at 0 for each HCT
+    # range, so its rows are numbered 0..n-1 instead (author,
+    # 2026-10-12).
+    "agglpy_v04": ("ID", "X", "Y", "R"),
+    "agglpy_v00": ("ID", "X (pixels)", "Y (pixels)", "Radius (pixels)"),
+}
+_PUBLIC_FORMATS = ("agglpy", "imagej")
+_RENAMES = {
+    "agglpy_v04": {"ID": "id", "X": "x", "Y": "y", "R": "r"},
+    "agglpy_v00": {
+        "ID": "id",
+        "X (pixels)": "x",
+        "Y (pixels)": "y",
+        "Radius (pixels)": "r",
+    },
+}
+_MAX_LISTED = 10
+# An ImageJ oval is read as a circle up to this |Width - Height| (px):
+# the grain of ImageJ's integer bounding boxes.
+_NEAR_CIRCLE_PX = 1.0
+
+
+def read_particles(path: PathLike, *, format: str = "auto") -> pd.DataFrame:
+    """Read a particle file into a particle table (px).
+
+    Formats, recognised by their header columns:
+
+    - ``"agglpy"``: ``id, x, y, r``, written by ``write_particles``;
+      read unchanged, ids included.
+    - ``"imagej"``: the CSV of Fiji's ROI Manager (``Index, Type, X,
+      Y, Width, Height``). Converted to pixel centres
+      (``x = X + Width/2 - 0.5``), ``r = (Width + Height)/4`` and
+      ``id = Index + 1``, the number Fiji shows. Ovals with
+      ``|Width - Height| <= 1`` px are read as circles; other shapes
+      are dropped. Either gives one ``NonCircularParticlesWarning``.
+
+    Only the geometry is read: the result has exactly the columns
+    ``id, x, y, r``, and any other column in the file is ignored. A
+    file with a header and no rows gives an empty table.
+
+    Args:
+        path: The particle file (UTF-8, a byte order mark is fine).
+        format: ``"auto"`` (default) recognises the format from the
+            header; a format name skips that and requires its columns.
+
+    Returns:
+        A validated particle table.
+
+    Raises:
+        FileNotFoundError: If the file doesn't exist.
+        FileFormatError: If no format or more than one matches, a
+            column is missing or a value breaks the particle table
+            schema.
+        ParamsError: If ``format`` is not a known format name.
+
+    Warns:
+        NonCircularParticlesWarning: If ImageJ shapes were approximated
+            or dropped.
+    """
+    path = Path(path)
+    if format != "auto" and format not in _FORMATS:
+        raise ParamsError(
+            f"format must be 'auto' or one of {list(_PUBLIC_FORMATS)}, "
+            f"got {format!r}"
+        )
+    try:
+        raw = pd.read_csv(
+            path, encoding="utf-8-sig", float_precision="round_trip"
+        )
+    except (pd.errors.EmptyDataError, pd.errors.ParserError) as exc:
+        raise FileFormatError(f"{path}: not a CSV table: {exc}") from exc
+    except UnicodeDecodeError as exc:
+        raise FileFormatError(f"{path}: not UTF-8 text: {exc}") from exc
+    name = _detect(raw, path) if format == "auto" else format
+    missing = [c for c in _FORMATS[name] if c not in raw.columns]
+    if missing:
+        raise FileFormatError(
+            f"{path}: columns {missing} of format {name!r} are missing"
+        )
+    try:
+        if name == "imagej":
+            table = _from_imagej(raw, path)
+        else:
+            table = raw.loc[:, list(_FORMATS[name])]
+            table = table.rename(columns=_RENAMES.get(name, {}))
+            if name == "agglpy_v00":
+                table["id"] = np.arange(len(table))
+        return validate_particles(table)
+    except ParticleTableError as exc:
+        raise FileFormatError(f"{path}: {exc}") from exc
+
+
+def _detect(raw: pd.DataFrame, path: Path) -> str:
+    found = [
+        name
+        for name, columns in _FORMATS.items()
+        if all(c in raw.columns for c in columns)
+    ]
+    if len(found) == 1:
+        return found[0]
+    if not found:
+        raise FileFormatError(
+            f"{path}: not a particle file: header {list(raw.columns)} "
+            f"matches none of the formats {list(_PUBLIC_FORMATS)}"
+        )
+    raise FileFormatError(
+        f"{path}: the header matches several formats {found}; "
+        f"choose one with format="
+    )
+
+
+def _from_imagej(raw: pd.DataFrame, path: Path) -> pd.DataFrame:
+    numbers = {
+        c: _numeric(raw[c], c) for c in ("Index", "X", "Y", "Width", "Height")
+    }
+    w, h = numbers["Width"], numbers["Height"]
+    ids = numbers["Index"] + 1  # the number Fiji shows
+    oval = raw["Type"] == "Oval"
+    gap = (w - h).abs()
+    near = oval & (gap > 0) & (gap <= _NEAR_CIRCLE_PX)
+    keep = oval & (gap <= _NEAR_CIRCLE_PX)
+    if near.any() or not keep.all():
+        _warn_shapes(raw, ids, near, ~keep, path)
+    # ImageJ counts from pixel edges, agglpy from pixel centres (D-051)
+    return pd.DataFrame(
+        {
+            "id": ids[keep],
+            "x": numbers["X"][keep] + w[keep] / 2 - 0.5,
+            "y": numbers["Y"][keep] + h[keep] / 2 - 0.5,
+            "r": (w[keep] + h[keep]) / 4,
+        }
+    )
+
+
+def _numeric(values: pd.Series, column: str) -> pd.Series:
+    try:
+        return pd.to_numeric(values, errors="raise").astype(np.float64)
+    except (ValueError, TypeError) as exc:
+        raise ParticleTableError(
+            f"column {column!r} must be numeric: {exc}"
+        ) from exc
+
+
+def _warn_shapes(
+    raw: pd.DataFrame,
+    ids: pd.Series,
+    near: pd.Series,
+    dropped: pd.Series,
+    path: Path,
+) -> None:
+    def listed(labels: list[str]) -> str:
+        more = len(labels) - _MAX_LISTED
+        tail = f" and {more} more" if more > 0 else ""
+        return ", ".join(labels[:_MAX_LISTED]) + tail
+
+    def size(i: Any) -> str:
+        return f"{raw.at[i, 'Width']:g} x {raw.at[i, 'Height']:g}"
+
+    parts = [f"{path}: {len(raw)} ROIs"]
+    if near.any():
+        labels = [f"{ids[i]:g}" for i in raw.index[near]]
+        parts.append(
+            f"{len(labels)} near-circular ovals read as circles "
+            f"(|W - H| <= 1 px; ids {listed(labels)})"
+        )
+    if dropped.any():
+        labels = [
+            f"{ids[i]:g}: {raw.at[i, 'Type']} {size(i)}"
+            for i in raw.index[dropped]
+        ]
+        parts.append(
+            f"{len(labels)} non-circular ROIs dropped (ids {listed(labels)})"
+        )
+    warnings.warn(
+        "; ".join(parts) + ".", NonCircularParticlesWarning, stacklevel=4
+    )
