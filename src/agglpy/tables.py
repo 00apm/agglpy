@@ -213,7 +213,9 @@ def outside_image(
     but still reaches into the image is not outside.
 
     Args:
-        particles: A particle table (columns ``x, y, r`` in px).
+        particles: A validated particle table (columns ``x, y, r`` in
+            px); a NaN coordinate, which validation rejects, would
+            count as not outside.
         width: Image width in px.
         height: Image height in px.
 
