@@ -425,6 +425,17 @@ def _from_imagej(raw: pd.DataFrame, path: Path) -> pd.DataFrame:
     numbers = {
         c: _numeric(raw[c], c) for c in ("Index", "X", "Y", "Width", "Height")
     }
+    # a ROI without an index or a position can't be placed: fail,
+    # naming the file's column and line (an empty size only drops it)
+    for column in ("Index", "X", "Y"):
+        rows = np.flatnonzero(~np.isfinite(numbers[column].to_numpy()))
+        if rows.size:
+            lines = [str(row + 2) for row in rows]  # line 1: header
+            word = "line" if len(lines) == 1 else "lines"
+            raise ParticleTableError(
+                f"column {column!r} is empty or not finite at {word} "
+                f"{_listed(lines)}"
+            )
     w, h = numbers["Width"], numbers["Height"]
     ids = numbers["Index"] + 1  # the number Fiji shows
     oval = raw["Type"] == "Oval"
@@ -460,11 +471,6 @@ def _warn_shapes(
     dropped: pd.Series,
     path: Path,
 ) -> None:
-    def listed(labels: list[str]) -> str:
-        more = len(labels) - _MAX_LISTED
-        tail = f" and {more} more" if more > 0 else ""
-        return ", ".join(labels[:_MAX_LISTED]) + tail
-
     def size(i: Any) -> str:
         return f"{raw.at[i, 'Width']:g} x {raw.at[i, 'Height']:g}"
 
@@ -473,7 +479,7 @@ def _warn_shapes(
         labels = [f"{ids[i]:g}" for i in raw.index[near]]
         parts.append(
             f"{len(labels)} near-circular ovals read as circles "
-            f"(|W - H| <= 1 px; ids {listed(labels)})"
+            f"(|W - H| <= 1 px; ids {_listed(labels)})"
         )
     if dropped.any():
         labels = [
@@ -481,11 +487,18 @@ def _warn_shapes(
             for i in raw.index[dropped]
         ]
         parts.append(
-            f"{len(labels)} non-circular ROIs dropped (ids {listed(labels)})"
+            f"{len(labels)} non-circular ROIs dropped (ids {_listed(labels)})"
         )
     warnings.warn(
         "; ".join(parts) + ".", NonCircularParticlesWarning, stacklevel=4
     )
+
+
+def _listed(labels: list[str]) -> str:
+    """Labels joined by commas, cut after ``_MAX_LISTED``."""
+    more = len(labels) - _MAX_LISTED
+    tail = f" and {more} more" if more > 0 else ""
+    return ", ".join(labels[:_MAX_LISTED]) + tail
 
 
 def write_particles(
