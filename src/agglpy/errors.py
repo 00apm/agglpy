@@ -103,3 +103,33 @@ class ValuesNotCountedWarning(UserWarning):
 
 class MissingImagesWarning(UserWarning):
     """Warns that images of the images table have no per-image value."""
+
+
+class FileFormatError(AgglpyError, ValueError):
+    """Raised when a file exists but its content can't be read.
+
+    No or an ambiguous particle-file format, missing columns, values
+    that break the particle table schema (the ``ParticleTableError`` is
+    chained as the cause), an image OpenCV can't decode, an unreadable
+    TIFF header. The message names the file.
+    """
+
+
+class PixelSizeWarning(UserWarning):
+    """Warns that the pixel size read from a file may be wrong.
+
+    The Zeiss text field and the raw value differ by more than 1 %, or
+    the pixels are not square (x and y differ by more than 1 %).
+    """
+
+
+class NonCircularParticlesWarning(UserWarning):
+    """Warns that a reader approximated or dropped non-circular shapes.
+
+    Near-circular ovals were read as circles, or shapes that are not
+    circles were left out.
+    """
+
+
+class ParticlesOutsideImageWarning(UserWarning):
+    """Warns that particles lie entirely outside their image."""
