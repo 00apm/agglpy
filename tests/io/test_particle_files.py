@@ -451,3 +451,31 @@ def test_rows_longer_than_the_header_are_rejected(
     path = write_csv(tmp_path / "p.csv", ["id,x,y,r", row])
     with pytest.raises(FileFormatError, match=r"p\.csv.*more fields"):
         read_particles(path)
+
+
+@pytest.mark.parametrize("column", ["Index", "X", "Y"])
+def test_imagej_empty_position_names_the_file_column_and_line(
+    tmp_path: Path, column: str
+) -> None:
+    # the error names the column as the file has it, and the line
+    rows = ["1,0,a,Oval,none,0,0,60,60", "2,1,b,Oval,none,100,0,60,60"]
+    position = {"Index": 1, "X": 5, "Y": 6}[column]
+    fields = rows[1].split(",")
+    fields[position] = ""
+    path = _imagej(tmp_path / "p.csv", [rows[0], ",".join(fields)])
+    with pytest.raises(FileFormatError, match=rf"p\.csv.*'{column}'.*line 3"):
+        read_particles(path)
+
+
+def test_large_imagej_ids_are_printed_as_integers(tmp_path: Path) -> None:
+    path = _imagej(tmp_path / "p.csv", ["1,1234566,a,Rectangle,none,0,0,6,6"])
+    with pytest.warns(NonCircularParticlesWarning, match="ids 1234567: "):
+        read_particles(path)
+
+
+def test_format_argument_error_shows_the_header(tmp_path: Path) -> None:
+    # a ';' file read with format= shows why the columns are missing,
+    # as auto-detection does (no comma in it: one field per row)
+    path = write_csv(tmp_path / "p.csv", ["id;x;y;r", "1;10;10;5"])
+    with pytest.raises(FileFormatError, match=r"header.*id;x;y;r"):
+        read_particles(path, format="agglpy")
