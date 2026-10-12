@@ -476,14 +476,14 @@ def _warn_shapes(
 
     parts = [f"{path}: {len(raw)} ROIs"]
     if near.any():
-        labels = [f"{ids[i]:g}" for i in raw.index[near]]
+        labels = [f"{int(ids[i])}" for i in raw.index[near]]
         parts.append(
             f"{len(labels)} near-circular ovals read as circles "
             f"(|W - H| <= 1 px; ids {_listed(labels)})"
         )
     if dropped.any():
         labels = [
-            f"{ids[i]:g}: {raw.at[i, 'Type']} {size(i)}"
+            f"{int(ids[i])}: {raw.at[i, 'Type']} {size(i)}"
             for i in raw.index[dropped]
         ]
         parts.append(
