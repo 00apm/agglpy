@@ -36,7 +36,7 @@ from agglpy.errors import (
     ParticleTableError,
     PixelSizeWarning,
 )
-from agglpy.tables import validate_particles
+from agglpy.tables import PARTICLE_COLUMNS, validate_particles
 
 PathLike = str | os.PathLike[str]
 
@@ -451,3 +451,36 @@ def _warn_shapes(
     warnings.warn(
         "; ".join(parts) + ".", NonCircularParticlesWarning, stacklevel=4
     )
+
+
+def write_particles(
+    particles: pd.DataFrame, path: PathLike, *, overwrite: bool = False
+) -> None:
+    """Write a particle table as an agglpy particle file.
+
+    Writes exactly the columns ``id, x, y, r`` (px), in that order:
+    extra columns in memory are not written. One header row, comma
+    separated, ``.`` as decimal mark, UTF-8 without a byte order mark,
+    LF line endings on every OS, so ImageJ can open the file and the
+    same table always gives the same bytes. Floats are written as the
+    shortest decimal that reads back to the same value:
+    ``read_particles`` returns the table exactly.
+
+    Args:
+        particles: A particle table.
+        path: The file to write.
+        overwrite: Replace an existing file. By default an existing
+            file is never touched.
+
+    Raises:
+        ParticleTableError: If the table breaks the schema (nothing is
+            written).
+        FileExistsError: If the file exists and ``overwrite`` is False.
+        FileNotFoundError: If the folder doesn't exist.
+    """
+    table = validate_particles(particles, warn_duplicates=False)
+    table = table.loc[:, list(PARTICLE_COLUMNS)]
+    with Path(path).open(
+        "w" if overwrite else "x", encoding="utf-8", newline=""
+    ) as fh:
+        table.to_csv(fh, index=False, lineterminator="\n")

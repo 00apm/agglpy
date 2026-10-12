@@ -8,6 +8,7 @@ import warnings
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from agglpy.errors import (
@@ -17,8 +18,8 @@ from agglpy.errors import (
     ParamsError,
     ParticleTableError,
 )
-from agglpy.io import read_particles
-from agglpy.tables import PARTICLE_COLUMNS
+from agglpy.io import read_particles, write_particles
+from agglpy.tables import PARTICLE_COLUMNS, make_particles
 
 from support.paths import DATA_DIR
 
@@ -345,3 +346,79 @@ def test_shape_warning_points_at_the_caller(tmp_path: Path) -> None:
     with pytest.warns(NonCircularParticlesWarning) as record:
         read_particles(path)
     assert record[0].filename == __file__
+
+
+def test_exact_round_trip_of_random_floats(tmp_path: Path) -> None:
+    # pandas writes the shortest decimal that reads back to the same
+    # float; the default parser would miss the last digit for 17 % of
+    # these values, round_trip for none
+    rng = np.random.default_rng(2026)
+    n = 100_000
+    # random digits on an 8-px grid: no near-identical circles
+    cell = np.arange(n)
+    table = make_particles(
+        (cell % 400) * 8 + rng.uniform(-1, 1, n) - 50,
+        (cell // 400) * 8 + rng.uniform(-1, 1, n) - 50,
+        rng.uniform(0.5, 120, n),
+        ids=rng.permutation(n) * 3 + 7,
+    )
+    write_particles(table, tmp_path / "p.csv")
+    pd.testing.assert_frame_equal(
+        read_particles(tmp_path / "p.csv"), table, check_exact=True
+    )
+
+
+def test_written_bytes_are_fixed(tmp_path: Path) -> None:
+    # one header, comma, '.', no index, integer ids, LF on every OS,
+    # no byte order mark
+    table = make_particles([2700.5, 0.1], [2005.5, -3.0], [26.6, 1e-3])
+    write_particles(table, tmp_path / "p.csv")
+    assert (tmp_path / "p.csv").read_bytes() == (
+        b"id,x,y,r\n1,2700.5,2005.5,26.6\n2,0.1,-3.0,0.001\n"
+    )
+
+
+def test_only_the_schema_columns_are_written(tmp_path: Path) -> None:
+    table = make_particles([10.0], [10.0], [5.0])
+    table.insert(0, "note", ["x"])
+    table["agglomerate_id"] = [4]
+    write_particles(table, tmp_path / "p.csv")
+    assert (tmp_path / "p.csv").read_text().splitlines()[0] == "id,x,y,r"
+
+
+def test_empty_table_writes_a_header(tmp_path: Path) -> None:
+    write_particles(make_particles([], [], []), tmp_path / "p.csv")
+    assert (tmp_path / "p.csv").read_bytes() == b"id,x,y,r\n"
+    assert len(read_particles(tmp_path / "p.csv")) == 0
+
+
+def test_existing_file_is_never_overwritten_by_default(
+    tmp_path: Path,
+) -> None:
+    path = write_csv(tmp_path / "p.csv", ["keep me"])
+    with pytest.raises(FileExistsError):
+        write_particles(make_particles([1.0], [1.0], [1.0]), path)
+    assert path.read_text() == "keep me\n"
+    write_particles(make_particles([1.0], [1.0], [1.0]), path, overwrite=True)
+    assert path.read_text().startswith("id,x,y,r")
+
+
+def test_bad_table_writes_nothing(tmp_path: Path) -> None:
+    bad = pd.DataFrame({"id": [1], "x": [1.0], "y": [1.0], "r": [-1.0]})
+    with pytest.raises(ParticleTableError):
+        write_particles(bad, tmp_path / "p.csv")
+    assert not (tmp_path / "p.csv").exists()
+
+
+def test_missing_folder_raises_file_not_found(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError):
+        write_particles(
+            make_particles([1.0], [1.0], [1.0]), tmp_path / "no" / "p.csv"
+        )
+
+
+def test_writing_does_not_warn_about_duplicates(tmp_path: Path) -> None:
+    # the duplicate warning belongs to creating or reading a table
+    with pytest.warns(Warning):
+        table = make_particles([10.0, 10.5], [10.0, 10.0], [5.0, 5.0])
+    write_particles(table, tmp_path / "p.csv")  # fixture: no warning
