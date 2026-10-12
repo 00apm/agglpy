@@ -12,12 +12,13 @@ from pathlib import Path
 import cv2
 import numpy as np
 import pytest
+import tifffile
 
 from agglpy.errors import FileFormatError, PixelSizeWarning
 from agglpy.io import ImageMetadata, read_image_metadata
 
 from support.paths import DATA_DIR
-from support.tiffs import write_zeiss
+from support.tiffs import write_fei, write_imagej, write_zeiss
 
 INPUT = DATA_DIR / "input"
 D7_017 = INPUT / "multiple_image" / "images" / "D7-017" / "D7-017.tif"
@@ -159,3 +160,97 @@ def test_undecodable_other_file_raises_file_format_error(
     path.write_text("not an image")
     with pytest.raises(FileFormatError, match=r"notes\.png"):
         read_image_metadata(path)
+
+
+def test_thermo_fei_pixel_width(tmp_path: Path) -> None:
+    # FEI Helios sample: 512 x 471 px, PixelWidth 3.3724e-06 m
+    path = write_fei(tmp_path / "f.tif", 512, 471, 3.3724e-06, 3.3724e-06)
+    assert read_image_metadata(path) == ImageMetadata(
+        3.3724e-06, "Thermo/FEI [Scan] PixelWidth", 512, 471
+    )
+
+
+def test_thermo_fei_non_square_pixels_warn(tmp_path: Path) -> None:
+    path = write_fei(tmp_path / "f.tif", 16, 8, 3.3724e-06, 3.5e-06)
+    with pytest.warns(PixelSizeWarning, match=r"f\.tif.*not square"):
+        meta = read_image_metadata(path)
+    assert meta.pixel_size == 3.3724e-06  # the x value
+
+
+@pytest.mark.parametrize(
+    ("unit", "factor"),
+    [
+        ("micron", 1e-6),
+        ("um", 1e-6),
+        ("\N{MICRO SIGN}m", 1e-6),
+        ("\N{GREEK SMALL LETTER MU}m", 1e-6),
+        ("nm", 1e-9),
+        ("mm", 1e-3),
+        ("cm", 1e-2),
+        ("m", 1.0),
+    ],
+)
+def test_imagej_units(tmp_path: Path, unit: str, factor: float) -> None:
+    # ImageJ 1.51a sample: 5.928571 px per micron -> 1.6867e-07 m
+    path = write_imagej(tmp_path / "ij.tif", 16, 8, unit, (5.928571, 5.928571))
+    meta = read_image_metadata(path)
+    assert meta.pixel_size == pytest.approx(factor / 5.928571, rel=1e-6)
+    assert meta.pixel_size_source == f"ImageJ calibration (unit={unit})"
+
+
+@pytest.mark.parametrize("unit", [None, "pixel", "inch"])
+def test_imagej_without_a_known_unit_has_no_pixel_size(
+    tmp_path: Path, unit: str | None
+) -> None:
+    path = write_imagej(tmp_path / "ij.tif", 16, 8, unit, (5.0, 5.0))
+    assert read_image_metadata(path).pixel_size is None
+
+
+def test_imagej_non_square_pixels_warn(tmp_path: Path) -> None:
+    path = write_imagej(tmp_path / "ij.tif", 16, 8, "micron", (5.0, 6.0))
+    with pytest.warns(PixelSizeWarning, match="not square"):
+        meta = read_image_metadata(path)
+    assert meta.pixel_size == pytest.approx(0.2e-6)
+
+
+def test_first_reader_wins(tmp_path: Path) -> None:
+    # Zeiss before Thermo/FEI before ImageJ (D-050)
+    path = tmp_path / "both.tif"
+    zeiss = b"0\r\n0\r\n0\r\n1e-06\r\n"
+    fei = b"[Scan]\r\nPixelWidth=2e-06\r\n"
+    tifffile.imwrite(
+        path,
+        np.zeros((8, 1024), np.uint8),
+        extratags=[
+            (34118, 2, len(zeiss) + 1, zeiss, True),
+            (34682, 2, len(fei) + 1, fei, True),
+        ],
+    )
+    assert read_image_metadata(path).pixel_size == pytest.approx(1e-6)
+
+
+def test_tiff_resolution_alone_is_never_used(tmp_path: Path) -> None:
+    # 72 dpi in many files, 1/1 in Zeiss files: not a pixel size
+    path = tmp_path / "plain.tif"
+    tifffile.imwrite(
+        path,
+        np.zeros((8, 16), np.uint8),
+        resolution=(72, 72),
+        resolutionunit="INCH",
+    )
+    assert read_image_metadata(path) == ImageMetadata(None, None, 16, 8)
+
+
+@pytest.mark.parametrize("kind", ["zeiss", "non-square"])
+def test_pixel_size_warning_points_at_the_caller(
+    tmp_path: Path, kind: str
+) -> None:
+    if kind == "zeiss":
+        path = write_zeiss(
+            tmp_path / "z.tif", 3072, 8, 1.171875e-07, (50, "nm")
+        )
+    else:
+        path = write_fei(tmp_path / "f.tif", 16, 8, 3.3724e-06, 3.5e-06)
+    with pytest.warns(PixelSizeWarning) as record:
+        read_image_metadata(path)
+    assert record[0].filename == __file__

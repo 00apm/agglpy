@@ -11,6 +11,8 @@ import numpy as np
 import tifffile
 
 ZEISS_TAG = 34118  # CZ_SEM
+FEI_HELIOS_TAG = 34682
+DESCRIPTION_TAG = 270  # ImageDescription
 
 
 def _pixels(width: int, height: int) -> np.ndarray:
@@ -53,4 +55,48 @@ def write_zeiss(
         )
         for _ in range(pages - 1):
             tif.write(_pixels(width, height))
+    return path
+
+
+def write_fei(
+    path: Path,
+    width: int,
+    height: int,
+    pixel_width: float,
+    pixel_height: float | None = None,
+) -> Path:
+    """A TIFF with a Thermo/FEI ``[Scan]`` section (Helios tag)."""
+    text = f"[Scan]\r\nPixelWidth={pixel_width!r}\r\n"
+    if pixel_height is not None:
+        text += f"PixelHeight={pixel_height!r}\r\n"
+    data = text.encode("ascii")
+    tifffile.imwrite(
+        path,
+        _pixels(width, height),
+        extratags=[(FEI_HELIOS_TAG, 2, len(data) + 1, data, True)],
+    )
+    return path
+
+
+def write_imagej(
+    path: Path,
+    width: int,
+    height: int,
+    unit: str | None,
+    resolution: tuple[float, float] = (1.0, 1.0),
+) -> Path:
+    """An ImageJ TIFF with a calibration (px per unit), or none.
+
+    The ImageJ description is written by hand: tifffile's own ImageJ
+    writer rejects a non-ASCII unit such as µm.
+    """
+    text = "ImageJ=1.51a\n" + ("" if unit is None else f"unit={unit}\n")
+    data = text.encode("utf-8")
+    tifffile.imwrite(
+        path,
+        _pixels(width, height),
+        resolution=resolution,
+        metadata=None,
+        extratags=[(DESCRIPTION_TAG, 2, len(data) + 1, data, True)],
+    )
     return path

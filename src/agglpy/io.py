@@ -21,6 +21,7 @@ import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import cv2
 import numpy as np
@@ -148,6 +149,16 @@ _ZEISS_UNITS = {
     "mm": 1e-3,
     "m": 1.0,
 }
+_IMAGEJ_UNITS = {
+    "micron": 1e-6,
+    "\N{MICRO SIGN}m": 1e-6,
+    "\N{GREEK SMALL LETTER MU}m": 1e-6,
+    "um": 1e-6,
+    "nm": 1e-9,
+    "mm": 1e-3,
+    "cm": 1e-2,
+    "m": 1.0,
+}
 _TOLERANCE = 0.01  # 1 %: text vs raw value, x vs y pixel size
 
 
@@ -179,10 +190,39 @@ def _zeiss(
     return size, f"Zeiss CZ_SEM (1024-px reference scaled to {width} px)"
 
 
+def _thermo_fei(
+    tif: tifffile.TiffFile, width: int, path: Path
+) -> tuple[float, str] | None:
+    fei = tif.fei_metadata
+    scan = fei.get("Scan") if isinstance(fei, dict) else None
+    if not isinstance(scan, dict):
+        return None
+    x = _positive(scan.get("PixelWidth"))
+    if x is None:
+        return None
+    _check_square(x, _positive(scan.get("PixelHeight")), path)
+    return x, "Thermo/FEI [Scan] PixelWidth"
+
+
+def _imagej_calibration(
+    tif: tifffile.TiffFile, width: int, path: Path
+) -> tuple[float, str] | None:
+    ij = tif.imagej_metadata
+    unit = ij.get("unit") if isinstance(ij, dict) else None
+    factor = _IMAGEJ_UNITS.get(unit) if isinstance(unit, str) else None
+    tags = tif.pages.first.tags
+    x_res = _resolution(tags.get(282))  # XResolution, px per unit
+    if factor is None or x_res is None:
+        return None
+    y_res = _resolution(tags.get(283))  # YResolution
+    _check_square(factor / x_res, y_res and factor / y_res, path)
+    return factor / x_res, f"ImageJ calibration (unit={unit})"
+
+
 # First hit wins (D-050). A new vendor comes with a real sample file.
 _PIXEL_SIZE_READERS: tuple[
     Callable[[tifffile.TiffFile, int, Path], tuple[float, str] | None], ...
-] = (_zeiss,)
+] = (_zeiss, _thermo_fei, _imagej_calibration)
 
 
 def _item(values: object, index: int) -> object:
@@ -197,3 +237,20 @@ def _positive(value: object) -> float | None:
         return None
     number = float(value)
     return number if math.isfinite(number) and number > 0 else None
+
+
+def _resolution(tag: Any) -> float | None:
+    value = getattr(tag, "value", None)
+    if isinstance(value, tuple) and len(value) == 2 and value[1]:
+        return _positive(value[0] / value[1])
+    return None
+
+
+def _check_square(x: float, y: float | None, path: Path) -> None:
+    if y is not None and abs(x - y) > _TOLERANCE * x:
+        warnings.warn(
+            f"{path}: pixels are not square (x {x:.6g} m, y {y:.6g} m); "
+            f"the x value is used",
+            PixelSizeWarning,
+            stacklevel=4,
+        )
