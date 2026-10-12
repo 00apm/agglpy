@@ -61,6 +61,12 @@ The operator reviews the automatic detection result and:
 
 In the published study this was done in ImageJ; within agglpy this corresponds to the manual review/edit step between automatic HCT detection and the agglomerate classification stage.
 
+**Coordinates.** Particle positions and radii are in pixels, with pixel centres at integers: pixel $i$ covers $[i - 0.5, i + 0.5)$, as in OpenCV, NumPy and scikit-image, so an image $w$ pixels wide spans $[-0.5, w - 0.5]$. The origin is the corner of the raw image, whatever part of it detection used. A circle reaching past the image edge, or with its centre outside the image, is a partly visible particle and stays in the data.
+
+**Reading a Fiji correction.** ImageJ and Fiji count from pixel edges (the centre of pixel $i$ at $i + 0.5$), so a circle read from a ROI Manager CSV is shifted by $-0.5$ px: the oval with $X = 2674$, $W = 54$ is the HCT circle centred at $x = 2700.5$. Its radius is $(W + H)/4$, and its id is the number Fiji shows (the ROI index + 1). ImageJ stores whole-pixel bounding boxes, so an oval whose width and height differ by at most 1 px is read as a circle; other shapes are left out. Both are reported in one warning per file.
+
+Codebase: `agglpy.io.read_particles`, `agglpy.tables.outside_image`.
+
 ## 5. Closest-neighbor finding
 
 Determining which particles are connected requires comparing each particle against candidate neighbors. Checking every pair is expensive for images with many particles, so agglpy narrows the candidate set first.
@@ -139,7 +145,7 @@ Metrics describe a group of images: one image, a user group (a column of the ima
 
 **Size distributions.** `distribution` counts any column over size classes $(a, b]$ (or $[a, b)$), the outer edge included. A value within $10^{-9}$ (relative) of an edge counts as on the edge, because a whole-pixel diameter times the pixel size misses round edges by one rounding step. Values outside the classes and missing values are not counted and are reported. Each class gives the amount (count, or the sum of a weight column such as the real particle volumes), the fraction, the cumulative fraction, the density (fraction / class width) and the log density, fraction / $\log_{10}(b/a)$ ($dN/d\log D$, ISO 9276-1).
 
-**Units.** Properties are computed in pixels; each image is converted to physical units with its own pixel size before images are pooled, so metrics and distributions always see one unit.
+**Units.** Properties are computed in pixels; each image is converted to physical units with its own pixel size before images are pooled, so metrics and distributions always see one unit. The pixel size is given by the user or read from the image file's tags: for Zeiss the stored reference value for a 1024-px wide image, scaled to the image width; for Thermo/FEI the pixel width of the scan; otherwise an ImageJ calibration. The plain TIFF resolution is never used, because many files carry a placeholder there (72 dpi, or 1/1 in Zeiss files). Codebase: `agglpy.io.read_image_metadata`.
 
 ## Output
 
