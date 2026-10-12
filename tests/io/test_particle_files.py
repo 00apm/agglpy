@@ -436,3 +436,18 @@ def test_duplicate_warning_names_the_file_and_points_at_the_caller(
     with pytest.warns(DuplicateParticlesWarning) as record:
         read_particles(path)
     assert record[0].filename == __file__
+
+
+@pytest.mark.parametrize(
+    "row",
+    ["1,1,5,2,3", "1,10,20,3,"],
+    ids=["decimal comma", "trailing comma"],
+)
+def test_rows_longer_than_the_header_are_rejected(
+    tmp_path: Path, row: str
+) -> None:
+    # pandas would take the first field as the index and shift every
+    # value one column left: wrong geometry without an error
+    path = write_csv(tmp_path / "p.csv", ["id,x,y,r", row])
+    with pytest.raises(FileFormatError, match=r"p\.csv.*more fields"):
+        read_particles(path)

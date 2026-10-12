@@ -366,6 +366,13 @@ def read_particles(path: PathLike, *, format: str = "auto") -> pd.DataFrame:
         raise FileFormatError(f"{path}: not a CSV table: {exc}") from exc
     except UnicodeDecodeError as exc:
         raise FileFormatError(f"{path}: not UTF-8 text: {exc}") from exc
+    # rows one field longer than the header: pandas takes the first
+    # field as the index and shifts every value one column left
+    if not isinstance(raw.index, pd.RangeIndex):
+        raise FileFormatError(
+            f"{path}: rows have more fields than the header "
+            f"{list(raw.columns)} (a decimal comma or a trailing comma?)"
+        )
     name = _detect(raw, path) if format == "auto" else format
     missing = [c for c in _FORMATS[name] if c not in raw.columns]
     if missing:
