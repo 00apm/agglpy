@@ -377,7 +377,8 @@ def read_particles(path: PathLike, *, format: str = "auto") -> pd.DataFrame:
     missing = [c for c in _FORMATS[name] if c not in raw.columns]
     if missing:
         raise FileFormatError(
-            f"{path}: columns {missing} of format {name!r} are missing"
+            f"{path}: columns {missing} of format {name!r} are missing "
+            f"(header: {list(raw.columns)})"
         )
     try:
         if name == "imagej":
