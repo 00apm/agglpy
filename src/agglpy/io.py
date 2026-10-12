@@ -30,13 +30,19 @@ import tifffile
 from numpy.typing import NDArray
 
 from agglpy.errors import (
+    DuplicateParticlesWarning,
     FileFormatError,
     NonCircularParticlesWarning,
     ParamsError,
     ParticleTableError,
     PixelSizeWarning,
 )
-from agglpy.tables import PARTICLE_COLUMNS, validate_particles
+from agglpy.tables import (
+    PARTICLE_COLUMNS,
+    _duplicates_message,
+    find_duplicates,
+    validate_particles,
+)
 
 PathLike = str | os.PathLike[str]
 
@@ -333,6 +339,8 @@ def read_particles(path: PathLike, *, format: str = "auto") -> pd.DataFrame:
     Warns:
         NonCircularParticlesWarning: If ImageJ shapes were approximated
             or dropped.
+        DuplicateParticlesWarning: If the file holds near-identical
+            circles (see ``agglpy.tables.find_duplicates``).
     """
     path = Path(path)
     if format != "auto" and format not in _FORMATS:
@@ -362,9 +370,19 @@ def read_particles(path: PathLike, *, format: str = "auto") -> pd.DataFrame:
             table = table.rename(columns=_RENAMES.get(name, {}))
             if name == "agglpy_v00":
                 table["id"] = np.arange(len(table))
-        return validate_particles(table)
+        table = validate_particles(table, warn_duplicates=False)
     except ParticleTableError as exc:
         raise FileFormatError(f"{path}: {exc}") from exc
+    # warned here, not in validate_particles: the message names the file
+    # and points at the caller's line
+    pairs = find_duplicates(table)
+    if pairs:
+        warnings.warn(
+            f"{path}: {_duplicates_message(pairs)}",
+            DuplicateParticlesWarning,
+            stacklevel=2,
+        )
+    return table
 
 
 def _detect(raw: pd.DataFrame, path: Path) -> str:

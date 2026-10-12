@@ -422,3 +422,17 @@ def test_writing_does_not_warn_about_duplicates(tmp_path: Path) -> None:
     with pytest.warns(Warning):
         table = make_particles([10.0, 10.5], [10.0, 10.0], [5.0, 5.0])
     write_particles(table, tmp_path / "p.csv")  # fixture: no warning
+
+
+def test_duplicate_warning_names_the_file_and_points_at_the_caller(
+    tmp_path: Path,
+) -> None:
+    # a notebook reading many files must see which one has duplicates
+    path = write_csv(
+        tmp_path / "p.csv", ["id,x,y,r", "1,10,10,5", "2,10.5,10,5"]
+    )
+    with pytest.warns(DuplicateParticlesWarning, match=r"p\.csv: 1 pairs"):
+        read_particles(path)
+    with pytest.warns(DuplicateParticlesWarning) as record:
+        read_particles(path)
+    assert record[0].filename == __file__

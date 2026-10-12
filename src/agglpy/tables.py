@@ -142,16 +142,23 @@ def validate_particles(
     if warn_duplicates:
         pairs = find_duplicates(out)
         if pairs:
-            listed = pairs[:_MAX_LISTED_DUPLICATES]
-            more = len(pairs) - len(listed)
-            suffix = f" and {more} more" if more else ""
             warnings.warn(
-                f"{len(pairs)} pairs of near-identical circles (ids): "
-                f"{', '.join(map(str, listed))}{suffix}",
+                _duplicates_message(pairs),
                 DuplicateParticlesWarning,
                 stacklevel=2,
             )
     return out
+
+
+def _duplicates_message(pairs: list[tuple[int, int]]) -> str:
+    """Text of the duplicate warning; io prefixes it with the file."""
+    listed = pairs[:_MAX_LISTED_DUPLICATES]
+    more = len(pairs) - len(listed)
+    suffix = f" and {more} more" if more else ""
+    return (
+        f"{len(pairs)} pairs of near-identical circles (ids): "
+        f"{', '.join(map(str, listed))}{suffix}"
+    )
 
 
 def find_duplicates(
