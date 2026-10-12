@@ -517,7 +517,7 @@ def test_to_physical_scales_particle_columns():
         ("surface", 2),
     ]:
         pd.testing.assert_series_equal(out[column], table[column] * 0.5**power)
-    for column in ("id", "source", "agglomerate_id", "enclosed"):
+    for column in ("id", "agglomerate_id", "enclosed"):
         pd.testing.assert_series_equal(out[column], table[column])
 
 

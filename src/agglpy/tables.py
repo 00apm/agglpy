@@ -8,15 +8,14 @@ column    dtype    meaning
 id        int64    particle id, unique within one image
 x, y      float64  centre (px), finite
 r         float64  radius (px), finite and > 0
-source    object   where the table came from: "hct", "manual", …
 ========  =======  ==================================================
 
-``source`` is known for certain when a table is read. Which circles a
-manual correction kept, edited or added is not stored: ImageJ
-renumbers circles, so it can only be inferred by matching geometry
-(D-036).
+The table carries geometry only. Which particle set an image was
+analysed from is recorded per image by the application, and which
+circles a manual correction kept, edited or added is inferred by
+matching geometry (D-036, D-052): ImageJ renumbers circles.
 
-Analysis adds columns later (agglomerate id, type, enclosed flag).
+Analysis adds columns later (agglomerate id, enclosed flag).
 An empty table is valid: zero particles is a result (D-022).
 """
 
@@ -29,7 +28,7 @@ from scipy.spatial import cKDTree
 
 from agglpy.errors import DuplicateParticlesWarning, ParticleTableError
 
-PARTICLE_COLUMNS: tuple[str, ...] = ("id", "x", "y", "r", "source")
+PARTICLE_COLUMNS: tuple[str, ...] = ("id", "x", "y", "r")
 _FLOAT_COLUMNS = ("x", "y", "r")
 _MAX_LISTED_DUPLICATES = 10
 
@@ -39,7 +38,6 @@ def make_particles(
     y: ArrayLike,
     r: ArrayLike,
     *,
-    source: str = "hct",
     ids: ArrayLike | None = None,
 ) -> pd.DataFrame:
     """Build a validated particle table from coordinate arrays.
@@ -48,7 +46,6 @@ def make_particles(
         x: Centre x coordinates in px.
         y: Centre y coordinates in px.
         r: Radii in px.
-        source: Value of the ``source`` column for every row.
         ids: Particle ids; ``1..n`` if omitted.
 
     Returns:
@@ -78,7 +75,6 @@ def make_particles(
             "x": columns["x"],
             "y": columns["y"],
             "r": columns["r"],
-            "source": [source] * n,
         }
     )
     return validate_particles(table)
@@ -103,8 +99,8 @@ def validate_particles(
 
     Raises:
         ParticleTableError: If a column is missing, not numeric where
-            it must be, not finite, ``r <= 0``, ids not integral or not
-            unique, or ``source`` has missing values.
+            it must be, not finite, ``r <= 0``, or ids not integral or
+            not unique.
     """
     missing = [c for c in PARTICLE_COLUMNS if c not in table.columns]
     if missing:
@@ -126,10 +122,6 @@ def validate_particles(
         raise ParticleTableError(
             f"column 'id' must be unique, repeated: {sorted(duplicated)}"
         )
-
-    if out["source"].isna().any():
-        raise ParticleTableError("column 'source' has missing values")
-    out["source"] = out["source"].astype(str).astype(object)
 
     if warn_duplicates:
         pairs = find_duplicates(out)

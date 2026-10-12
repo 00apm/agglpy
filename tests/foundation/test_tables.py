@@ -21,17 +21,21 @@ def _table(**columns: list) -> pd.DataFrame:
         "x": [10.0, 50.0],
         "y": [10.0, 50.0],
         "r": [5.0, 5.0],
-        "source": ["hct", "hct"],
     }
     base.update(columns)
     return pd.DataFrame(base)
+
+
+def test_schema_is_geometry_only() -> None:
+    # No provenance column (D-052): which particle set an image used is
+    # recorded by the application, once per image.
+    assert PARTICLE_COLUMNS == ("id", "x", "y", "r")
 
 
 def test_make_particles_numbers_ids_from_one() -> None:
     t = make_particles([10, 50], [10, 50], [5, 6])
     assert list(t.columns) == list(PARTICLE_COLUMNS)
     assert t["id"].tolist() == [1, 2]
-    assert t["source"].tolist() == ["hct", "hct"]
     assert t["id"].dtype == np.int64 and t["r"].dtype == np.float64
 
 
@@ -61,8 +65,8 @@ def test_duplicate_ids_are_rejected() -> None:
 
 
 def test_missing_column_is_named() -> None:
-    with pytest.raises(ParticleTableError, match="source"):
-        validate_particles(_table().drop(columns="source"))
+    with pytest.raises(ParticleTableError, match="'r'"):
+        validate_particles(_table().drop(columns="r"))
 
 
 def test_non_numeric_column_is_rejected() -> None:
@@ -87,16 +91,19 @@ def test_radius_must_be_positive(bad: float) -> None:
         validate_particles(_table(r=[5.0, bad]))
 
 
-def test_missing_source_is_rejected() -> None:
-    with pytest.raises(ParticleTableError, match="source"):
-        validate_particles(_table(source=["hct", None]))
-
-
 def test_extra_columns_are_kept_after_the_schema() -> None:
     t = _table()
     t.insert(0, "note", ["a", "b"])
     out = validate_particles(t)
     assert list(out.columns) == [*PARTICLE_COLUMNS, "note"]
+
+
+def test_old_source_column_is_an_ordinary_extra_column() -> None:
+    # A table built before D-052 still validates; its source column is
+    # kept like any other extra column, missing values included.
+    out = validate_particles(_table(source=["hct", None]))
+    assert list(out.columns) == [*PARTICLE_COLUMNS, "source"]
+    assert out["source"].tolist() == ["hct", None]
 
 
 def test_input_is_not_modified_and_index_is_fresh() -> None:

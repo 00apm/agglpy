@@ -135,7 +135,7 @@ def _table(x, y, r, ids=None) -> pd.DataFrame:
     """A validated particle table, without the duplicate warning."""
     ids = list(range(1, len(x) + 1)) if ids is None else ids
     return validate_particles(
-        pd.DataFrame({"id": ids, "x": x, "y": y, "r": r, "source": "hct"}),
+        pd.DataFrame({"id": ids, "x": x, "y": y, "r": r}),
         warn_duplicates=False,
     )
 
