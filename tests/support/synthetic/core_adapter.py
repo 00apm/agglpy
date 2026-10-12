@@ -52,7 +52,6 @@ def run_core(
             "x": [c.x for c in case.circles],
             "y": [c.y for c in case.circles],
             "r": [c.r for c in case.circles],
-            "source": "synthetic",
         }
     )
     found = find_agglomerates(table)  # rows stay in input order

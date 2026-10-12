@@ -5,16 +5,20 @@ import pytest
 from agglpy.errors import (
     AgglpyError,
     DuplicateParticlesWarning,
+    FileFormatError,
     MissingImagesWarning,
+    NonCircularParticlesWarning,
     ParamsError,
+    ParticlesOutsideImageWarning,
     ParticleTableError,
+    PixelSizeWarning,
     TableError,
     ValuesNotCountedWarning,
 )
 
 
 @pytest.mark.parametrize(
-    "error", [ParamsError, TableError, ParticleTableError]
+    "error", [ParamsError, TableError, ParticleTableError, FileFormatError]
 )
 def test_errors_share_one_base_and_are_value_errors(
     error: type[Exception],
@@ -25,6 +29,12 @@ def test_errors_share_one_base_and_are_value_errors(
     assert issubclass(error, ValueError)
 
 
+def test_file_format_error_is_not_a_table_error() -> None:
+    # A bad file and a bad table built in memory are told apart; the
+    # file error chains the table error as its cause instead.
+    assert not issubclass(FileFormatError, TableError)
+
+
 def test_particle_table_error_is_a_table_error() -> None:
     # `except TableError` catches every table problem, particle tables
     # included.
@@ -33,7 +43,14 @@ def test_particle_table_error_is_a_table_error() -> None:
 
 @pytest.mark.parametrize(
     "warning",
-    [DuplicateParticlesWarning, ValuesNotCountedWarning, MissingImagesWarning],
+    [
+        DuplicateParticlesWarning,
+        ValuesNotCountedWarning,
+        MissingImagesWarning,
+        PixelSizeWarning,
+        NonCircularParticlesWarning,
+        ParticlesOutsideImageWarning,
+    ],
 )
 def test_warnings_are_user_warnings(warning: type[Warning]) -> None:
     assert issubclass(warning, UserWarning)

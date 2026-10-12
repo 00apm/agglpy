@@ -4,10 +4,11 @@
 |---|---|---|---|
 | `foundation/` | the foundation modules of the new architecture: `test_params.py` → `agglpy.params`, `test_tables.py` → `agglpy.tables`, `test_logger.py` → `agglpy.logger` | unit tests | permanent |
 | `core/` | one file per core module of the new architecture (`test_agglomerates.py` → `agglpy.core.agglomerates`, `test_properties.py` → `agglpy.core.properties`, `test_metrics.py` → `agglpy.core.metrics`, `test_distributions.py` → `agglpy.core.distributions`, `test_classify.py` → the recipe `examples/agglomerate_types.py` (no classification in the library)) | unit tests on hand-made data, answers worked out by hand | permanent |
+| `io/` | the io edge `agglpy.io`: `test_images.py` → `read_image`, `test_metadata.py` → `read_image_metadata` and the pixel-size readers, `test_particle_files.py` → `read_particles`, `write_particles` | unit tests on the real images and CSVs in `data/` and on tiny synthetic files (`support/tiffs.py`, `tmp_path`) | permanent |
 | `recipes/` | the recipes in `examples/` (repo root): their functions, and each one run as a script | unit tests on hand-made data | permanent |
-| `golden/` | the whole analysis on two real SEM images (D7-017, D7-019), compared with recorded results | end-to-end, marked `slow` | permanent (runner changes in Phase 2) |
-| `legacy/` | the v0.4 API: `Manager`, `ImgDataSet`, settings, folder layout, CSV importers | unit / integration | deleted with the legacy code (roadmap 2.9); CSV importer tests move to the new `io` module (2.2) |
-| `support/` | helpers, **no tests**: data paths, synthetic cases, the neutral `Result`, adapters (legacy and core) | — | `synthetic/legacy_adapter.py` deleted in 2.9 |
+| `golden/` | the whole analysis on two real SEM images (D7-017, D7-019), compared with recorded results: the automatic HCT path (`test_golden.py`, legacy code) and the corrected path from a Fiji CSV (`test_corrected.py`, new code) | end-to-end, marked `slow` | permanent (runner changes in Phase 2) |
+| `legacy/` | the v0.4 API: `Manager`, `ImgDataSet`, settings, folder layout, CSV importers | unit / integration | deleted with the legacy code (roadmap 2.9); the CSV importer tests have their new-API version in `io/test_particle_files.py` |
+| `support/` | helpers, **no tests**: data paths, synthetic TIFFs (`tiffs.py`), synthetic cases, the neutral `Result`, adapters (legacy and core) | — | `synthetic/legacy_adapter.py` deleted in 2.9 |
 | `data/` | input images, settings, CSVs, golden expected files | — | — |
 
 `conftest.py` holds fixtures shared by all folders (paths to the input data sets).
