@@ -168,7 +168,10 @@ class ClaheParams:
 
 @dataclass(frozen=True)
 class RollingBallParams:
-    """Rolling-ball background subtraction (ImageJ's method).
+    """Rolling-ball background subtraction with ImageJ's semantics.
+
+    The ball is scikit-image's exact one, so values may differ slightly
+    from Fiji's.
 
     Attributes:
         radius: Ball radius in px, > 0. Larger than the largest particle

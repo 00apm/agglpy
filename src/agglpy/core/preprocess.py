@@ -81,11 +81,13 @@ def _clahe(image: NDArray[np.uint8], params: ClaheParams) -> NDArray[np.uint8]:
 def _subtract_background(
     image: NDArray[np.uint8], params: RollingBallParams
 ) -> NDArray[np.uint8]:
-    """Rolling-ball background subtraction, as ImageJ does it.
+    """Rolling-ball background subtraction with ImageJ's semantics.
 
     The background is estimated on a float copy (presmoothed if asked)
     and subtracted from the unsmoothed image; the result is rounded and
-    clipped to 0-255 once, at the end.
+    clipped to 0-255 once, at the end. The ball is scikit-image's exact
+    one (ImageJ shrinks large images first), so values may differ
+    slightly from Fiji's.
     """
     values = image.astype(np.float64)
     if params.light_background:
