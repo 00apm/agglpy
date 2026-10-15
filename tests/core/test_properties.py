@@ -21,6 +21,7 @@ from agglpy.core.properties import (
     particle_properties,
     to_physical,
 )
+from agglpy.core.region import Bounds
 from agglpy.errors import (
     DuplicateParticlesWarning,
     ParamsError,
@@ -487,15 +488,27 @@ def test_feret_max_matches_brute_force(seed: int):
     assert out["D_feret_max"].tolist() == pytest.approx(expected, rel=1e-12)
 
 
+# A region around the ABC example, far from its circles.
+FAR = Bounds(-100.5, -100.5, 100.5, 100.5)
+
+
 def test_columns_in_spec_order():
-    out = agglomerate_properties(_particles([0], [0], [1]))
+    table = _particles([0], [0], [1])
+    out = agglomerate_properties(table, bounds=FAR)
     assert list(out.columns) == ["agglomerate_id", *DIMENSIONS]
+    # without bounds, the same columns without touches_edge
+    out = agglomerate_properties(table)
+    assert list(out.columns) == [
+        "agglomerate_id",
+        *(c for c in DIMENSIONS if c != "touches_edge"),
+    ]
 
 
 def test_dimensions_cover_exactly_the_property_columns():
     table = _particles(*ABC)
-    added = set(particle_properties(table).columns) - set(table.columns)
-    agglomerate = set(agglomerate_properties(table).columns)
+    particle = particle_properties(table, bounds=FAR)
+    added = set(particle.columns) - set(table.columns)
+    agglomerate = set(agglomerate_properties(table, bounds=FAR).columns)
     assert set(DIMENSIONS) == added | (agglomerate - {"agglomerate_id"})
 
 
@@ -522,7 +535,7 @@ def test_to_physical_scales_particle_columns():
 
 
 def test_to_physical_scales_agglomerate_columns_by_dimensions():
-    table = agglomerate_properties(_particles(*ABC))
+    table = agglomerate_properties(_particles(*ABC), bounds=FAR)
     out = to_physical(table, 0.5)
     for column, power in DIMENSIONS.items():
         expected = table[column] * 0.5**power if power else table[column]
@@ -558,3 +571,70 @@ def test_to_physical_rejects_bad_pixel_size(pixel_size):
 def test_to_physical_rejects_text_in_a_converted_column():
     with pytest.raises(ParticleTableError, match="'D'"):
         to_physical(pd.DataFrame({"D": ["1 um"]}), 2.0)
+
+
+# ---------------------------------------------------------------------
+# touches_edge (with the analysed region's bounds)
+# ---------------------------------------------------------------------
+
+# D7-017 with bottom_fraction 0.1: 3072 x 2073 px kept
+D7_017 = Bounds(-0.5, -0.5, 3071.5, 2072.5)
+
+
+@pytest.mark.parametrize(
+    ("x", "y", "r", "touches"),
+    [
+        (8.5, 1248.5, 21.8, True),  # reaches past the left edge
+        (1500, 2060, 10, False),  # 2070 < 2072.5
+        (1500, 2065, 10, True),  # 2075 >= 2072.5: into the data bar
+        (3060, 1000, 11.5, True),  # exactly at the right edge
+        (1500, 11, 11.5, True),  # exactly at the top edge
+        (1500, 1000, 500, False),  # large, but inside
+    ],
+)
+def test_touches_edge_rule(x, y, r, touches):
+    out = particle_properties(_particles([x], [y], [r]), bounds=D7_017)
+    assert out["touches_edge"].tolist() == [touches]
+
+
+def test_touches_edge_small_example():
+    # 10 x 8 image, 6 rows kept: y + r = 5.6 >= 5.5
+    bounds = Bounds(-0.5, -0.5, 9.5, 5.5)
+    out = particle_properties(
+        _particles([5, 5], [5.2, 2.5], [0.4, 0.4]), bounds=bounds
+    )
+    assert out["touches_edge"].tolist() == [True, False]
+    assert out["touches_edge"].dtype == bool
+
+
+def test_agglomerate_touches_edge_when_any_member_does():
+    # two touching circles, only the left one reaches the edge
+    # (9.5 - 10 = -0.5), and a single circle far away
+    table = _particles([9.5, 29.5, 500], [100, 100, 100], [10, 10, 10])
+    out = agglomerate_properties(table, bounds=D7_017)
+    assert out["member_count"].tolist() == [2, 1]
+    assert out["touches_edge"].tolist() == [True, False]
+
+
+def test_no_bounds_no_touches_edge_column():
+    table = _particles(*ABC)
+    assert "touches_edge" not in particle_properties(table).columns
+    assert "touches_edge" not in agglomerate_properties(table).columns
+
+
+def test_empty_table_touches_edge_is_bool():
+    empty = _particles([], [], [])
+    assert particle_properties(empty, bounds=FAR)["touches_edge"].dtype == bool
+    out = agglomerate_properties(empty, bounds=FAR)
+    assert out["touches_edge"].dtype == bool
+
+
+def test_touches_edge_needs_x_and_y():
+    with pytest.raises(ParticleTableError, match="'x'"):
+        particle_properties(pd.DataFrame({"r": [1.0]}), bounds=FAR)
+
+
+def test_to_physical_leaves_touches_edge_alone():
+    table = particle_properties(_particles(*ABC), bounds=FAR)
+    out = to_physical(table, 0.5)
+    pd.testing.assert_series_equal(out["touches_edge"], table["touches_edge"])
