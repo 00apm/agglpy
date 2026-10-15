@@ -113,7 +113,7 @@ where $V$ is the summed volume of all member spheres (enclosed ones included onc
 
 This is a deliberately simple estimate. It assumes isotropic deposition and ignores particles hidden behind the outline (only the enclosed particles are doubled). More precise estimates may exist and could replace it.
 
-Codebase: `agglpy.core.agglomerates.find_enclosed` flags enclosed particles; `agglpy.core.properties.agglomerate_properties` gives `enclosed_count`, `volume_with_hidden`, `D_with_hidden` and `member_count_with_hidden`. agglpy 0.4 called them `idj` and `*_dsom`.
+Codebase: `agglpy.core.agglomerates.find_agglomerates` flags enclosed particles (column `enclosed`); `agglpy.core.properties.agglomerate_properties` gives `enclosed_count`, `volume_with_hidden`, `D_with_hidden` and `member_count_with_hidden`. agglpy 0.4 called them `idj` and `*_dsom`.
 
 ## 8. Agglomerate size and shape
 

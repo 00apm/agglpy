@@ -14,7 +14,7 @@ import pandas as pd
 import pytest
 
 from agglpy.core import properties
-from agglpy.core.agglomerates import find_agglomerates, find_contacts
+from agglpy.core.agglomerates import _find_contacts, find_agglomerates
 from agglpy.core.properties import (
     DIMENSIONS,
     agglomerate_properties,
@@ -395,9 +395,9 @@ def test_contact_search_gets_image_positions(monkeypatch):
 
     def spy(particles: pd.DataFrame):
         seen.append(particles[["x", "y"]].to_numpy().copy())
-        return find_contacts(particles)
+        return _find_contacts(particles)
 
-    monkeypatch.setattr(properties, "find_contacts", spy)
+    monkeypatch.setattr(properties, "_find_contacts", spy)
     table = _particles([0, 14, 500], [0, 0, 300], [10, 4, 5])
     agglomerate_properties(table)
     assert len(seen) == 1

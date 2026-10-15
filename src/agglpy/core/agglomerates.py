@@ -7,10 +7,11 @@ to exactly one, so the whole grouping is one column of the particle
 table, ``agglomerate_id``. ``enclosed`` marks a particle lying
 completely inside a larger particle (old name ``idj``).
 
-The functions take a validated particle table
-(``tables.validate_particles``) and never modify it;
-``find_agglomerates`` runs them all. ``select_agglomerates`` takes a
-consistent subset of the particle and agglomerate tables.
+``find_agglomerates`` takes a validated particle table
+(``tables.validate_particles``), never modifies it and runs the three
+private grouping steps (contacts, labels, enclosed) in order.
+``select_agglomerates`` takes a consistent subset of the particle and
+agglomerate tables.
 """
 
 import itertools
@@ -33,7 +34,7 @@ _SEARCH_MARGIN = 1e-9
 _MAX_LISTED = 10
 
 
-class Contacts(NamedTuple):
+class _Contacts(NamedTuple):
     """Pairs of touching particles, as row positions in the table.
 
     Each pair appears once. ``larger[k]`` is the member with the larger
@@ -44,7 +45,7 @@ class Contacts(NamedTuple):
     smaller: NDArray[np.intp]
 
 
-def find_contacts(particles: pd.DataFrame) -> Contacts:
+def _find_contacts(particles: pd.DataFrame) -> _Contacts:
     """Find every pair of touching particles.
 
     Each particle searches the distance ``2 * r`` around its centre
@@ -55,12 +56,12 @@ def find_contacts(particles: pd.DataFrame) -> Contacts:
         particles: A validated particle table.
 
     Returns:
-        The touching pairs (see ``Contacts``).
+        The touching pairs (see ``_Contacts``).
     """
     n = len(particles)
     if n < 2:
         empty = np.empty(0, dtype=np.intp)
-        return Contacts(empty, empty.copy())
+        return _Contacts(empty, empty.copy())
     xy = particles[["x", "y"]].to_numpy(dtype=np.float64)
     r = particles["r"].to_numpy(dtype=np.float64)
     ids = particles["id"].to_numpy()
@@ -84,11 +85,11 @@ def find_contacts(particles: pd.DataFrame) -> Contacts:
     larger, smaller = larger[owned], smaller[owned]
 
     touching = _distance(xy, larger, smaller) <= r[larger] + r[smaller]
-    return Contacts(larger[touching], smaller[touching])
+    return _Contacts(larger[touching], smaller[touching])
 
 
-def label_agglomerates(
-    particles: pd.DataFrame, contacts: Contacts
+def _label_agglomerates(
+    particles: pd.DataFrame, contacts: _Contacts
 ) -> pd.Series:
     """Give each particle the id of the agglomerate it belongs to.
 
@@ -99,7 +100,7 @@ def label_agglomerates(
 
     Args:
         particles: A validated particle table.
-        contacts: Its contacts (``find_contacts``).
+        contacts: Its contacts (``_find_contacts``).
 
     Returns:
         ``agglomerate_id`` (int64) per particle, on the table's index.
@@ -129,7 +130,7 @@ def label_agglomerates(
     )
 
 
-def find_enclosed(particles: pd.DataFrame, contacts: Contacts) -> pd.Series:
+def _find_enclosed(particles: pd.DataFrame, contacts: _Contacts) -> pd.Series:
     """Flag particles lying completely inside a larger particle.
 
     A particle is enclosed when its circle, outline included, is inside
@@ -139,7 +140,7 @@ def find_enclosed(particles: pd.DataFrame, contacts: Contacts) -> pd.Series:
 
     Args:
         particles: A validated particle table.
-        contacts: Its contacts (``find_contacts``).
+        contacts: Its contacts (``_find_contacts``).
 
     Returns:
         ``enclosed`` (bool) per particle, on the table's index.
@@ -221,14 +222,14 @@ def find_agglomerates(particles: pd.DataFrame) -> pd.DataFrame:
         ParticleTableError: If the table breaks the schema.
 
     Warns:
-        DuplicateParticlesWarning: See ``find_enclosed``.
+        DuplicateParticlesWarning: See ``_find_enclosed``.
     """
     # The caller saw the general duplicate warning when the table was
     # made; only the one about enclosed duplicates comes from here.
     table = validate_particles(particles, warn_duplicates=False)
-    contacts = find_contacts(table)
-    table["agglomerate_id"] = label_agglomerates(table, contacts)
-    table["enclosed"] = find_enclosed(table, contacts)
+    contacts = _find_contacts(table)
+    table["agglomerate_id"] = _label_agglomerates(table, contacts)
+    table["enclosed"] = _find_enclosed(table, contacts)
     return table
 
 

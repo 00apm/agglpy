@@ -17,11 +17,11 @@ import pandas as pd
 import pytest
 
 from agglpy.core.agglomerates import (
-    Contacts,
+    _Contacts,
+    _find_contacts,
+    _find_enclosed,
+    _label_agglomerates,
     find_agglomerates,
-    find_contacts,
-    find_enclosed,
-    label_agglomerates,
     select_agglomerates,
 )
 from agglpy.core.metrics import summary
@@ -140,7 +140,7 @@ def _table(x, y, r, ids=None) -> pd.DataFrame:
     )
 
 
-def _pairs(contacts: Contacts) -> set[tuple[int, int]]:
+def _pairs(contacts: _Contacts) -> set[tuple[int, int]]:
     """Contacts as (larger, smaller) row-position pairs."""
     return set(
         zip(contacts.larger.tolist(), contacts.smaller.tolist(), strict=True)
@@ -148,7 +148,7 @@ def _pairs(contacts: Contacts) -> set[tuple[int, int]]:
 
 
 def _brute_force_pairs(table: pd.DataFrame) -> set[tuple[int, int]]:
-    """Touching pairs from checking every pair, oriented as Contacts."""
+    """Touching pairs from checking every pair, oriented as _Contacts."""
     xy = table[["x", "y"]].to_numpy()
     r = table["r"].to_numpy()
     ids = table["id"].to_numpy()
@@ -164,28 +164,28 @@ def _brute_force_pairs(table: pd.DataFrame) -> set[tuple[int, int]]:
 
 def test_touching_pair_is_a_contact():
     table = _table([0, 14], [0, 0], [10, 4])  # d = 14 = 10 + 4
-    assert _pairs(find_contacts(table)) == {(0, 1)}
+    assert _pairs(_find_contacts(table)) == {(0, 1)}
 
 
 def test_separate_pair_is_not_a_contact():
     table = _table([0, 15], [0, 0], [10, 4])  # d = 15 > 14
-    assert _pairs(find_contacts(table)) == set()
+    assert _pairs(_find_contacts(table)) == set()
 
 
 def test_contact_is_owned_by_the_larger_particle():
     table = _table([0, 14], [0, 0], [4, 10])  # larger one in row 1
-    assert _pairs(find_contacts(table)) == {(1, 0)}
+    assert _pairs(_find_contacts(table)) == {(1, 0)}
 
 
 def test_equal_radii_contact_is_owned_by_the_lower_id():
     table = _table([0, 20], [0, 0], [10, 10], ids=[7, 3])
-    assert _pairs(find_contacts(table)) == {(1, 0)}
+    assert _pairs(_find_contacts(table)) == {(1, 0)}
 
 
 def test_large_particle_finds_small_far_neighbour():
     # The small one searches only 2 * 2 px; the big one must find it.
     table = _table([0, 101], [0, 0], [100, 2])  # d = 101 <= 102
-    assert _pairs(find_contacts(table)) == {(0, 1)}
+    assert _pairs(_find_contacts(table)) == {(0, 1)}
 
 
 def test_contacts_match_brute_force():
@@ -196,7 +196,7 @@ def test_contacts_match_brute_force():
         rng.uniform(0, 150, n),
         rng.lognormal(np.log(4), 0.5, n),
     )
-    assert _pairs(find_contacts(table)) == _brute_force_pairs(table)
+    assert _pairs(_find_contacts(table)) == _brute_force_pairs(table)
 
 
 def test_contacts_match_brute_force_on_half_pixel_grid():
@@ -218,7 +218,7 @@ def test_contacts_match_brute_force_on_half_pixel_grid():
         if np.hypot(*(xy[a] - xy[b])) == r[a] + r[b]
     ]
     assert tangent, "the grid should produce exactly touching pairs"
-    assert _pairs(find_contacts(table)) == expected
+    assert _pairs(_find_contacts(table)) == expected
 
 
 def test_tangent_pair_far_from_origin_is_found():
@@ -230,38 +230,38 @@ def test_tangent_pair_far_from_origin_is_found():
         [-47423.292388719005, -47520.93433815313],
         [r, r],
     )
-    assert len(find_contacts(table).larger) == 1
+    assert len(_find_contacts(table).larger) == 1
 
 
 @pytest.mark.parametrize("n", [0, 1])
 def test_no_contacts_without_a_pair(n: int):
-    contacts = find_contacts(_table([0] * n, [0] * n, [5] * n))
+    contacts = _find_contacts(_table([0] * n, [0] * n, [5] * n))
     assert contacts.larger.dtype == np.intp
     assert len(contacts.larger) == len(contacts.smaller) == 0
 
 
-def _contacts(*pairs: tuple[int, int]) -> Contacts:
+def _contacts(*pairs: tuple[int, int]) -> _Contacts:
     larger = np.array([p[0] for p in pairs], dtype=np.intp)
     smaller = np.array([p[1] for p in pairs], dtype=np.intp)
-    return Contacts(larger, smaller)
+    return _Contacts(larger, smaller)
 
 
 def test_chain_of_contacts_is_one_agglomerate():
     # A-B and B-C touch, A and C don't: still one agglomerate. D alone.
     table = _table([0, 1, 2, 3], [0] * 4, [1] * 4)
-    ids = label_agglomerates(table, _contacts((0, 1), (1, 2)))
+    ids = _label_agglomerates(table, _contacts((0, 1), (1, 2)))
     assert ids.tolist() == [0, 0, 0, 1]
 
 
 def test_particle_without_contacts_is_its_own_agglomerate():
     table = _table([0, 100, 200], [0] * 3, [1] * 3)
-    assert label_agglomerates(table, _contacts()).tolist() == [0, 1, 2]
+    assert _label_agglomerates(table, _contacts()).tolist() == [0, 1, 2]
 
 
 def test_agglomerate_ids_follow_the_smallest_particle_id():
     # Rows 0-1 hold ids 5, 6; rows 2-3 ids 1, 2: that group is first.
     table = _table([0, 1, 50, 51], [0] * 4, [1] * 4, ids=[5, 6, 1, 2])
-    ids = label_agglomerates(table, _contacts((0, 1), (2, 3)))
+    ids = _label_agglomerates(table, _contacts((0, 1), (2, 3)))
     assert ids.tolist() == [1, 1, 0, 0]
 
 
@@ -274,21 +274,21 @@ def test_agglomerate_ids_do_not_depend_on_row_order():
     shuffled = table.sample(frac=1, random_state=3).reset_index(drop=True)
 
     def by_particle(t: pd.DataFrame) -> dict[int, int]:
-        ids = label_agglomerates(t, find_contacts(t))
+        ids = _label_agglomerates(t, _find_contacts(t))
         return dict(zip(t["id"], ids, strict=True))
 
     assert by_particle(shuffled) == by_particle(table)
 
 
 def test_agglomerates_of_empty_table():
-    ids = label_agglomerates(_table([], [], []), _contacts())
+    ids = _label_agglomerates(_table([], [], []), _contacts())
     assert ids.dtype == np.int64
     assert ids.name == "agglomerate_id"
     assert len(ids) == 0
 
 
 def _enclosed(table: pd.DataFrame) -> list[bool]:
-    return find_enclosed(table, find_contacts(table)).tolist()
+    return _find_enclosed(table, _find_contacts(table)).tolist()
 
 
 def test_small_particle_inside_large_is_enclosed():
@@ -331,7 +331,7 @@ def test_duplicate_warning_counts_enclosed_particles_not_pairs():
 
 
 def test_enclosed_of_empty_table():
-    flags = find_enclosed(_table([], [], []), _contacts())
+    flags = _find_enclosed(_table([], [], []), _contacts())
     assert flags.dtype == bool
     assert flags.name == "enclosed"
     assert len(flags) == 0

@@ -22,7 +22,7 @@ import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 
-from agglpy.core.agglomerates import find_contacts
+from agglpy.core.agglomerates import _find_contacts
 from agglpy.errors import ParticleTableError
 from agglpy.params import _positive
 
@@ -385,7 +385,7 @@ def _covered_arcs(
     arc across angle 0 is split in two.
     """
     n = len(r)
-    contacts = find_contacts(
+    contacts = _find_contacts(
         pd.DataFrame({"id": np.arange(n), "x": x, "y": y, "r": r})
     )
     # Only members of one agglomerate cover each other.
@@ -396,7 +396,7 @@ def _covered_arcs(
     d = np.sqrt(dx * dx + dy * dy)
 
     # The smaller circle inside the larger one: its whole outline is
-    # covered (identical circles: the one Contacts lists as smaller).
+    # covered (identical circles: the one _Contacts lists as smaller).
     inside = d <= r[big] - r[small]
     # Outlines crossing: each covers an arc of the other. Tangent
     # circles touch in one point and cover nothing.
