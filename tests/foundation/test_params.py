@@ -155,6 +155,13 @@ def test_invalid_clahe_is_rejected(kwargs: dict) -> None:
         ClaheParams(**kwargs)
 
 
+def test_rolling_ball_defaults_suit_a_dark_background() -> None:
+    # SEM images of particles are usually bright on dark
+    params = RollingBallParams(radius=50)
+    assert params.light_background is False
+    assert params.presmooth is True
+
+
 def test_rolling_ball_needs_positive_radius() -> None:
     with pytest.raises(ParamsError):
         RollingBallParams(radius=0)

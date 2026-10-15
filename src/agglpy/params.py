@@ -168,18 +168,25 @@ class ClaheParams:
 
 @dataclass(frozen=True)
 class RollingBallParams:
-    """Rolling-ball background subtraction.
+    """Rolling-ball background subtraction (ImageJ's method).
 
     Attributes:
-        radius: Ball radius in px, > 0.
-        light_background: True if particles are darker than the
-            background.
-        presmooth: Apply a 3x3 mean blur before estimating the
-            background.
+        radius: Ball radius in px, > 0. Larger than the largest particle
+            for a pure background estimate; a smaller ball also goes
+            inside large particles and raises the contrast within them.
+            The time grows with radius² (about 50 s at 50 px on a
+            3072 x 2073 image).
+        light_background: True if the particles are darker than the
+            background: the image is inverted, its background
+            subtracted and the result inverted back, so the polarity
+            stays.
+        presmooth: Estimate the background on a 3x3 mean-blurred copy,
+            less sensitive to noise; the background is subtracted from
+            the unblurred image.
     """
 
     radius: float
-    light_background: bool = True
+    light_background: bool = False
     presmooth: bool = True
 
     def __post_init__(self) -> None:
