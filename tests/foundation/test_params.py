@@ -12,6 +12,7 @@ from agglpy.params import (
     HCTParams,
     HCTRange,
     PreprocessParams,
+    RegionParams,
     RollingBallParams,
 )
 
@@ -96,14 +97,18 @@ def test_replace_validates_too() -> None:
 
 def test_preprocess_defaults_do_nothing() -> None:
     p = PreprocessParams()
-    assert p == PreprocessParams(0.0, None, None, None)
+    assert p == PreprocessParams(None, None, None)
+
+
+def test_preprocess_fields_are_in_step_order() -> None:
+    # The region left preprocessing: it is RegionParams now.
+    names = [f.name for f in dataclasses.fields(PreprocessParams)]
+    assert names == ["median_blur", "rolling_ball", "clahe"]
 
 
 @pytest.mark.parametrize(
     "kwargs",
     [
-        {"crop_ratio": -0.1},
-        {"crop_ratio": 1.0},
         {"median_blur": 4},
         {"median_blur": 1},
     ],
@@ -111,6 +116,25 @@ def test_preprocess_defaults_do_nothing() -> None:
 def test_invalid_preprocess_is_rejected(kwargs: dict) -> None:
     with pytest.raises(ParamsError):
         PreprocessParams(**kwargs)
+
+
+@pytest.mark.parametrize("fraction", [0, 0.0, 0.1, 0.999])
+def test_region_bottom_fraction_is_accepted(fraction: float) -> None:
+    region = RegionParams(bottom_fraction=fraction)
+    assert region.bottom_fraction == fraction
+    assert type(region.bottom_fraction) is float
+
+
+def test_region_default_keeps_the_whole_image() -> None:
+    assert RegionParams().bottom_fraction == 0.0
+
+
+@pytest.mark.parametrize(
+    "fraction", [-0.1, 1.0, 1.5, float("nan"), "0.1", True]
+)
+def test_invalid_region_is_rejected(fraction: object) -> None:
+    with pytest.raises(ParamsError, match="bottom_fraction"):
+        RegionParams(bottom_fraction=fraction)  # type: ignore[arg-type]
 
 
 def test_clahe_tile_grid_list_becomes_tuple() -> None:
@@ -162,7 +186,6 @@ def test_values_are_stored_as_plain_python_types() -> None:
         accumulator_threshold=np.float64(15),
     )
     pre = PreprocessParams(
-        crop_ratio=0,
         median_blur=np.int64(5),
         clahe=ClaheParams(np.float64(2.0), np.array([8, 8])),
         rolling_ball=RollingBallParams(np.int64(50), np.bool_(False)),
@@ -175,7 +198,7 @@ def test_values_are_stored_as_plain_python_types() -> None:
         float,
         float,
     ]
-    assert type(pre.crop_ratio) is float and type(pre.median_blur) is int
+    assert type(pre.median_blur) is int
     assert pre.clahe is not None and pre.rolling_ball is not None
     assert type(pre.clahe.clip_limit) is float
     assert [type(v) for v in pre.clahe.tile_grid] == [int, int]

@@ -189,27 +189,41 @@ class RollingBallParams:
 
 
 @dataclass(frozen=True)
+class RegionParams:
+    """The part of an image that is analysed.
+
+    Attributes:
+        bottom_fraction: Fraction of the image height cut off at the
+            bottom (the SEM data bar), 0 <= bottom_fraction < 1. The
+            rows kept are ``int((1 - bottom_fraction) * height)``.
+    """
+
+    bottom_fraction: float = 0.0
+
+    def __post_init__(self) -> None:
+        fraction = _number("bottom_fraction", self.bottom_fraction)
+        if not 0.0 <= fraction < 1.0:
+            raise ParamsError(f"need 0 <= bottom_fraction < 1, got {fraction}")
+        _set(self, "bottom_fraction", fraction)
+
+
+@dataclass(frozen=True)
 class PreprocessParams:
     """Image preprocessing before detection. Defaults change nothing.
 
+    The steps run in the order of the fields; ``None`` skips a step.
+
     Attributes:
-        crop_ratio: Fraction of the image height cut off at the bottom
-            (the SEM info bar), 0 <= crop_ratio < 1.
         median_blur: Odd kernel size >= 3, or None for no blur.
-        clahe: CLAHE settings, or None.
         rolling_ball: Background subtraction settings, or None.
+        clahe: CLAHE settings, or None.
     """
 
-    crop_ratio: float = 0.0
     median_blur: int | None = None
-    clahe: ClaheParams | None = None
     rolling_ball: RollingBallParams | None = None
+    clahe: ClaheParams | None = None
 
     def __post_init__(self) -> None:
-        crop = _number("crop_ratio", self.crop_ratio)
-        if not 0.0 <= crop < 1.0:
-            raise ParamsError(f"need 0 <= crop_ratio < 1, got {crop}")
-        _set(self, "crop_ratio", crop)
         if self.median_blur is not None:
             kernel = _integer("median_blur", self.median_blur)
             if kernel < 3 or kernel % 2 == 0:
@@ -218,8 +232,8 @@ class PreprocessParams:
                 )
             _set(self, "median_blur", kernel)
         for name, cls in (
-            ("clahe", ClaheParams),
             ("rolling_ball", RollingBallParams),
+            ("clahe", ClaheParams),
         ):
             value = getattr(self, name)
             if value is not None and not isinstance(value, cls):
