@@ -76,23 +76,33 @@ def _set(obj: object, name: str, value: object) -> None:
 class HCTRange:
     """One Hough Circle Transform pass over a range of diameters (px).
 
+    The values go to ``cv2.HoughCircles`` (``HOUGH_GRADIENT``, ``dp=1``)
+    as ``minRadius = int(d_min / 2)`` and ``maxRadius = int(d_max / 2)``
+    (an odd diameter rounds down), ``minDist = min_dist_ratio * d_max /
+    2``, ``param1 = canny_threshold``, ``param2 =
+    accumulator_threshold``.
+
     Attributes:
         d_min: Smallest circle diameter searched, in px.
         d_max: Largest circle diameter searched, in px.
-        dist2R: Minimum distance between detected centres, relative
-            to ``d_max``.
-        param1: Upper threshold of the Canny edge detector inside
-            OpenCV's HoughCircles (the lower one is half of it).
-        param2: Accumulator threshold; lower values find more circles
-            and more false ones.
+        min_dist_ratio: Minimum distance between detected centres, as a
+            fraction of the range's largest radius (``d_max / 2``).
+            OpenCV keeps the stronger of two centres closer than that,
+            so a wide range can lose real overlapping small particles
+            (r 30-120 and 0.4: two r 30 particles 40 px apart, 40 < 48);
+            narrow the range then.
+        canny_threshold: Upper threshold of the Canny edge detector
+            inside OpenCV's HoughCircles (``param1``; the lower one is
+            half of it).
+        accumulator_threshold: Votes a centre needs (``param2``); lower
+            values find more circles, and more false ones.
     """
 
     d_min: int
     d_max: int
-    # established HCT name, renamed with the detector in 2.6
-    dist2R: float = 0.4  # noqa: N815
-    param1: float = 200.0
-    param2: float = 15.0
+    min_dist_ratio: float = 0.4
+    canny_threshold: float = 200.0
+    accumulator_threshold: float = 15.0
 
     def __post_init__(self) -> None:
         d_min = _integer("d_min", self.d_min)
@@ -103,7 +113,11 @@ class HCTRange:
             )
         _set(self, "d_min", d_min)
         _set(self, "d_max", d_max)
-        for name in ("dist2R", "param1", "param2"):
+        for name in (
+            "min_dist_ratio",
+            "canny_threshold",
+            "accumulator_threshold",
+        ):
             _set(self, name, _positive(name, getattr(self, name)))
 
 
@@ -154,18 +168,28 @@ class ClaheParams:
 
 @dataclass(frozen=True)
 class RollingBallParams:
-    """Rolling-ball background subtraction.
+    """Rolling-ball background subtraction with ImageJ's semantics.
+
+    The ball is scikit-image's exact one, so values may differ slightly
+    from Fiji's.
 
     Attributes:
-        radius: Ball radius in px, > 0.
-        light_background: True if particles are darker than the
-            background.
-        presmooth: Apply a 3x3 mean blur before estimating the
-            background.
+        radius: Ball radius in px, > 0. Larger than the largest particle
+            for a pure background estimate; a smaller ball also goes
+            inside large particles and raises the contrast within them.
+            The time grows with radius² (about 50 s at 50 px on a
+            3072 x 2073 image).
+        light_background: True if the particles are darker than the
+            background: the image is inverted, its background
+            subtracted and the result inverted back, so the polarity
+            stays.
+        presmooth: Estimate the background on a 3x3 mean-blurred copy,
+            less sensitive to noise; the background is subtracted from
+            the unblurred image.
     """
 
     radius: float
-    light_background: bool = True
+    light_background: bool = False
     presmooth: bool = True
 
     def __post_init__(self) -> None:
@@ -175,27 +199,41 @@ class RollingBallParams:
 
 
 @dataclass(frozen=True)
+class RegionParams:
+    """The part of an image that is analysed.
+
+    Attributes:
+        bottom_fraction: Fraction of the image height cut off at the
+            bottom (the SEM data bar), 0 <= bottom_fraction < 1. The
+            rows kept are ``int((1 - bottom_fraction) * height)``.
+    """
+
+    bottom_fraction: float = 0.0
+
+    def __post_init__(self) -> None:
+        fraction = _number("bottom_fraction", self.bottom_fraction)
+        if not 0.0 <= fraction < 1.0:
+            raise ParamsError(f"need 0 <= bottom_fraction < 1, got {fraction}")
+        _set(self, "bottom_fraction", fraction)
+
+
+@dataclass(frozen=True)
 class PreprocessParams:
     """Image preprocessing before detection. Defaults change nothing.
 
+    The steps run in the order of the fields; ``None`` skips a step.
+
     Attributes:
-        crop_ratio: Fraction of the image height cut off at the bottom
-            (the SEM info bar), 0 <= crop_ratio < 1.
         median_blur: Odd kernel size >= 3, or None for no blur.
-        clahe: CLAHE settings, or None.
         rolling_ball: Background subtraction settings, or None.
+        clahe: CLAHE settings, or None.
     """
 
-    crop_ratio: float = 0.0
     median_blur: int | None = None
-    clahe: ClaheParams | None = None
     rolling_ball: RollingBallParams | None = None
+    clahe: ClaheParams | None = None
 
     def __post_init__(self) -> None:
-        crop = _number("crop_ratio", self.crop_ratio)
-        if not 0.0 <= crop < 1.0:
-            raise ParamsError(f"need 0 <= crop_ratio < 1, got {crop}")
-        _set(self, "crop_ratio", crop)
         if self.median_blur is not None:
             kernel = _integer("median_blur", self.median_blur)
             if kernel < 3 or kernel % 2 == 0:
@@ -204,8 +242,8 @@ class PreprocessParams:
                 )
             _set(self, "median_blur", kernel)
         for name, cls in (
-            ("clahe", ClaheParams),
             ("rolling_ball", RollingBallParams),
+            ("clahe", ClaheParams),
         ):
             value = getattr(self, name)
             if value is not None and not isinstance(value, cls):

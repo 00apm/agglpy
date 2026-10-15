@@ -19,12 +19,18 @@ The analysis proceeds through seven stages:
 
 Raw SEM images are noisy, due to the electron beam signal acquisition process, particle surface roughness and resistivity, electron beam scattering on gas molecules in the SEM chamber, and local electric charge accumulation on high-resistivity samples (visible as locally overexposed regions or bright horizontal streaks along the scan direction).
 
-Two corrections are applied:
+The main corrections:
 
 - **Median filtering** — a 3×3 pixel mask is scanned across the image; the 9 pixel values under the mask are sorted and the median replaces the central pixel's value. This reduces noise while preserving edge sharpness.
 - **Background normalization (Rolling-Ball algorithm)** — simulates a ball of a chosen radius rolled under the image intensity surface. The minimum intensity the ball can reach at each point forms a background estimate, which is subtracted from the original image. This removes slow-varying illumination/charging artifacts while preserving sharp particle features. The ball radius sets the scale of background structure that gets corrected and needs to be chosen relative to particle size.
 
-Codebase: `img_process.preprocess_img` (crop, median blur, CLAHE), `img_process.rolling_ball_substraction` (rolling-ball).
+**Analysed region.** SEM images carry a data bar at the bottom. The analysed region cuts a fraction of the image height off at the bottom (`RegionParams.bottom_fraction`; 0.1 for Zeiss images, whose bar takes 9.2 % of the height), keeping `int((1 - f) * h)` rows: $\lfloor (1 - f)\,h \rfloor$ computed in floating point, which can give one row fewer when the exact product is a whole number ($f = 0.8$, $h = 10$ keeps 1 row, not 2; never at $f = 0.1$ on the 2304-px Zeiss images). Detection, the edge flag (section 8) and the field of view (section 9) all use this one region.
+
+**Order of the steps.** Median filter, then rolling ball, then CLAHE (contrast limited adaptive histogram equalization), each optional. Noise is removed first, since the later steps amplify it; the background is subtracted while intensity is still signal plus background; CLAHE comes last and evens out edge strength across the image, which the fixed thresholds of the edge detector (section 2) need. agglpy ≤ 0.4 ran CLAHE before the rolling ball.
+
+**Rolling ball** with ImageJ's semantics (the ball itself is scikit-image's exact one, so values may differ slightly from Fiji's, which shrinks large images first): the background is estimated on a copy smoothed by a 3×3 mean (optional) and subtracted from the unsmoothed image, so the result is not blurred. For a light background with dark particles, the image is inverted, its background subtracted and the result inverted back (background 230, particle 60 → 255, 85). A ball larger than the largest particle estimates the background only; a smaller ball also goes inside large particles and raises the contrast within them. The time grows with the radius squared (about 50 s at 50 px on a 3072 × 2073 image).
+
+Codebase: `agglpy.core.region` (`region_bounds`, `region_slices`), `agglpy.core.preprocess.preprocess`.
 
 ## 2. Edge detection
 
@@ -48,7 +54,9 @@ agglpy uses OpenCV's HCT implementation, based on a two-stage Hough Transform. R
 
 Each candidate center is accumulated in a voting matrix per radius; peaks in the accumulator indicate the most probable circle centers. The radius is then refined by fitting the circle equation to the surrounding edge pixels.
 
-Codebase: `img_process.HCT` / `img_process.HCT_multi`.
+**Ranges.** One HCT pass searches a range of radii; particles of very different sizes are found by several passes with their own thresholds (`HCTRange`: diameters `d_min`–`d_max`, `canny_threshold`, `accumulator_threshold`, `min_dist_ratio`). Within a pass, of two centres closer than `min_dist_ratio` × the largest radius only the stronger is kept, so a wide range can lose overlapping small particles. Passes are independent: a particle at the boundary between two ranges can be found by both; such pairs are reported, not removed. Centres are found only inside the image; a partly visible particle with its centre outside comes from manual correction.
+
+Codebase: `agglpy.core.detect.detect_hct`.
 
 **Limitation:** HCT approximates every detected feature as a circle. Near-spherical particles are represented well; particles that deviate significantly from spherical shape are poorly represented or missed entirely. This is addressed in the next stage.
 
@@ -126,6 +134,8 @@ All agglomerate properties describe the circle model: each primary particle is a
 **Projected area.** `area` is the exact area of the union of the member circles: overlaps count once, an enclosed particle adds nothing. It is computed geometrically (the uncovered arcs of each circle, Green's theorem), not on a pixel grid and not on the image, so it describes the circle model, not the agglomerate's outline as the image shows it. $D_{pa} = \sqrt{4A/\pi}$ is the diameter of the circle with the same area.
 
 **Feret diameters.** `D_feret_x` and `D_feret_y` are the widths along the image axes, exact for circles; over many randomly oriented agglomerates a fixed direction gives the classical statistical diameter (Walton, 1948). `D_feret_max` is the largest width in any direction, $\max (d_{ij} + r_i + r_j)$ over member pairs.
+
+**Edge.** `touches_edge` marks a particle whose circle reaches the edge of the analysed region, and an agglomerate with any such member: it may continue outside what is seen, so its size is a lower bound. Whether to leave such agglomerates out is a choice of the analysis.
 
 **Centre of mass and radius of gyration** (`x_com`, `y_com`, `rg`): members weighted by volume. The centre of mass is the exact projection of the 3D one; `rg` leaves out the unknown height differences, so it is a lower bound of the 3D radius of gyration (exact for a single sphere).
 

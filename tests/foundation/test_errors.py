@@ -6,8 +6,10 @@ from agglpy.errors import (
     AgglpyError,
     DuplicateParticlesWarning,
     FileFormatError,
+    ImageError,
     MissingImagesWarning,
     NonCircularParticlesWarning,
+    NoParticlesWarning,
     ParamsError,
     ParticlesOutsideImageWarning,
     ParticleTableError,
@@ -18,7 +20,8 @@ from agglpy.errors import (
 
 
 @pytest.mark.parametrize(
-    "error", [ParamsError, TableError, ParticleTableError, FileFormatError]
+    "error",
+    [ParamsError, TableError, ParticleTableError, FileFormatError, ImageError],
 )
 def test_errors_share_one_base_and_are_value_errors(
     error: type[Exception],
@@ -45,6 +48,7 @@ def test_particle_table_error_is_a_table_error() -> None:
     "warning",
     [
         DuplicateParticlesWarning,
+        NoParticlesWarning,
         ValuesNotCountedWarning,
         MissingImagesWarning,
         PixelSizeWarning,
@@ -54,3 +58,8 @@ def test_particle_table_error_is_a_table_error() -> None:
 )
 def test_warnings_are_user_warnings(warning: type[Warning]) -> None:
     assert issubclass(warning, UserWarning)
+
+
+def test_image_error_is_not_a_table_error() -> None:
+    # A bad image array and a bad table are told apart.
+    assert not issubclass(ImageError, TableError)

@@ -11,6 +11,10 @@ everywhere: they count in every sum, count and statistic; only the
 ``*_with_hidden`` values count them a second time
 (``docs/methodology.md``, section 7).
 
+With the analysed region's ``Bounds`` (``agglpy.core.region``), both
+add ``touches_edge``: whether a particle, or any member of an
+agglomerate, reaches the region's edge, so it may be cut off.
+
 ``DIMENSIONS`` gives the length exponent of every property column;
 ``to_physical`` uses it for the one conversion from px to physical
 units.
@@ -23,12 +27,13 @@ import pandas as pd
 from numpy.typing import NDArray
 
 from agglpy.core.agglomerates import _find_contacts
+from agglpy.core.region import Bounds
 from agglpy.errors import ParticleTableError
 from agglpy.params import _positive
 
-# Length exponent of each property column: 0 count or ratio, 1 length
-# (px), 2 area (px²), 3 volume (px³). D, area and volume mean the same
-# for a particle and an agglomerate.
+# Length exponent of each property column: 0 count, ratio or flag,
+# 1 length (px), 2 area (px²), 3 volume (px³). D, area and volume mean
+# the same for a particle and an agglomerate.
 DIMENSIONS: MappingProxyType[str, int] = MappingProxyType(
     {
         "member_count": 0,
@@ -52,6 +57,7 @@ DIMENSIONS: MappingProxyType[str, int] = MappingProxyType(
         "D_feret_x": 1,
         "D_feret_y": 1,
         "D_feret_max": 1,
+        "touches_edge": 0,
     }
 )
 
@@ -72,35 +78,50 @@ _CHUNK = 2**20
 _DIRECTIONS = 64
 
 
-def particle_properties(table: pd.DataFrame) -> pd.DataFrame:
+def particle_properties(
+    table: pd.DataFrame, bounds: Bounds | None = None
+) -> pd.DataFrame:
     """Add each particle's size, as a sphere, to the particle table.
 
     Adds ``D = 2r`` (px), ``area = πr²`` (px², the circle),
     ``volume = (4/3)πr³`` (px³, the sphere) and ``surface = πD²``
-    (px², the sphere's surface, not the projected ``area``).
+    (px², the sphere's surface, not the projected ``area``). With
+    ``bounds``, also ``touches_edge``: True when the circle reaches the
+    edge, ``x - r <= x_min`` or ``x + r >= x_max`` (same for y); a
+    circle exactly at the edge may already be cut off.
 
     Args:
-        table: A particle table with at least the column ``r``.
+        table: A particle table with at least the column ``r``, and
+            ``x, y`` when ``bounds`` is given.
+        bounds: The analysed region (``core.region.region_bounds``);
+            None adds no ``touches_edge`` (no image, e.g. imported
+            particles).
 
     Returns:
-        A copy with the four columns, replacing any from an earlier
+        A copy with the new columns, replacing any from an earlier
         run; every other column, the row order and the index are kept.
 
     Raises:
-        ParticleTableError: If ``r`` is missing, not numeric, not
-            finite or not > 0.
+        ParticleTableError: If a needed column is missing, not numeric,
+            not finite, or ``r`` is not > 0.
     """
-    _require(table, ("r",))
+    _require(table, ("r",) if bounds is None else ("x", "y", "r"))
     r = _radii(table)
     out = table.copy()
     out["D"] = 2 * r
     out["area"] = np.pi * r**2
     out["volume"] = _sphere_volume(r)
     out["surface"] = _sphere_surface(r)
+    if bounds is not None:
+        out["touches_edge"] = _touches_edge(
+            _finite(table, "x"), _finite(table, "y"), r, bounds
+        )
     return out
 
 
-def agglomerate_properties(table: pd.DataFrame) -> pd.DataFrame:
+def agglomerate_properties(
+    table: pd.DataFrame, bounds: Bounds | None = None
+) -> pd.DataFrame:
     """Measure every agglomerate of one image.
 
     Members are all particles with the same ``agglomerate_id``,
@@ -129,6 +150,9 @@ def agglomerate_properties(table: pd.DataFrame) -> pd.DataFrame:
       areas; ``D_pa``: diameter of the circle with that area.
     - ``D_feret_x``, ``D_feret_y``: Feret diameter along the image x
       and y axis; ``D_feret_max``: largest Feret diameter.
+    - ``touches_edge`` (only with ``bounds``): True when any member
+      reaches the region's edge (see ``particle_properties``); the
+      agglomerate may be larger than what is seen.
 
     ``area`` and the Feret diameters describe the circle model, not the
     agglomerate's outline on the image.
@@ -136,6 +160,8 @@ def agglomerate_properties(table: pd.DataFrame) -> pd.DataFrame:
     Args:
         table: The particle table from ``find_agglomerates``; only
             ``x, y, r, agglomerate_id, enclosed`` are read.
+        bounds: The analysed region (``core.region.region_bounds``);
+            None adds no ``touches_edge``.
 
     Returns:
         A new table, one row per agglomerate sorted by
@@ -176,6 +202,10 @@ def agglomerate_properties(table: pd.DataFrame) -> pd.DataFrame:
         D_feret_y=groups.max(y + r) - groups.min(y - r),
         D_feret_max=_feret_max(groups, x, y, r),
     )
+    if bounds is not None:
+        edge = _touches_edge(x, y, r, bounds)
+        # any member: the number of members at the edge is > 0
+        columns["touches_edge"] = groups.sum(edge.astype(np.float64)) > 0
     return pd.DataFrame(columns)
 
 
@@ -508,6 +538,22 @@ def _pair_max_rows(
     span = np.sqrt(dx * dx + dy * dy) + r[:, :, None] + r[:, None, :]
     best: NDArray[np.float64] = span.reshape(len(x), -1).max(axis=1)
     return best
+
+
+def _touches_edge(
+    x: NDArray[np.float64],
+    y: NDArray[np.float64],
+    r: NDArray[np.float64],
+    bounds: Bounds,
+) -> NDArray[np.bool_]:
+    # "reaches": a circle exactly at the edge counts (<=, >=)
+    touches: NDArray[np.bool_] = (
+        (x - r <= bounds.x_min)
+        | (x + r >= bounds.x_max)
+        | (y - r <= bounds.y_min)
+        | (y + r >= bounds.y_max)
+    )
+    return touches
 
 
 def _sphere_volume(r: NDArray[np.float64]) -> NDArray[np.float64]:
