@@ -235,6 +235,35 @@ def test_input_is_not_modified():
     assert np.array_equal(image, before)
 
 
+def _window(image: np.ndarray) -> np.ndarray:
+    # the image as a window of a larger one, like the region cut
+    larger = np.zeros((image.shape[0] + 30, image.shape[1] + 40), np.uint8)
+    larger[10:-20, 15:-25] = image
+    return larger[10:-20, 15:-25]
+
+
+@pytest.mark.parametrize(
+    "view",
+    [
+        lambda a: np.repeat(a, 2, axis=1)[:, ::2],
+        np.asfortranarray,
+        _window,
+    ],
+    ids=["strided", "fortran", "window"],
+)
+def test_a_view_gives_the_same_table_as_a_copy(view):
+    # detect_hct hands its input to OpenCV without copying it, so the
+    # region cut (a view) must give what a contiguous copy gives
+    image = _draw(120, 160, _random_discs(120, 160, n=4, seed=0))
+    part = view(image)
+    assert np.array_equal(part, image)
+    assert not part.flags.c_contiguous
+    params = HCTParams(ranges=(HCTRange(12, 44),))
+    expected = detect_hct(image, params)
+    assert len(expected) == 4
+    pd.testing.assert_frame_equal(detect_hct(part, params), expected)
+
+
 @pytest.mark.parametrize(
     "image",
     [
