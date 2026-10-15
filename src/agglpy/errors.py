@@ -89,8 +89,26 @@ class ParticleTableError(TableError):
     """Raised when a particle table does not match its schema."""
 
 
+class ImageError(AgglpyError, ValueError):
+    """Raised when an image array is not what a function needs.
+
+    Preprocessing and detection take a 2-D ``uint8`` grey image, as
+    ``agglpy.io.read_image`` returns it; other arrays are not converted,
+    since scaling a float or 16-bit image is a choice that changes what
+    is detected.
+    """
+
+
 class DuplicateParticlesWarning(UserWarning):
     """Warns about near-identical circles: a detection mistake."""
+
+
+class NoParticlesWarning(UserWarning):
+    """Warns that a detection found no particles at all.
+
+    The result is still a valid, empty particle table; the message
+    states the image size and its range of pixel values.
+    """
 
 
 class ValuesNotCountedWarning(UserWarning):
