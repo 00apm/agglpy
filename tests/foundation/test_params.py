@@ -18,7 +18,17 @@ from agglpy.params import (
 
 def test_hct_range_defaults_match_the_legacy_hct() -> None:
     r = HCTRange(d_min=5, d_max=25)
-    assert (r.dist2R, r.param1, r.param2) == (0.4, 200.0, 15.0)
+    assert (
+        r.min_dist_ratio,
+        r.canny_threshold,
+        r.accumulator_threshold,
+    ) == (0.4, 200.0, 15.0)
+
+
+@pytest.mark.parametrize("old", ["dist2R", "param1", "param2"])
+def test_hct_range_old_names_are_gone(old: str) -> None:
+    with pytest.raises(TypeError, match=old):
+        HCTRange(d_min=5, d_max=25, **{old: 1.0})
 
 
 @pytest.mark.parametrize(
@@ -28,9 +38,9 @@ def test_hct_range_defaults_match_the_legacy_hct() -> None:
         {"d_min": 10, "d_max": 10},
         {"d_min": 20, "d_max": 10},
         {"d_min": 5.5, "d_max": 10},
-        {"d_min": 5, "d_max": 10, "dist2R": 0},
-        {"d_min": 5, "d_max": 10, "param1": -1},
-        {"d_min": 5, "d_max": 10, "param2": float("nan")},
+        {"d_min": 5, "d_max": 10, "min_dist_ratio": 0},
+        {"d_min": 5, "d_max": 10, "canny_threshold": -1},
+        {"d_min": 5, "d_max": 10, "accumulator_threshold": float("nan")},
     ],
 )
 def test_invalid_hct_range_is_rejected(kwargs: dict) -> None:
@@ -47,8 +57,8 @@ def test_bool_is_not_a_number() -> None:
 
 
 def test_error_message_names_the_field_and_value() -> None:
-    with pytest.raises(ParamsError, match=r"param2.*-3"):
-        HCTRange(d_min=5, d_max=10, param2=-3)
+    with pytest.raises(ParamsError, match=r"accumulator_threshold.*-3"):
+        HCTRange(d_min=5, d_max=10, accumulator_threshold=-3)
 
 
 def test_ranges_list_becomes_tuple_and_is_hashable() -> None:
@@ -73,9 +83,10 @@ def test_hct_params_accept_only_ranges() -> None:
 def test_params_are_immutable_and_changed_by_replace() -> None:
     r = HCTRange(5, 25)
     with pytest.raises(dataclasses.FrozenInstanceError):
-        r.param2 = 20  # type: ignore[misc]
-    changed = dataclasses.replace(r, param2=20)
-    assert changed.param2 == 20 and r.param2 == 15.0
+        r.accumulator_threshold = 20  # type: ignore[misc]
+    changed = dataclasses.replace(r, accumulator_threshold=20)
+    assert changed.accumulator_threshold == 20
+    assert r.accumulator_threshold == 15.0
 
 
 def test_replace_validates_too() -> None:
@@ -133,9 +144,9 @@ def test_asdict_gives_a_plain_record() -> None:
             {
                 "d_min": 5,
                 "d_max": 25,
-                "dist2R": 0.4,
-                "param1": 200.0,
-                "param2": 15.0,
+                "min_dist_ratio": 0.4,
+                "canny_threshold": 200.0,
+                "accumulator_threshold": 15.0,
             },
         )
     }
@@ -145,7 +156,10 @@ def test_values_are_stored_as_plain_python_types() -> None:
     # Values taken from a DataFrame are NumPy scalars; the record
     # (asdict, D-021) must still be plain data that YAML can write.
     hct = HCTRange(
-        np.int64(5), np.int64(25), param1=200, param2=np.float64(15)
+        np.int64(5),
+        np.int64(25),
+        canny_threshold=200,
+        accumulator_threshold=np.float64(15),
     )
     pre = PreprocessParams(
         crop_ratio=0,

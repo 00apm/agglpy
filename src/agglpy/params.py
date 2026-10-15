@@ -76,23 +76,33 @@ def _set(obj: object, name: str, value: object) -> None:
 class HCTRange:
     """One Hough Circle Transform pass over a range of diameters (px).
 
+    The values go to ``cv2.HoughCircles`` (``HOUGH_GRADIENT``, ``dp=1``)
+    as ``minRadius = int(d_min / 2)`` and ``maxRadius = int(d_max / 2)``
+    (an odd diameter rounds down), ``minDist = min_dist_ratio * d_max /
+    2``, ``param1 = canny_threshold``, ``param2 =
+    accumulator_threshold``.
+
     Attributes:
         d_min: Smallest circle diameter searched, in px.
         d_max: Largest circle diameter searched, in px.
-        dist2R: Minimum distance between detected centres, relative
-            to ``d_max``.
-        param1: Upper threshold of the Canny edge detector inside
-            OpenCV's HoughCircles (the lower one is half of it).
-        param2: Accumulator threshold; lower values find more circles
-            and more false ones.
+        min_dist_ratio: Minimum distance between detected centres, as a
+            fraction of the range's largest radius (``d_max / 2``).
+            OpenCV keeps the stronger of two centres closer than that,
+            so a wide range can lose real overlapping small particles
+            (r 30-120 and 0.4: two r 30 particles 40 px apart, 40 < 48);
+            narrow the range then.
+        canny_threshold: Upper threshold of the Canny edge detector
+            inside OpenCV's HoughCircles (``param1``; the lower one is
+            half of it).
+        accumulator_threshold: Votes a centre needs (``param2``); lower
+            values find more circles, and more false ones.
     """
 
     d_min: int
     d_max: int
-    # established HCT name, renamed with the detector in 2.6
-    dist2R: float = 0.4  # noqa: N815
-    param1: float = 200.0
-    param2: float = 15.0
+    min_dist_ratio: float = 0.4
+    canny_threshold: float = 200.0
+    accumulator_threshold: float = 15.0
 
     def __post_init__(self) -> None:
         d_min = _integer("d_min", self.d_min)
@@ -103,7 +113,11 @@ class HCTRange:
             )
         _set(self, "d_min", d_min)
         _set(self, "d_max", d_max)
-        for name in ("dist2R", "param1", "param2"):
+        for name in (
+            "min_dist_ratio",
+            "canny_threshold",
+            "accumulator_threshold",
+        ):
             _set(self, name, _positive(name, getattr(self, name)))
 
 
