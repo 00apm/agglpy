@@ -363,44 +363,25 @@ def _union_area(
 ) -> NDArray[np.float64]:
     """Exact area of the union of each agglomerate's member circles.
 
-    Green's theorem: the area is a sum over the parts of each circle's
-    outline that lie outside every other circle. Each circle starts
-    with its full outline (area πr²); the parts other circles cover are
-    subtracted, each covered angle once.
+    Green's theorem: the area is ½∮(x dy - y dx) along the union's
+    boundary, which is made of the outline arcs (``_outline_arcs``).
     """
-    n = len(r)
-    circle, start, end = _covered_arcs(groups.codes, x, y, r)
-
-    # Sort the arcs circle by circle, by start angle. Each arc counts
-    # only beyond the furthest end of the arcs before it on its circle,
-    # so overlapping covered parts are subtracted once.
-    order = np.lexsort((start, circle))
-    circle, start, end = circle[order], start[order], end[order]
-    # Ends lie in [0, 2π]; adding 8 per circle keeps a running max from
-    # reaching into the next circle.
-    offset = 8.0 * circle
-    reached = np.maximum.accumulate(offset + end) - offset
-    before = np.empty_like(reached)
-    before[1:] = reached[:-1]
-    first = np.ones(len(circle), dtype=bool)
-    first[1:] = circle[1:] != circle[:-1]
-    before[first] = -np.inf
-    a = np.maximum(start, before)
-    b = np.maximum(end, before)
-
-    # Green's theorem, ½∮(x dy - y dx), over the arc a…b of the circle.
+    circle, a, b = _outline_arcs(groups.codes, x, y, r)
     # Centres relative to the agglomerate's centre of mass keep the
     # terms small (only here: the contact search needs image positions).
     rr = r[circle]
     cx = (x - x_com[groups.codes])[circle]
     cy = (y - y_com[groups.codes])[circle]
-    covered = 0.5 * (
+    # ½∮(x dy - y dx) over the arc a…b of a circle.
+    part = 0.5 * (
         rr * rr * (b - a)
         + cx * rr * (np.sin(b) - np.sin(a))
         - cy * rr * (np.cos(b) - np.cos(a))
     )
-    outside = np.pi * r * r - np.bincount(circle, weights=covered, minlength=n)
-    return groups.sum(outside)
+    # Each arc adds to the area of its circle's agglomerate.
+    return np.bincount(
+        groups.codes[circle], weights=part, minlength=groups.k
+    ).astype(np.float64)
 
 
 def _outline_arcs(
