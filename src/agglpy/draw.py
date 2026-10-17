@@ -196,8 +196,8 @@ def particles(
             value when None.
         colors: ``{label: colour}`` for a label column; it must give
             every drawn label. Without it, the ``tab10`` colours go to
-            the categories of a ``category`` column, else to the sorted
-            labels.
+            the categories of a ``category`` column, to False and True
+            of a bool column, else to the sorted labels.
         alpha: Opacity of the fill, 0 (outlines only) to 1.
         linewidth: Width of the outlines in points, others half of it;
             on a ``figure`` one point is one pixel of the file.
@@ -435,9 +435,12 @@ def _palette(
         if missing:
             raise TableError(f"colors= gives no colour for {_listed(missing)}")
         return _Palette(None, dict(colors))
-    # category: colours by category order, the same in every image
+    # category and bool: every possible label, so the colours are the
+    # same in every image
     if isinstance(values.dtype, pd.CategoricalDtype):
         labels = list(values.cat.categories)
+    elif pd.api.types.is_bool_dtype(values):
+        labels = [False, True]
     else:
         labels = _sorted(found)
     palette = mpl.colormaps[_PALETTE]

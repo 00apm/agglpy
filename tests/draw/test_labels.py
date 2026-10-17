@@ -118,3 +118,13 @@ def test_an_empty_selection_has_no_legend():
     p = table(pd.Categorical(["a", "b", "a"], categories=["a", "b"]))
     _, drawing = drawn(p, select=p["x"] > 1000)
     assert drawing.legend is None
+
+
+def test_bool_colours_do_not_depend_on_the_values_present():
+    image_one, drawing_one = drawn(table([True, True, True]))
+    image_two, drawing_two = drawn(table([False, True, True]))
+    # True keeps the second colour also where no False is drawn
+    np.testing.assert_array_equal(image_one[40, 30], rgba(TAB10(1)))
+    np.testing.assert_array_equal(image_two[40, 70], rgba(TAB10(1)))
+    assert legend_labels(drawing_one) == legend_labels(drawing_two)
+    assert legend_labels(drawing_one) == ["False", "True"]
