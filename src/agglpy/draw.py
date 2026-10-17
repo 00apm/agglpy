@@ -24,15 +24,21 @@ import matplotlib as mpl
 import numpy as np
 import pandas as pd
 from matplotlib.axes import Axes
-from matplotlib.collections import Collection, EllipseCollection
+from matplotlib.collections import (
+    Collection,
+    EllipseCollection,
+    PathCollection,
+)
 from matplotlib.colorbar import Colorbar
 from matplotlib.colors import Colormap, Normalize, to_rgba
 from matplotlib.figure import Figure
 from matplotlib.legend import Legend
 from matplotlib.patches import Patch
+from matplotlib.path import Path
 from matplotlib.typing import ColorType
 from numpy.typing import NDArray
 
+from agglpy.core.properties import _outline_arcs
 from agglpy.errors import ParamsError, TableError
 
 # File pixels per inch of the figures from ``figure``: at 72, one point
@@ -249,6 +255,103 @@ def particles(
     return Drawing(fills, None, others_artist, bar, key)
 
 
+def agglomerates(
+    ax: Axes,
+    particles: pd.DataFrame,
+    agglomerates: pd.DataFrame,
+    *,
+    color_by: Hashable,
+    select: pd.Series | None = None,
+    image: NDArray[Any] | None = None,
+    others: ColorType | None = "grey",
+    cmap: str | Colormap | None = None,
+    norm: Normalize | None = None,
+    vmin: float | None = None,
+    vmax: float | None = None,
+    colors: Mapping[Any, ColorType] | None = None,
+    alpha: float = 0.5,
+    linewidth: float = 1.0,
+    legend: bool | str = True,
+) -> Drawing:
+    """Draw each agglomerate as one shape coloured by its column.
+
+    The member circles of a selected agglomerate are filled together
+    (``alpha``; overlaps are filled once) and the agglomerate's outer
+    outline is drawn opaque: the outline arcs of its members, the edge
+    of a hole inside a ring of particles included. Inner circle lines
+    are not drawn; enclosed particles lie under the fill.
+
+    Args:
+        ax: The axes to draw into, e.g. from ``figure``.
+        particles: The image's particle table, in px (``x, y, r``,
+            ``agglomerate_id``).
+        agglomerates: The image's agglomerate table
+            (``agglomerate_id`` and ``color_by``).
+        color_by: The agglomerate column that gives the colours (see
+            ``particles``).
+        select: A boolean Series on the agglomerate table's index; None
+            selects all. Members of unselected agglomerates, and
+            particles whose agglomerate is not in the table, are drawn
+            as ``others``.
+        image, others, cmap, norm, vmin, vmax, colors, alpha,
+            linewidth, legend: As for ``particles``.
+
+    Returns:
+        The ``Drawing`` with the added artists.
+
+    Raises:
+        TableError: As for ``particles``; also if ``agglomerate_id`` is
+            missing from either table or repeated in the agglomerate
+            table.
+        ParamsError: As for ``particles``.
+    """
+    x, y, r = _geometry(particles)
+    members = _ids(particles, "particle")
+    ids = _ids(agglomerates, "agglomerate")
+    if len(np.unique(ids)) < len(ids):
+        raise TableError("agglomerate_id repeats in the agglomerate table")
+    values = _column(agglomerates, color_by)
+    chosen = _selection(agglomerates, select)
+    style = _Style(alpha, linewidth)
+    palette = _palette(values[chosen], cmap, norm, vmin, vmax, colors)
+    colored = chosen & palette.has_colour(values)
+
+    # Row of each particle's agglomerate among the coloured ones, -1
+    # for a particle drawn as others.
+    shown = pd.Series(
+        np.arange(int(colored.sum())), index=ids[colored], dtype=np.int64
+    )
+    row = shown.reindex(members).fillna(-1).to_numpy(dtype=np.int64)
+    _draw_image(ax, image)
+    others_artist = _others(ax, x, y, r, row < 0, others, style)
+
+    fills = outlines = None
+    if colored.any():
+        rgba = palette.rgba(values[colored])
+        drawn = row >= 0
+        codes = row[drawn]
+        fills = PathCollection(
+            _union_paths(codes, x[drawn], y[drawn], r[drawn], len(rgba)),
+            facecolors=_with_alpha(rgba, style.alpha),
+            edgecolors="none",
+        )
+        outlines = PathCollection(
+            _outline_paths(codes, x[drawn], y[drawn], r[drawn], len(rgba)),
+            facecolors="none",
+            edgecolors=rgba,
+            linewidths=style.linewidth,
+        )
+        ax.add_collection(fills, autolim=False)
+        ax.add_collection(outlines, autolim=False)
+    _fit(ax, x, y, r, image)
+    bar, key = (
+        _legend(ax, palette, color_by, legend, style)
+        if colored.any()
+        else (None, None)
+    )
+    return Drawing(fills, outlines, others_artist, bar, key)
+
+
 # ---------------------------------------------------------------------
 # Colours
 # ---------------------------------------------------------------------
@@ -396,6 +499,60 @@ def _others(
     )
     ax.add_collection(outlines, autolim=False)
     return outlines
+
+
+def _union_paths(
+    codes: NDArray[np.int64],
+    x: NDArray[np.float64],
+    y: NDArray[np.float64],
+    r: NDArray[np.float64],
+    k: int,
+) -> list[Path]:
+    """One compound path of all member circles per agglomerate.
+
+    Every circle runs the same way round, so the nonzero fill rule
+    fills each overlap once.
+    """
+    unit = Path.unit_circle()
+    circle = np.asarray(unit.vertices, dtype=np.float64)
+    vertices = (
+        circle[None] * r[:, None, None] + np.stack([x, y], axis=1)[:, None]
+    )
+    order = np.argsort(codes, kind="stable")
+    bounds = np.searchsorted(codes[order], np.arange(k + 1))
+    paths = []
+    for i in range(k):
+        rows = order[bounds[i] : bounds[i + 1]]
+        paths.append(
+            Path(
+                vertices[rows].reshape(-1, 2),
+                np.tile(np.asarray(unit.codes), len(rows)),
+            )
+        )
+    return paths
+
+
+def _outline_paths(
+    codes: NDArray[np.int64],
+    x: NDArray[np.float64],
+    y: NDArray[np.float64],
+    r: NDArray[np.float64],
+    k: int,
+) -> list[Path]:
+    """One path of the outer outline arcs per agglomerate."""
+    circle, start, end = _outline_arcs(codes.astype(np.intp), x, y, r)
+    arcs: list[list[Path]] = [[] for _ in range(k)]
+    for c, a, b in zip(
+        circle, np.degrees(start), np.degrees(end), strict=True
+    ):
+        unit = Path.arc(a, b)
+        arcs[codes[c]].append(
+            Path(unit.vertices * r[c] + (x[c], y[c]), unit.codes)
+        )
+    return [
+        Path.make_compound_path(*paths) if paths else Path(np.empty((0, 2)))
+        for paths in arcs
+    ]
 
 
 def _draw_image(ax: Axes, image: NDArray[Any] | None) -> None:
@@ -572,6 +729,15 @@ def _geometry(
     if (r <= 0).any():
         raise TableError("column 'r' must be > 0")
     return x, y, r
+
+
+def _ids(table: pd.DataFrame, name: str) -> NDArray[np.int64]:
+    if "agglomerate_id" not in table.columns:
+        raise TableError(
+            f"the {name} table has no column 'agglomerate_id' "
+            "(find_agglomerates adds it)"
+        )
+    return table["agglomerate_id"].to_numpy(dtype=np.int64)
 
 
 def _column(table: pd.DataFrame, column: Hashable) -> pd.Series:
