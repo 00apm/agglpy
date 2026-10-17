@@ -12,6 +12,8 @@ import yaml
 
 from agglpy import export
 from agglpy.errors import (
+    OutputExistsError,
+    OutputLockedError,
     ParamsError,
     TableError,
 )
@@ -233,3 +235,59 @@ def test_record_values_must_be_plain(tmp_path, value):
 def test_record_key_agglpy_is_reserved(tmp_path):
     with pytest.raises(ParamsError, match="agglpy"):
         write(tmp_path, record={"agglpy": 1})
+
+
+# ---------------------------------------------------------------------
+# An earlier export in the folder
+# ---------------------------------------------------------------------
+
+
+def test_an_earlier_export_is_refused(tmp_path):
+    write(tmp_path)
+    before = (tmp_path / "record.yml").read_bytes()
+    with pytest.raises(OutputExistsError, match="overwrite=True") as info:
+        write(tmp_path, tables={"other": SUMMARY})
+    assert "results.xlsx" in str(info.value)
+    assert (tmp_path / "record.yml").read_bytes() == before
+    assert not (tmp_path / "csv" / "other.csv").exists()
+
+
+def test_overwrite_replaces_only_agglpys_files(tmp_path):
+    write(tmp_path)
+    (tmp_path / "notes.txt").write_text("mine")
+    (tmp_path / "csv" / "stale.csv").write_text("old")
+    write(tmp_path, tables={"other": SUMMARY}, overwrite=True)
+    assert sorted(p.name for p in (tmp_path / "csv").iterdir()) == [
+        "other.csv"
+    ]
+    assert (tmp_path / "notes.txt").read_text() == "mine"
+    assert sheets(tmp_path) == ["other", "info"]
+
+
+def test_any_one_file_of_an_export_counts(tmp_path):
+    (tmp_path / "record.yml").write_text("x: 1\n")
+    with pytest.raises(OutputExistsError, match=r"record\.yml"):
+        write(tmp_path)
+
+
+def test_a_locked_file_stops_the_overwrite(tmp_path, monkeypatch):
+    write(tmp_path)
+    before = {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
+    rename = Path.rename
+
+    def locked(self, target):
+        if self.name == "results.xlsx":  # open in Excel
+            raise PermissionError(13, "in use", str(self))
+        return rename(self, target)
+
+    monkeypatch.setattr(Path, "rename", locked)
+    with pytest.raises(OutputLockedError, match=r"results\.xlsx"):
+        write(tmp_path, tables={"other": SUMMARY}, overwrite=True)
+    after = {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
+    assert after == before  # nothing changed
+
+
+def test_output_errors_are_os_errors(tmp_path):
+    write(tmp_path)
+    with pytest.raises(FileExistsError):
+        write(tmp_path)

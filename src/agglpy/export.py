@@ -11,6 +11,7 @@ of agglpy and its main dependencies to every export.
 import dataclasses
 import os
 import re
+import shutil
 from collections.abc import Mapping
 from datetime import datetime
 from importlib.metadata import PackageNotFoundError, version
@@ -20,7 +21,12 @@ from typing import Any
 import pandas as pd
 import yaml
 
-from agglpy.errors import ParamsError, TableError
+from agglpy.errors import (
+    OutputExistsError,
+    OutputLockedError,
+    ParamsError,
+    TableError,
+)
 
 PathLike = str | os.PathLike[str]
 
@@ -139,6 +145,7 @@ def write_results(
     }
 
     out = Path(folder)
+    _clear(out, overwrite)
     out.mkdir(parents=True, exist_ok=True)
     (out / _CSV).mkdir()
     for name, table in written.items():
@@ -255,6 +262,37 @@ def _version(names: tuple[str, ...]) -> str | None:
         except PackageNotFoundError:
             continue
     return None
+
+
+def _clear(folder: Path, overwrite: bool) -> None:
+    """Remove an earlier export, or refuse; never anything else."""
+    old = [folder / n for n in (_XLSX, _RECORD, _CSV) if (folder / n).exists()]
+    if not old:
+        return
+    names = ", ".join(p.name for p in old)
+    if not overwrite:
+        raise OutputExistsError(
+            f"{folder} already holds an export ({names}); pass "
+            "overwrite=True to replace it"
+        )
+    # Renaming fails on a file another program holds open (Windows):
+    # try each first, so a locked file stops the export before anything
+    # is removed.
+    for path in old:
+        moved = path.with_name(path.name + ".agglpy-check")
+        try:
+            path.rename(moved)
+        except PermissionError as exc:
+            raise OutputLockedError(
+                f"can't replace {path}: is it open in another program? "
+                "Close it and retry"
+            ) from exc
+        moved.rename(path)
+    for path in old:
+        if path.is_dir():
+            shutil.rmtree(path)
+        else:
+            path.unlink()
 
 
 def _write_csv(table: pd.DataFrame, path: Path) -> None:
