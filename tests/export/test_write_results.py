@@ -1,6 +1,7 @@
 """agglpy.export.write_results: xlsx, CSV and the record in a folder."""
 
 import dataclasses
+import enum
 from datetime import datetime
 from pathlib import Path
 
@@ -291,3 +292,64 @@ def test_output_errors_are_os_errors(tmp_path):
     write(tmp_path)
     with pytest.raises(FileExistsError):
         write(tmp_path)
+
+
+# ---------------------------------------------------------------------
+# Review fixes: NumPy values, failed writes
+# ---------------------------------------------------------------------
+
+
+def test_record_holds_numpy_scalars_as_plain_values(tmp_path):
+    # np.float64 is a float subclass: written as a plain float
+    out = write(
+        tmp_path,
+        record={
+            "mean": np.float64(1.5),
+            "half": np.float32(0.25),
+            "flag": np.bool_(True),
+        },
+    )
+    saved = record(out)
+    assert (saved["mean"], saved["half"], saved["flag"]) == (1.5, 0.25, True)
+
+
+def test_record_holds_numpy_arrays_as_lists(tmp_path):
+    out = write(
+        tmp_path,
+        record={
+            "ids": np.array([1, 2]),
+            "one": np.array([7]),
+            "grid": np.array([[1, 2], [3, 4]]),
+        },
+    )
+    saved = record(out)
+    assert saved["ids"] == [1, 2]
+    assert saved["one"] == [7]
+    assert saved["grid"] == [[1, 2], [3, 4]]
+
+
+class _Kind(str, enum.Enum):
+    A = "a"
+
+
+def test_record_refuses_subclasses_of_plain_types(tmp_path):
+    with pytest.raises(TypeError, match="record"):
+        write(tmp_path, record={"kind": _Kind.A})
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_multiindex_columns_raise_before_writing(tmp_path):
+    table = pd.DataFrame({("D", "mean"): [1.0], ("D", "std"): [0.1]})
+    with pytest.raises(TableError, match="MultiIndex"):
+        write(tmp_path, tables={"stats": table})
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_a_failed_write_leaves_no_export(tmp_path):
+    # Excel refuses timezone-aware times; only the writer finds out.
+    (tmp_path / "notes.txt").write_text("mine")
+    times = pd.DataFrame({"t": pd.date_range("2026", periods=2, tz="UTC")})
+    with pytest.raises(ValueError, match="timezone"):
+        write(tmp_path, tables={"times": times})
+    assert [p.name for p in tmp_path.iterdir()] == ["notes.txt"]
+    write(tmp_path)  # a retry needs no overwrite=True

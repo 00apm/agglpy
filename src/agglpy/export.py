@@ -84,7 +84,8 @@ def write_results(
       tables written.
 
     Column names stay as in the tables; units go into the ``units``
-    sheet and ``csv/units.csv`` (``table | column | unit``).
+    sheet and ``csv/units.csv`` (``table | column | unit``). A write
+    that fails part-way removes the files it wrote.
 
     Args:
         folder: The folder to write into.
@@ -106,7 +107,7 @@ def write_results(
 
     Raises:
         TableError: If a name is not allowed or a table is not a
-            DataFrame.
+            DataFrame or has MultiIndex columns.
         ParamsError: If ``record`` has its own ``agglpy`` entry.
         TypeError: If a record value or a unit is of another type.
         OutputExistsError: If ``folder`` holds an export and
@@ -144,23 +145,30 @@ def write_results(
         **caller,
     }
 
+    text = yaml.safe_dump(full, sort_keys=False, allow_unicode=True)
+
     out = Path(folder)
     _clear(out, overwrite)
     out.mkdir(parents=True, exist_ok=True)
-    (out / _CSV).mkdir()
-    for name, table in written.items():
-        _write_csv(table, out / _CSV / f"{name}.csv")
-    if unit_rows is not None:
-        _write_csv(unit_rows, out / _CSV / "units.csv")
-    with pd.ExcelWriter(out / _XLSX, engine="openpyxl") as excel:
+    try:
+        (out / _CSV).mkdir()
         for name, table in written.items():
-            if in_xlsx[name]:
-                table.to_excel(excel, sheet_name=name, index=False)
+            _write_csv(table, out / _CSV / f"{name}.csv")
         if unit_rows is not None:
-            unit_rows.to_excel(excel, sheet_name="units", index=False)
-        _info(full).to_excel(excel, sheet_name="info", index=False)
-    with (out / _RECORD).open("w", encoding="utf-8", newline="\n") as fh:
-        yaml.safe_dump(full, fh, sort_keys=False, allow_unicode=True)
+            _write_csv(unit_rows, out / _CSV / "units.csv")
+        with pd.ExcelWriter(out / _XLSX, engine="openpyxl") as excel:
+            for name, table in written.items():
+                if in_xlsx[name]:
+                    table.to_excel(excel, sheet_name=name, index=False)
+            if unit_rows is not None:
+                unit_rows.to_excel(excel, sheet_name="units", index=False)
+            _info(full).to_excel(excel, sheet_name="info", index=False)
+        with (out / _RECORD).open("w", encoding="utf-8", newline="\n") as fh:
+            fh.write(text)
+    except BaseException:
+        # A half-written export would block the retry: remove it.
+        _remove(_export_items(out))
+        raise
     return out
 
 
@@ -180,6 +188,11 @@ def _check_names(tables: Mapping[str, pd.DataFrame]) -> None:
         seen.add(name.lower())
         if not isinstance(table, pd.DataFrame):
             raise TableError(f"table {name!r} is not a DataFrame")
+        if isinstance(table.columns, pd.MultiIndex):
+            raise TableError(
+                f"table {name!r} has MultiIndex columns; flatten them, "
+                "e.g. table.columns = ['_'.join(c) for c in table.columns]"
+            )
 
 
 def _with_index(table: pd.DataFrame) -> pd.DataFrame:
@@ -216,10 +229,13 @@ def _plain(value: object, key: str) -> Any:
     """``value`` as plain YAML types; ``key`` names it in errors."""
     if dataclasses.is_dataclass(value) and not isinstance(value, type):
         value = dataclasses.asdict(value)
-    if value is None or isinstance(value, str | bool | int | float):
+    # NumPy numbers and arrays as Python numbers and lists; checked
+    # first: np.float64 is also a float, which YAML can't write.
+    if type(value).__module__ == "numpy" and hasattr(value, "tolist"):
+        return _plain(value.tolist(), key)
+    # Exact types: a subclass (e.g. a str Enum) is not plain YAML.
+    if value is None or type(value) in (str, bool, int, float):
         return value
-    if hasattr(value, "item") and type(value).__module__ == "numpy":
-        return _plain(value.item(), key)  # a NumPy number
     if isinstance(value, Mapping):
         out = {}
         for k, v in value.items():
@@ -266,7 +282,7 @@ def _version(names: tuple[str, ...]) -> str | None:
 
 def _clear(folder: Path, overwrite: bool) -> None:
     """Remove an earlier export, or refuse; never anything else."""
-    old = [folder / n for n in (_XLSX, _RECORD, _CSV) if (folder / n).exists()]
+    old = _export_items(folder)
     if not old:
         return
     names = ", ".join(p.name for p in old)
@@ -288,7 +304,18 @@ def _clear(folder: Path, overwrite: bool) -> None:
                 "Close it and retry"
             ) from exc
         moved.rename(path)
-    for path in old:
+    _remove(old)
+
+
+def _export_items(folder: Path) -> list[Path]:
+    """The files and folder of an export present in ``folder``."""
+    return [
+        folder / n for n in (_XLSX, _RECORD, _CSV) if (folder / n).exists()
+    ]
+
+
+def _remove(paths: list[Path]) -> None:
+    for path in paths:
         if path.is_dir():
             shutil.rmtree(path)
         else:
