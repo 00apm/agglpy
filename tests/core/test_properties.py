@@ -638,3 +638,109 @@ def test_to_physical_leaves_touches_edge_alone():
     table = particle_properties(_particles(*ABC), bounds=FAR)
     out = to_physical(table, 0.5)
     pd.testing.assert_series_equal(out["touches_edge"], table["touches_edge"])
+
+
+# ---------------------------------------------------------------------
+# Outline arcs (private; the union area and agglpy.draw use them)
+# ---------------------------------------------------------------------
+
+FULL = 2 * math.pi
+
+
+def _arcs(x, y, r, codes=None) -> list[tuple[int, float, float]]:
+    """Outline arcs as (circle, start, end); one agglomerate by default."""
+    x, y, r = (np.asarray(v, dtype=np.float64) for v in (x, y, r))
+    codes = np.zeros(len(r), dtype=np.intp) if codes is None else codes
+    circle, start, end = properties._outline_arcs(
+        np.asarray(codes, dtype=np.intp), x, y, r
+    )
+    return list(zip(circle.tolist(), start.tolist(), end.tolist()))
+
+
+def _degrees(arcs) -> list[tuple[int, float, float]]:
+    return [(c, math.degrees(a), math.degrees(b)) for c, a, b in arcs]
+
+
+def test_a_free_circle_is_one_full_arc():
+    assert _arcs([3], [4], [10]) == [(0, 0.0, FULL)]
+
+
+def test_outline_arcs_of_two_crossing_circles():
+    # 1 (120, 88, r 14.2) and 2 (141.5, 90, r 9.8): each loses the arc
+    # facing the other; the arc of 2 runs across angle 0.
+    (c1, a1, b1), (c2, a2, b2) = _degrees(
+        _arcs([120, 141.5], [88, 90], [14.2, 9.8])
+    )
+    assert (c1, c2) == (0, 1)
+    assert (a1, b1) == pytest.approx((26.48, 344.14), abs=0.005)
+    assert (a2, b2) == pytest.approx((216.87, 513.76), abs=0.005)
+
+
+def test_an_arc_across_zero_is_one_arc():
+    # B covers A's outline at 180° ± 41.41° (cos = 15 / 20).
+    half = math.degrees(math.acos(0.75))
+    arcs = [
+        a for a in _degrees(_arcs([0, -15], [0, 0], [10, 10])) if a[0] == 0
+    ]
+    assert arcs == [(0, pytest.approx(180 + half), pytest.approx(540 - half))]
+
+
+def test_an_enclosed_circle_has_no_outline_arc():
+    # ABC: B touches A from outside, C lies inside A.
+    assert _arcs(*ABC) == [(0, 0.0, FULL), (1, 0.0, FULL)]
+
+
+def test_tangent_circles_keep_full_outlines():
+    assert _arcs([0, 14], [0, 0], [10, 4]) == [(0, 0.0, FULL), (1, 0.0, FULL)]
+
+
+def test_a_circle_covered_by_two_others_has_no_outline_arc():
+    arcs = _arcs([0, 12, 6], [0, 0, 0], [10, 10, 7.5])
+    assert [c for c, _, _ in arcs] == [0, 1]
+
+
+def test_only_members_of_one_agglomerate_cover_each_other():
+    arcs = _arcs([0, 10], [0, 0], [10, 10], codes=[0, 1])
+    assert arcs == [(0, 0.0, FULL), (1, 0.0, FULL)]
+
+
+def test_a_ring_keeps_the_edge_of_its_hole():
+    angle = np.linspace(0, 2 * np.pi, 24, endpoint=False)
+    x, y = 50 * np.cos(angle), 50 * np.sin(angle)
+    arcs = _arcs(x, y, np.full(24, 8.0))
+    assert [c for c, _, _ in arcs] == sorted(list(range(24)) * 2)
+    # One arc of each circle faces outwards, one inwards (the hole).
+    facing = [math.cos((a + b) / 2 - angle[c]) for c, a, b in arcs]
+    assert sum(f > 0 for f in facing) == 24
+    assert sum(f < 0 for f in facing) == 24
+
+
+def test_no_circles_no_arcs():
+    assert _arcs([], [], []) == []
+
+
+@pytest.mark.parametrize("seed", range(5))
+def test_outline_arcs_are_exactly_the_uncovered_outline(seed: int):
+    rng = np.random.default_rng(seed)
+    x, y, r = (
+        rng.uniform(0, 30, 12),
+        rng.uniform(0, 30, 12),
+        rng.uniform(2, 8, 12),
+    )
+    codes = _particles(x, y, r)["agglomerate_id"].to_numpy()
+    arcs = _arcs(x, y, r, codes)
+    for c, a, b in arcs:
+        assert 0 <= a < b <= a + FULL
+    # Points of each outline: outside every other member if and only if
+    # they lie on one of the circle's arcs.
+    for c in range(12):
+        t = np.linspace(0, FULL, 720, endpoint=False) + 0.001
+        px, py = x[c] + r[c] * np.cos(t), y[c] + r[c] * np.sin(t)
+        others = (codes == codes[c]) & (np.arange(12) != c)
+        dist = np.hypot(px[:, None] - x[others], py[:, None] - y[others])
+        outside = (dist > r[others]).all(axis=1)
+        on_arc = np.zeros(len(t), dtype=bool)
+        for cc, a, b in arcs:
+            if cc == c:
+                on_arc |= ((t - a) % FULL) < (b - a)
+        assert (on_arc == outside).all()

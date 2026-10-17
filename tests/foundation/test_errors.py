@@ -10,6 +10,8 @@ from agglpy.errors import (
     MissingImagesWarning,
     NonCircularParticlesWarning,
     NoParticlesWarning,
+    OutputExistsError,
+    OutputLockedError,
     ParamsError,
     ParticlesOutsideImageWarning,
     ParticleTableError,
@@ -63,3 +65,20 @@ def test_warnings_are_user_warnings(warning: type[Warning]) -> None:
 def test_image_error_is_not_a_table_error() -> None:
     # A bad image array and a bad table are told apart.
     assert not issubclass(ImageError, TableError)
+
+
+@pytest.mark.parametrize(
+    ("error", "os_error"),
+    [
+        (OutputExistsError, FileExistsError),
+        (OutputLockedError, PermissionError),
+    ],
+)
+def test_output_errors_are_agglpy_and_os_errors(
+    error: type[Exception], os_error: type[OSError]
+) -> None:
+    # `except FileExistsError` / `except PermissionError` in user code
+    # keeps working; `except AgglpyError` catches them too.
+    assert issubclass(error, AgglpyError)
+    assert issubclass(error, os_error)
+    assert not issubclass(error, ValueError)

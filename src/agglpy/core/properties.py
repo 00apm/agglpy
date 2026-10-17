@@ -363,44 +363,104 @@ def _union_area(
 ) -> NDArray[np.float64]:
     """Exact area of the union of each agglomerate's member circles.
 
-    Green's theorem: the area is a sum over the parts of each circle's
-    outline that lie outside every other circle. Each circle starts
-    with its full outline (area πr²); the parts other circles cover are
-    subtracted, each covered angle once.
+    Green's theorem: the area is ½∮(x dy - y dx) along the union's
+    boundary, which is made of the outline arcs (``_outline_arcs``).
     """
-    n = len(r)
-    circle, start, end = _covered_arcs(groups.codes, x, y, r)
-
-    # Sort the arcs circle by circle, by start angle. Each arc counts
-    # only beyond the furthest end of the arcs before it on its circle,
-    # so overlapping covered parts are subtracted once.
-    order = np.lexsort((start, circle))
-    circle, start, end = circle[order], start[order], end[order]
-    # Ends lie in [0, 2π]; adding 8 per circle keeps a running max from
-    # reaching into the next circle.
-    offset = 8.0 * circle
-    reached = np.maximum.accumulate(offset + end) - offset
-    before = np.empty_like(reached)
-    before[1:] = reached[:-1]
-    first = np.ones(len(circle), dtype=bool)
-    first[1:] = circle[1:] != circle[:-1]
-    before[first] = -np.inf
-    a = np.maximum(start, before)
-    b = np.maximum(end, before)
-
-    # Green's theorem, ½∮(x dy - y dx), over the arc a…b of the circle.
+    circle, a, b = _outline_arcs(groups.codes, x, y, r)
     # Centres relative to the agglomerate's centre of mass keep the
     # terms small (only here: the contact search needs image positions).
     rr = r[circle]
     cx = (x - x_com[groups.codes])[circle]
     cy = (y - y_com[groups.codes])[circle]
-    covered = 0.5 * (
+    # ½∮(x dy - y dx) over the arc a…b of a circle.
+    part = 0.5 * (
         rr * rr * (b - a)
         + cx * rr * (np.sin(b) - np.sin(a))
         - cy * rr * (np.cos(b) - np.cos(a))
     )
-    outside = np.pi * r * r - np.bincount(circle, weights=covered, minlength=n)
-    return groups.sum(outside)
+    # Each arc adds to the area of its circle's agglomerate.
+    return np.bincount(
+        groups.codes[circle], weights=part, minlength=groups.k
+    ).astype(np.float64)
+
+
+def _outline_arcs(
+    codes: NDArray[np.intp],
+    x: NDArray[np.float64],
+    y: NDArray[np.float64],
+    r: NDArray[np.float64],
+) -> tuple[NDArray[np.intp], NDArray[np.float64], NDArray[np.float64]]:
+    """Arcs of each circle's outline outside every other member circle.
+
+    Together they are the boundary of each agglomerate's union of
+    circles, the edge of a hole inside a ring of particles included.
+    ``codes`` gives each circle's agglomerate (0 … k-1); only members of
+    one agglomerate cover each other.
+
+    Returns (circle, start, end) in radians, sorted by circle and start,
+    with ``0 <= start < end``: an arc across angle 0 is one arc with
+    ``end > 2π``, a circle nothing covers is ``(0, 2π)``, and a circle
+    covered completely (enclosed, or by neighbours together) has none.
+    """
+    n = len(r)
+    circle, start, end = _covered_arcs(codes, x, y, r)
+
+    # Sweep each circle's covered arcs by start angle, keeping the
+    # furthest end reached so far: a gap between that end and the next
+    # start is outline. Ends lie in [0, 2π]; adding 8 per circle keeps
+    # the running max from reaching into the next circle.
+    order = np.lexsort((start, circle))
+    circle, start, end = circle[order], start[order], end[order]
+    offset = 8.0 * circle
+    reached = np.maximum.accumulate(offset + end) - offset
+    first = np.ones(len(circle), dtype=bool)
+    first[1:] = circle[1:] != circle[:-1]
+    last = np.ones(len(circle), dtype=bool)
+    last[:-1] = first[1:]
+    before = np.empty_like(reached)
+    before[1:] = reached[:-1]
+    before[first] = 0.0
+    gap = start > before
+
+    # Per covered circle (circle[first] and circle[last] list the same
+    # circles in the same order): the head gap 0 … first start and the
+    # tail gap furthest end … 2π are one arc across 0 when both exist.
+    head = gap[first]
+    tail = reached[last] < 2 * np.pi
+    joined = head & tail
+    head_only = first.copy()
+    head_only[first] = head & ~tail
+    middle = gap & ~first
+    free = np.ones(n, dtype=bool)
+    free[circle] = False
+    n_free = int(free.sum())
+
+    circles = np.concatenate(
+        [
+            circle[middle],
+            circle[head_only],
+            circle[last][tail],
+            np.flatnonzero(free),
+        ]
+    )
+    starts = np.concatenate(
+        [
+            before[middle],
+            np.zeros(int(head_only.sum())),
+            reached[last][tail],
+            np.zeros(n_free),
+        ]
+    )
+    ends = np.concatenate(
+        [
+            start[middle],
+            start[head_only],
+            2 * np.pi + np.where(joined, start[first], 0.0)[tail],
+            np.full(n_free, 2 * np.pi),
+        ]
+    )
+    order = np.lexsort((starts, circles))
+    return circles[order], starts[order], ends[order]
 
 
 def _covered_arcs(
