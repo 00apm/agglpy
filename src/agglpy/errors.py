@@ -99,6 +99,23 @@ class ImageError(AgglpyError, ValueError):
     """
 
 
+class OutputExistsError(AgglpyError, FileExistsError):
+    """Raised when a folder already holds an export and overwrite is off.
+
+    The message names the files of the earlier export; nothing is
+    written.
+    """
+
+
+class OutputLockedError(AgglpyError, PermissionError):
+    """Raised when a file of an earlier export can't be replaced.
+
+    Usually the file is open in another program (on Windows, Excel
+    locks an open workbook). The message names the file; nothing is
+    changed.
+    """
+
+
 class DuplicateParticlesWarning(UserWarning):
     """Warns about near-identical circles: a detection mistake."""
 
