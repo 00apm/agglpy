@@ -29,6 +29,7 @@ from matplotlib.colorbar import Colorbar
 from matplotlib.colors import Colormap, Normalize, to_rgba
 from matplotlib.figure import Figure
 from matplotlib.legend import Legend
+from matplotlib.patches import Patch
 from matplotlib.typing import ColorType
 from numpy.typing import NDArray
 
@@ -44,6 +45,8 @@ _STRIP = 0.12
 _TEXT = 0.1
 # Label of the strip's axes, by which the draw functions find it.
 _STRIP_LABEL = "agglpy legend"
+# Default colours of label columns (10 colours).
+_PALETTE = "tab10"
 
 
 @dataclass(frozen=True)
@@ -263,9 +266,15 @@ class _Palette:
         self.labels = labels
 
     def has_colour(self, values: pd.Series) -> NDArray[np.bool_]:
+        if self.labels is not None:
+            return values.isin(list(self.labels)).to_numpy(dtype=bool)
         return values.notna().to_numpy(dtype=bool)
 
     def rgba(self, values: pd.Series) -> NDArray[np.float64]:
+        if self.labels is not None:
+            return np.array(
+                [to_rgba(self.labels[v]) for v in values], dtype=np.float64
+            ).reshape(-1, 4)
         assert self.scale is not None
         return np.asarray(
             self.scale.to_rgba(values.to_numpy(dtype=np.float64)),
@@ -285,26 +294,69 @@ def _palette(
     numeric = pd.api.types.is_numeric_dtype(
         values
     ) and not pd.api.types.is_bool_dtype(values)
-    if not numeric:
-        raise TableError(f"color_by: {values.name!r} is not numeric")
-    if colors is not None:
-        raise ParamsError(
-            f"colors= is for label columns; {values.name!r} holds "
-            "numbers (use cmap=)"
+    if numeric:
+        if colors is not None:
+            raise ParamsError(
+                f"colors= is for label columns; {values.name!r} holds "
+                "numbers (use cmap=)"
+            )
+        if norm is not None and (vmin is not None or vmax is not None):
+            raise ParamsError("pass either norm= or vmin= / vmax=")
+        # A copy: matplotlib fills an unset range in place, which would
+        # carry this image's range over to the next call.
+        scale_norm = (
+            copy.copy(norm) if norm is not None else Normalize(vmin, vmax)
         )
-    if norm is not None and (vmin is not None or vmax is not None):
-        raise ParamsError("pass either norm= or vmin= / vmax=")
-    # A copy: matplotlib fills an unset range in place, which would
-    # carry this image's range over to the next call.
-    scale_norm = copy.copy(norm) if norm is not None else Normalize(vmin, vmax)
-    present = values.dropna().to_numpy(dtype=np.float64)
-    if len(present):
-        scale_norm.autoscale_None(present)
-    scale = mpl.cm.ScalarMappable(
-        scale_norm, mpl.colormaps[cmap] if isinstance(cmap, str) else cmap
+        present = values.dropna().to_numpy(dtype=np.float64)
+        if len(present):
+            scale_norm.autoscale_None(present)
+        scale = mpl.cm.ScalarMappable(
+            scale_norm, mpl.colormaps[cmap] if isinstance(cmap, str) else cmap
+        )
+        scale.set_array(present)
+        return _Palette(scale, None)
+
+    if (
+        cmap is not None
+        or norm is not None
+        or vmin is not None
+        or (vmax is not None)
+    ):
+        raise ParamsError(
+            f"cmap=, norm=, vmin= and vmax= are for numeric columns; "
+            f"{values.name!r} holds labels (use colors=)"
+        )
+    found = values.dropna().unique().tolist()
+    if colors is not None:
+        missing = [v for v in found if v not in colors]
+        if missing:
+            raise TableError(f"colors= gives no colour for {_listed(missing)}")
+        return _Palette(None, dict(colors))
+    # category: colours by category order, the same in every image
+    if isinstance(values.dtype, pd.CategoricalDtype):
+        labels = list(values.cat.categories)
+    else:
+        labels = _sorted(found)
+    palette = mpl.colormaps[_PALETTE]
+    if len(labels) > palette.N:
+        raise TableError(
+            f"{len(labels)} labels in {values.name!r}, more than the "
+            f"{palette.N} default colours: pass colors={{label: colour}}"
+        )
+    return _Palette(
+        None, {label: palette(i) for i, label in enumerate(labels)}
     )
-    scale.set_array(present)
-    return _Palette(scale, None)
+
+
+def _sorted(labels: list[Any]) -> list[Any]:
+    try:
+        return sorted(labels)
+    except TypeError:  # mixed types, e.g. 1 and "a"
+        return sorted(labels, key=str)
+
+
+def _listed(labels: list[Any]) -> str:
+    return ", ".join(repr(v) for v in labels)
 
 
 def _with_alpha(
@@ -421,19 +473,42 @@ def _legend(
     title = str(color_by) if legend is True else str(legend)
     fig = ax.get_figure()
     assert isinstance(fig, Figure)
-    assert palette.scale is not None
     strip = _strip(fig)
-    if strip is None:
-        bar = fig.colorbar(palette.scale, ax=ax, label=title)
-        return bar, None
     text = _text_colour(fig)
+    if palette.scale is not None:
+        if strip is None:
+            bar = fig.colorbar(palette.scale, ax=ax, label=title)
+            return bar, None
+        size = _font_size(fig, strip)
+        cax = strip.inset_axes((0.1, 0.1, 0.15, 0.8))
+        bar = fig.colorbar(palette.scale, cax=cax)
+        bar.set_label(title, color=text, fontsize=size)
+        bar.ax.tick_params(colors=text, labelsize=size)
+        bar.outline.set_edgecolor(text)
+        return bar, None
+    assert palette.labels is not None
+    handles = [
+        Patch(
+            facecolor=_with_alpha(np.array([to_rgba(c)]), style.alpha)[0],
+            edgecolor=c,
+            label=str(label),
+        )
+        for label, c in palette.labels.items()
+    ]
+    if strip is None:
+        return None, ax.legend(handles=handles, title=title)
     size = _font_size(fig, strip)
-    cax = strip.inset_axes((0.1, 0.1, 0.15, 0.8))
-    bar = fig.colorbar(palette.scale, cax=cax)
-    bar.set_label(title, color=text, fontsize=size)
-    bar.ax.tick_params(colors=text, labelsize=size)
-    bar.outline.set_edgecolor(text)
-    return bar, None
+    key = strip.legend(
+        handles=handles,
+        title=title,
+        loc="center left",
+        frameon=False,
+        fontsize=size,
+        title_fontsize=size,
+        labelcolor=text,
+    )
+    key.get_title().set_color(text)
+    return None, key
 
 
 def _strip(fig: Figure) -> Axes | None:
