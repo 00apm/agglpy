@@ -166,5 +166,8 @@ class NonCircularParticlesWarning(UserWarning):
     """
 
 
-class ParticlesOutsideImageWarning(UserWarning):
-    """Warns that particles lie entirely outside their image."""
+class ParticlesOutsideRegionWarning(UserWarning):
+    """Warns that particles outside the analysed region were left out.
+
+    Each of them lies entirely outside the region.
+    """

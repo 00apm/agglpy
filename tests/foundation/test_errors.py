@@ -13,7 +13,7 @@ from agglpy.errors import (
     OutputExistsError,
     OutputLockedError,
     ParamsError,
-    ParticlesOutsideImageWarning,
+    ParticlesOutsideRegionWarning,
     ParticleTableError,
     PixelSizeWarning,
     TableError,
@@ -55,7 +55,7 @@ def test_particle_table_error_is_a_table_error() -> None:
         MissingImagesWarning,
         PixelSizeWarning,
         NonCircularParticlesWarning,
-        ParticlesOutsideImageWarning,
+        ParticlesOutsideRegionWarning,
     ],
 )
 def test_warnings_are_user_warnings(warning: type[Warning]) -> None:

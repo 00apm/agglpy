@@ -3,11 +3,18 @@
 import dataclasses
 
 import numpy as np
+import pandas as pd
 import pytest
 
-from agglpy.core.region import Bounds, region_bounds, region_slices
-from agglpy.errors import ParamsError
+from agglpy.core.region import (
+    Bounds,
+    outside_region,
+    region_bounds,
+    region_slices,
+)
+from agglpy.errors import ParamsError, ParticleTableError
 from agglpy.params import RegionParams
+from agglpy.tables import make_particles
 
 
 def test_small_example():
@@ -76,3 +83,59 @@ def test_size_from_numpy_integers():
 def test_bounds_are_frozen():
     with pytest.raises(dataclasses.FrozenInstanceError):
         Bounds(0, 0, 1, 1).x_min = 2  # type: ignore[misc]
+
+
+# --- outside_region ---------------------------------------------------
+
+FULL = Bounds(-0.5, -0.5, 3071.5, 2303.5)  # 3072 x 2304, no cut
+CUT = Bounds(-0.5, -0.5, 3071.5, 2072.5)  # bottom_fraction 0.1
+
+
+def test_outside_region_only_where_nothing_overlaps():
+    t = make_particles(
+        [1500.0, 10.0, -8.0, 3200.0],
+        [1000.0, 900.0, 900.0, 900.0],
+        [20.0, 25.0, 25.0, 25.0],
+    )
+    # normal, cut by the edge, centre outside but reaching in, outside
+    mask = outside_region(t, FULL)
+    assert mask.tolist() == [False, False, False, True]
+    assert mask.dtype == bool
+
+
+def test_touching_the_region_is_not_outside():
+    # right edge at 3071.5: x - r = 3071.5 touches, 0.1 px further is
+    # outside; the corner (3071.5, 2303.5) lies hypot(3, 4) = 5 = r
+    # from the centre: touches
+    t = make_particles(
+        [3096.5, 3096.6, 3074.5], [900.0, 1500.0, 2307.5], [25.0, 25.0, 5.0]
+    )
+    assert outside_region(t, FULL).tolist() == [False, True, False]
+
+
+def test_circles_on_the_data_bar_are_outside_the_cut_region():
+    # bottom edge at 2072.5: 2200 lies 127.5 below (> 20), 2085 only
+    # 12.5 (reaches in), 2092.5 exactly 20 (touches)
+    t = make_particles(
+        [1500.0, 1500.0, 1500.0], [2200.0, 2085.0, 2092.5], [20.0] * 3
+    )
+    assert outside_region(t, CUT).tolist() == [True, False, False]
+    assert outside_region(t, FULL).tolist() == [False, False, False]
+
+
+def test_outside_region_mask_follows_the_table_index():
+    t = make_particles([10.0, 5000.0], [10.0, 10.0], [5.0, 5.0])
+    t.index = [7, 3]
+    mask = outside_region(t, Bounds(-0.5, -0.5, 99.5, 99.5))
+    assert mask.index.tolist() == [7, 3]
+    assert t.loc[~mask, "id"].tolist() == [1]
+
+
+def test_outside_region_of_an_empty_table():
+    mask = outside_region(make_particles([], [], []), FULL)
+    assert len(mask) == 0 and mask.dtype == bool
+
+
+def test_outside_region_names_missing_columns():
+    with pytest.raises(ParticleTableError, match="'r'"):
+        outside_region(pd.DataFrame({"x": [1.0], "y": [1.0]}), FULL)
