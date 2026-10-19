@@ -4,11 +4,15 @@ The region is needed in two forms half a pixel apart (pixel centres at
 integers, see ``agglpy.tables``): array indices to cut the image, and
 pixel-centre coordinates for ``touches_edge``; its area is the field of
 view. All three come from one ``Bounds``, so they can't disagree.
+``outside_region`` marks the circles that lie entirely outside it.
 """
 
 from dataclasses import dataclass
 
-from agglpy.errors import ParamsError
+import numpy as np
+import pandas as pd
+
+from agglpy.errors import ParamsError, ParticleTableError
 from agglpy.params import RegionParams, _integer
 
 
@@ -86,3 +90,37 @@ def region_slices(bounds: Bounds) -> tuple[slice, slice]:
     rows = slice(round(bounds.y_min + 0.5), round(bounds.y_max + 0.5))
     cols = slice(round(bounds.x_min + 0.5), round(bounds.x_max + 0.5))
     return rows, cols
+
+
+def outside_region(
+    particles: pd.DataFrame, bounds: Bounds
+) -> "pd.Series[bool]":
+    """Mark the circles that don't overlap the analysed region at all.
+
+    A circle is outside when the distance from its centre to the
+    ``bounds`` rectangle is larger than ``r``. A circle that only
+    touches the rectangle, is cut by an edge or has its centre outside
+    but still reaches in is not outside. The region lies inside the
+    image, so a circle outside the image is outside the region too.
+
+    Args:
+        particles: A validated particle table (columns ``x, y, r`` in
+            px); a NaN coordinate, which validation rejects, would
+            count as not outside.
+        bounds: The analysed rectangle, from ``region_bounds``.
+
+    Returns:
+        A boolean mask on ``particles.index``: ``particles[~mask]``
+        keeps the circles that overlap the region.
+
+    Raises:
+        ParticleTableError: If ``x``, ``y`` or ``r`` is missing.
+    """
+    missing = [c for c in ("x", "y", "r") if c not in particles.columns]
+    if missing:
+        raise ParticleTableError(f"missing columns: {missing}")
+    x, y, r = (particles[c].to_numpy(dtype=float) for c in ("x", "y", "r"))
+    # distance from the centre to the nearest point of the rectangle
+    dx = np.maximum(np.maximum(bounds.x_min - x, x - bounds.x_max), 0.0)
+    dy = np.maximum(np.maximum(bounds.y_min - y, y - bounds.y_max), 0.0)
+    return pd.Series(np.hypot(dx, dy) > r, index=particles.index)

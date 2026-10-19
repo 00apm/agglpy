@@ -73,7 +73,7 @@ In the published study this was done in ImageJ; within agglpy this corresponds t
 
 **Reading a Fiji correction.** ImageJ and Fiji count from pixel edges (the centre of pixel $i$ at $i + 0.5$), so a circle read from a ROI Manager CSV is shifted by $-0.5$ px: the oval with $X = 2674$, $W = 54$ is the HCT circle centred at $x = 2700.5$. Its radius is $(W + H)/4$, and its id is the number Fiji shows (the ROI index + 1). ImageJ stores whole-pixel bounding boxes, so an oval whose width and height differ by at most 1 px is read as a circle; other shapes are left out. Both are reported in one warning per file.
 
-Codebase: `agglpy.io.read_particles`, `agglpy.tables.outside_image`.
+Codebase: `agglpy.io.read_particles`, `agglpy.core.region.outside_region`.
 
 ## 5. Closest-neighbor finding
 
