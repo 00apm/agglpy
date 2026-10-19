@@ -6,5 +6,6 @@ layer above.
 """
 
 from agglpy.pipeline._analysis import ImageResult, analyze
+from agglpy.pipeline._detection import detect_particles
 
-__all__ = ["ImageResult", "analyze"]
+__all__ = ["ImageResult", "analyze", "detect_particles"]
