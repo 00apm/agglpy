@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 
 import agglpy.pipeline._detection as detection
+from agglpy.core.region import Bounds
 from agglpy.errors import ImageError, NoParticlesWarning
 from agglpy.params import HCTParams, HCTRange, PreprocessParams, RegionParams
 from agglpy.pipeline import detect_particles
@@ -44,6 +45,18 @@ def test_bottom_cut_keeps_raw_frame_coordinates_and_drops_the_bar():
     assert found[["x", "y", "r"]].values.tolist() == [[60.5, 50.5, 15.0]]
     # without the cut both discs are found
     assert len(detect_particles(IMAGE, hct=HCT)) == 2
+
+
+def test_a_top_left_cut_is_shifted_back_to_the_raw_frame(monkeypatch):
+    # RegionParams only cuts the bottom; a region starting at column 10,
+    # row 20 stands in for a later top / left cut
+    monkeypatch.setattr(
+        detection,
+        "region_bounds",
+        lambda region, width, height: Bounds(9.5, 19.5, 199.5, 119.5),
+    )
+    found = detect_particles(IMAGE, hct=HCT)
+    assert found[["x", "y", "r"]].values.tolist() == [[60.5, 50.5, 15.0]]
 
 
 def test_preprocess_params_reach_the_core(monkeypatch):
