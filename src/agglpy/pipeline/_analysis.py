@@ -24,8 +24,9 @@ class ImageResult:
     themselves.
 
     Attributes:
-        particles: The kept particles: ``id, x, y, r``, then
-            ``agglomerate_id``, ``enclosed``, ``D``, ``area``,
+        particles: The kept particles: ``id, x, y, r``, any extra
+            columns of the input, then ``agglomerate_id``,
+            ``enclosed``, ``D``, ``area``,
             ``volume``, ``surface`` and, with an image size,
             ``touches_edge``.
         agglomerates: One row per agglomerate
@@ -80,7 +81,8 @@ def analyze(
 
     Raises:
         ParamsError: If only one size is given, a size is not an
-            integer >= 1, or ``region`` cuts the image without a size.
+            integer >= 1, ``region`` cuts the image without a size, or
+            the cut leaves no row.
         ParticleTableError: If the table breaks the schema.
 
     Warns:

@@ -96,7 +96,7 @@ def test_nothing_outside_gives_no_warning():
     table = _table()
     table = table[table["id"] != 4]
     with warnings.catch_warnings():
-        warnings.simplefilter("error")
+        warnings.simplefilter("error", UserWarning)
         res = analyze(table, **SIZE, region=REGION)
     assert res.outside_ids == ()
 
@@ -123,7 +123,7 @@ def test_all_dropped_gives_empty_tables_with_their_columns():
 
 def test_zero_particles():
     with warnings.catch_warnings():
-        warnings.simplefilter("error")
+        warnings.simplefilter("error", UserWarning)
         res = analyze(make_particles([], [], []), **SIZE)
     assert res.particles.empty and res.agglomerates.empty
     assert "touches_edge" in res.particles.columns

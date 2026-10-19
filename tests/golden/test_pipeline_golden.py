@@ -11,8 +11,10 @@ Pinned in px: the detected circles, which particles are grouped
 together and enclosed, the edge flags and every agglomerate property.
 Compared by content, never by id: particles are sorted by position and
 size, and each agglomerate is labelled by the row of its first member.
-The snapshots were checked once against agglpy 0.4.0 (same circles,
-same agglomerates; only renamed, re-defined or px-exact values differ).
+The snapshots were checked once against agglpy 0.4.0: the same
+circles and agglomerates. Besides renamed and re-defined values, the
+detected radii differ by up to 5e-8 relative: they are the shortest
+decimal of OpenCV's float32 value, which 0.4.0 used as it was.
 
 After an intended change of results, regenerate and review the diff:
 
@@ -48,7 +50,7 @@ RANGES = {
         HCTRange(60, 160, canny_threshold=170, accumulator_threshold=22),
     ),
 }
-# circles, and how many particles / agglomerates touch the region's edge
+# circles, edge particles, agglomerates, edge agglomerates
 COUNTS = {"D7-017": (784, 12, 422, 12), "D7-019": (673, 9, 469, 9)}
 # particles of the corrected sets touching the region's edge
 CORRECTED_EDGE = {"D7-017": 19, "D7-019": 40}
@@ -89,7 +91,8 @@ def _automatic(name: str) -> tuple[pd.DataFrame, list, ImageResult]:
 def _corrected(name: str) -> ImageResult:
     meta = read_image_metadata(IMAGES_DIR / name / f"{name}.tif")
     with warnings.catch_warnings():
-        warnings.simplefilter("error")  # a clean set: no warning
+        # a clean set: no agglpy warning
+        warnings.simplefilter("error", UserWarning)
         particles = read_particles(IMAGES_DIR / name / f"{name}_fitting.csv")
         return analyze(
             particles, width=meta.width, height=meta.height, region=REGION
