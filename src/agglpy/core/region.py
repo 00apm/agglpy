@@ -7,7 +7,9 @@ view. All three come from one ``Bounds``, so they can't disagree.
 ``outside_region`` marks the circles that lie entirely outside it.
 """
 
+import math
 from dataclasses import dataclass
+from fractions import Fraction
 
 import numpy as np
 import pandas as pd
@@ -44,9 +46,10 @@ class Bounds:
 def region_bounds(region: RegionParams, width: int, height: int) -> Bounds:
     """Turn the region params into a rectangle on an image of this size.
 
-    The rows kept are ``int((1 - bottom_fraction) * height)``: 2304
-    rows and 0.1 keep 2073. Width and height are plain numbers, so the
-    region of an image is known from its metadata without its pixels.
+    The rows kept are ``(1 - bottom_fraction) * height`` rounded to the
+    nearest whole row, a half up: 2304 rows and 0.1 keep 2074 (2073.6).
+    Width and height are plain numbers, so the region of an image is
+    known from its metadata without its pixels.
 
     Args:
         region: The region params.
@@ -55,7 +58,7 @@ def region_bounds(region: RegionParams, width: int, height: int) -> Bounds:
 
     Returns:
         The analysed rectangle, e.g. ``Bounds(-0.5, -0.5, 3071.5,
-        2072.5)`` for a 3072 x 2304 image and ``bottom_fraction=0.1``.
+        2073.5)`` for a 3072 x 2304 image and ``bottom_fraction=0.1``.
 
     Raises:
         ParamsError: If ``width`` or ``height`` is not an integer >= 1,
@@ -64,7 +67,10 @@ def region_bounds(region: RegionParams, width: int, height: int) -> Bounds:
     for name, value in (("width", width), ("height", height)):
         if _integer(name, value) < 1:
             raise ParamsError(f"{name} must be >= 1, got {value!r}")
-    rows = int((1 - region.bottom_fraction) * height)
+    # exact decimals: in floats (1 - 0.34) * 25 is 16.499..., which
+    # would round down instead of up
+    kept = (1 - Fraction(str(region.bottom_fraction))) * int(height)
+    rows = math.floor(kept + Fraction(1, 2))
     if rows < 1:
         raise ParamsError(
             f"bottom_fraction={region.bottom_fraction} leaves {rows} of "
@@ -85,7 +91,7 @@ def region_slices(bounds: Bounds) -> tuple[slice, slice]:
         bounds: A rectangle from ``region_bounds``.
 
     Returns:
-        ``(rows, cols)``, e.g. ``(slice(0, 2073), slice(0, 3072))``.
+        ``(rows, cols)``, e.g. ``(slice(0, 2074), slice(0, 3072))``.
     """
     rows = slice(round(bounds.y_min + 0.5), round(bounds.y_max + 0.5))
     cols = slice(round(bounds.x_min + 0.5), round(bounds.x_max + 0.5))

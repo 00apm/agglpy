@@ -53,7 +53,7 @@ RANGES = {
 # circles, edge particles, agglomerates, edge agglomerates
 COUNTS = {"D7-017": (784, 12, 422, 12), "D7-019": (673, 9, 469, 9)}
 # particles of the corrected sets touching the region's edge
-CORRECTED_EDGE = {"D7-017": 19, "D7-019": 40}
+CORRECTED_EDGE = {"D7-017": 19, "D7-019": 39}
 
 EXACT = {"rtol": 0.0, "atol": 0.0}
 # Sums over many members differ in the last digits between platforms
