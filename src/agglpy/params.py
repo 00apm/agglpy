@@ -179,7 +179,7 @@ class RollingBallParams:
             for a pure background estimate; a smaller ball also goes
             inside large particles and raises the contrast within them.
             The time grows with radius² (about 50 s at 50 px on a
-            3072 x 2073 image).
+            3072 x 2074 image).
         light_background: True if the particles are darker than the
             background: the image is inverted, its background
             subtracted and the result inverted back, so the polarity
@@ -206,7 +206,8 @@ class RegionParams:
     Attributes:
         bottom_fraction: Fraction of the image height cut off at the
             bottom (the SEM data bar), 0 <= bottom_fraction < 1. The
-            rows kept are ``int((1 - bottom_fraction) * height)``.
+            rows kept are ``(1 - bottom_fraction) * height`` rounded
+            to the nearest whole row, a half up.
     """
 
     bottom_fraction: float = 0.0

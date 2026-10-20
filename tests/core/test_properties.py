@@ -577,16 +577,16 @@ def test_to_physical_rejects_text_in_a_converted_column():
 # touches_edge (with the analysed region's bounds)
 # ---------------------------------------------------------------------
 
-# D7-017 with bottom_fraction 0.1: 3072 x 2073 px kept
-D7_017 = Bounds(-0.5, -0.5, 3071.5, 2072.5)
+# D7-017 with bottom_fraction 0.1: 3072 x 2074 px kept
+D7_017 = Bounds(-0.5, -0.5, 3071.5, 2073.5)
 
 
 @pytest.mark.parametrize(
     ("x", "y", "r", "touches"),
     [
         (8.5, 1248.5, 21.8, True),  # reaches past the left edge
-        (1500, 2060, 10, False),  # 2070 < 2072.5
-        (1500, 2065, 10, True),  # 2075 >= 2072.5: into the data bar
+        (1500, 2060, 10, False),  # 2070 < 2073.5
+        (1500, 2065, 10, True),  # 2075 >= 2073.5: into the data bar
         (3060, 1000, 11.5, True),  # exactly at the right edge
         (1500, 11, 11.5, True),  # exactly at the top edge
         (1500, 1000, 500, False),  # large, but inside

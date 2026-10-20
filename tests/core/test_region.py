@@ -26,11 +26,26 @@ def test_small_example():
 
 
 def test_d7_017_numbers():
-    # 3072 x 2304 Zeiss image, the usual 0.1: int(0.9 * 2304) = 2073
+    # 3072 x 2304 Zeiss image, the usual 0.1: 0.9 * 2304 = 2073.6 -> 2074
     bounds = region_bounds(RegionParams(bottom_fraction=0.1), 3072, 2304)
-    assert bounds == Bounds(-0.5, -0.5, 3071.5, 2072.5)
-    assert bounds.area == 6_368_256
-    assert region_slices(bounds) == (slice(0, 2073), slice(0, 3072))
+    assert bounds == Bounds(-0.5, -0.5, 3071.5, 2073.5)
+    assert bounds.area == 6_371_328
+    assert region_slices(bounds) == (slice(0, 2074), slice(0, 3072))
+
+
+@pytest.mark.parametrize(
+    ("fraction", "height", "rows"),
+    [
+        (0.8, 10, 2),  # floats give 1.9999999999999996
+        (0.55, 1920, 864),  # floats give 863.9999999999999
+        (0.34, 25, 17),  # 16.5 rounds up; floats give 16.499999999999996
+        (0.5, 5, 3),  # 2.5 rounds up, not to the even 2
+        (0.3, 10, 7),
+    ],
+)
+def test_rows_round_to_the_nearest_whole_row(fraction, height, rows):
+    bounds = region_bounds(RegionParams(bottom_fraction=fraction), 4, height)
+    assert bounds.y_max == rows - 0.5
 
 
 def test_no_cut_keeps_the_whole_image():
@@ -53,10 +68,11 @@ def test_the_cut_is_a_view_of_the_bottom_rows_removed():
 
 
 def test_a_cut_without_rows_is_rejected():
+    # 0.05 * 5 = 0.25 rows round to none
     with pytest.raises(
-        ParamsError, match=r"bottom_fraction=0.9 leaves 0 of 5 rows"
+        ParamsError, match=r"bottom_fraction=0.95 leaves 0 of 5 rows"
     ):
-        region_bounds(RegionParams(bottom_fraction=0.9), 10, 5)
+        region_bounds(RegionParams(bottom_fraction=0.95), 10, 5)
 
 
 @pytest.mark.parametrize(
@@ -88,7 +104,7 @@ def test_bounds_are_frozen():
 # --- outside_region ---------------------------------------------------
 
 FULL = Bounds(-0.5, -0.5, 3071.5, 2303.5)  # 3072 x 2304, no cut
-CUT = Bounds(-0.5, -0.5, 3071.5, 2072.5)  # bottom_fraction 0.1
+CUT = Bounds(-0.5, -0.5, 3071.5, 2073.5)  # bottom_fraction 0.1
 
 
 def test_outside_region_only_where_nothing_overlaps():
@@ -114,10 +130,10 @@ def test_touching_the_region_is_not_outside():
 
 
 def test_circles_on_the_data_bar_are_outside_the_cut_region():
-    # bottom edge at 2072.5: 2200 lies 127.5 below (> 20), 2085 only
-    # 12.5 (reaches in), 2092.5 exactly 20 (touches)
+    # bottom edge at 2073.5: 2200 lies 126.5 below (> 20), 2085 only
+    # 11.5 (reaches in), 2093.5 exactly 20 (touches)
     t = make_particles(
-        [1500.0, 1500.0, 1500.0], [2200.0, 2085.0, 2092.5], [20.0] * 3
+        [1500.0, 1500.0, 1500.0], [2200.0, 2085.0, 2093.5], [20.0] * 3
     )
     assert outside_region(t, CUT).tolist() == [True, False, False]
     assert outside_region(t, FULL).tolist() == [False, False, False]
