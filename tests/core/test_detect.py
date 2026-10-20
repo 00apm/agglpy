@@ -6,6 +6,7 @@ a spy to pin how the params reach OpenCV and how its output becomes a
 particle table.
 """
 
+import os
 import warnings
 
 import cv2
@@ -206,7 +207,7 @@ def test_nothing_found_is_an_empty_table_and_one_warning():
         "of possible 0-255); check preprocessing and HCT params"
     )
     # the warning points at the caller, not at agglpy
-    assert caught[0].filename == __file__
+    assert os.path.normcase(caught[0].filename) == os.path.normcase(__file__)
     assert list(found.columns) == ["id", "x", "y", "r"]
     assert len(found) == 0
     assert found["id"].dtype == np.int64
@@ -226,7 +227,7 @@ def test_one_disc_found_by_two_ranges_is_kept_twice_and_warned():
     with pytest.warns(DuplicateParticlesWarning, match=r"\(1, 2\)") as rec:
         found = detect_hct(image, params)
     assert found["id"].tolist() == [1, 2]
-    assert rec[0].filename == __file__
+    assert os.path.normcase(rec[0].filename) == os.path.normcase(__file__)
 
 
 def test_input_is_not_modified():

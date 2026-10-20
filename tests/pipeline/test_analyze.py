@@ -1,6 +1,7 @@
 """Analysis of one image's particles (``agglpy.pipeline.analyze``)."""
 
 import dataclasses
+import os
 import pickle
 import warnings
 
@@ -89,7 +90,7 @@ def test_with_a_size_the_outside_circle_is_dropped_and_warned():
 def test_the_warning_points_at_the_caller():
     with pytest.warns(ParticlesOutsideRegionWarning) as record:
         analyze(_table(), **SIZE, region=REGION)
-    assert record[0].filename == __file__
+    assert os.path.normcase(record[0].filename) == os.path.normcase(__file__)
 
 
 def test_nothing_outside_gives_no_warning():

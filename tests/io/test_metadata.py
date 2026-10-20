@@ -6,6 +6,7 @@ files of item 2.2 Findings (support.tiffs).
 """
 
 import dataclasses
+import os
 import struct
 import warnings
 from pathlib import Path
@@ -254,7 +255,7 @@ def test_pixel_size_warning_points_at_the_caller(
         path = write_fei(tmp_path / "f.tif", 16, 8, 3.3724e-06, 3.5e-06)
     with pytest.warns(PixelSizeWarning) as record:
         read_image_metadata(path)
-    assert record[0].filename == __file__
+    assert os.path.normcase(record[0].filename) == os.path.normcase(__file__)
 
 
 def test_tiff_tag_of_the_wrong_type_raises_file_format_error(

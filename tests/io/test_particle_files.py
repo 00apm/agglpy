@@ -4,6 +4,7 @@ Replaces the CSV importer tests of tests/legacy/test_particle_csv.py
 for the new API (that file stays until roadmap 2.9).
 """
 
+import os
 import warnings
 from pathlib import Path
 
@@ -345,7 +346,7 @@ def test_shape_warning_points_at_the_caller(tmp_path: Path) -> None:
     path = _imagej(tmp_path / "p.csv", ["1,0,a,Rectangle,none,0,0,6,6"])
     with pytest.warns(NonCircularParticlesWarning) as record:
         read_particles(path)
-    assert record[0].filename == __file__
+    assert os.path.normcase(record[0].filename) == os.path.normcase(__file__)
 
 
 def test_exact_round_trip_of_random_floats(tmp_path: Path) -> None:
@@ -435,7 +436,7 @@ def test_duplicate_warning_names_the_file_and_points_at_the_caller(
         read_particles(path)
     with pytest.warns(DuplicateParticlesWarning) as record:
         read_particles(path)
-    assert record[0].filename == __file__
+    assert os.path.normcase(record[0].filename) == os.path.normcase(__file__)
 
 
 @pytest.mark.parametrize(
