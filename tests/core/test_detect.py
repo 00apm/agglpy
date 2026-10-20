@@ -124,7 +124,7 @@ def test_params_reach_opencv_by_name(monkeypatch):
     monkeypatch.setattr(cv2, "HoughCircles", spy)
     params = HCTParams(
         ranges=(
-            HCTRange(3, 60, canny_threshold=220, accumulator_threshold=13),
+            HCTRange(3, 61, canny_threshold=220, accumulator_threshold=13),
             HCTRange(
                 61,
                 240,
@@ -140,11 +140,12 @@ def test_params_reach_opencv_by_name(monkeypatch):
         {
             "method": cv2.HOUGH_GRADIENT,
             "dp": 1,
-            "minDist": 12.0,  # 0.4 x the largest radius, 60 / 2
+            "minDist": 0.4 * 61 / 2,  # 0.4 x the largest radius
             "param1": 220.0,
             "param2": 13.0,
-            "minRadius": 1,  # int(3 / 2)
-            "maxRadius": 30,
+            # odd diameters round outward: the search covers 3-61 px
+            "minRadius": 1,  # floor(3 / 2)
+            "maxRadius": 31,  # ceil(61 / 2)
         },
         {
             "method": cv2.HOUGH_GRADIENT,
@@ -152,7 +153,7 @@ def test_params_reach_opencv_by_name(monkeypatch):
             "minDist": 60.0,  # 0.5 x 240 / 2
             "param1": 250.0,
             "param2": 24.0,
-            "minRadius": 30,  # int(61 / 2): odd diameters round down
+            "minRadius": 30,  # floor(61 / 2)
             "maxRadius": 120,
         },
     ]

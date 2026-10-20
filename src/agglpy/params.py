@@ -77,8 +77,9 @@ class HCTRange:
     """One Hough Circle Transform pass over a range of diameters (px).
 
     The values go to ``cv2.HoughCircles`` (``HOUGH_GRADIENT``, ``dp=1``)
-    as ``minRadius = int(d_min / 2)`` and ``maxRadius = int(d_max / 2)``
-    (an odd diameter rounds down), ``minDist = min_dist_ratio * d_max /
+    as ``minRadius = floor(d_min / 2)`` and ``maxRadius = ceil(d_max /
+    2)`` (rounded outward, so the search covers every diameter from
+    ``d_min`` to ``d_max``), ``minDist = min_dist_ratio * d_max /
     2``, ``param1 = canny_threshold``, ``param2 =
     accumulator_threshold``.
 

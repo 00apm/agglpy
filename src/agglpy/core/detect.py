@@ -96,8 +96,9 @@ def _hough(image: NDArray[np.uint8], hct: HCTRange) -> NDArray[np.float32]:
         minDist=hct.min_dist_ratio * hct.d_max / 2,
         param1=hct.canny_threshold,
         param2=hct.accumulator_threshold,
-        minRadius=int(hct.d_min / 2),
-        maxRadius=int(hct.d_max / 2),
+        # rounded outward, so an odd diameter stays inside the search
+        minRadius=hct.d_min // 2,
+        maxRadius=(hct.d_max + 1) // 2,
     )
     if found is None:
         return np.empty((0, 3), dtype=np.float32)

@@ -54,7 +54,7 @@ agglpy uses OpenCV's HCT implementation, based on a two-stage Hough Transform. R
 
 Each candidate center is accumulated in a voting matrix per radius; peaks in the accumulator indicate the most probable circle centers. The radius is then refined by fitting the circle equation to the surrounding edge pixels.
 
-**Ranges.** One HCT pass searches a range of radii; particles of very different sizes are found by several passes with their own thresholds (`HCTRange`: diameters `d_min`–`d_max`, `canny_threshold`, `accumulator_threshold`, `min_dist_ratio`). Within a pass, of two centres closer than `min_dist_ratio` × the largest radius only the stronger is kept, so a wide range can lose overlapping small particles. Passes are independent: a particle at the boundary between two ranges can be found by both; such pairs are reported, not removed. Centres are found only inside the image; a partly visible particle with its centre outside comes from manual correction.
+**Ranges.** One HCT pass searches a range of radii; particles of very different sizes are found by several passes with their own thresholds (`HCTRange`: diameters `d_min`–`d_max`, passed to OpenCV as whole radii rounded outward, so an odd `d_max` is still covered; `canny_threshold`, `accumulator_threshold`, `min_dist_ratio`). Within a pass, of two centres closer than `min_dist_ratio` × the largest radius only the stronger is kept, so a wide range can lose overlapping small particles. Passes are independent: a particle at the boundary between two ranges can be found by both; such pairs are reported, not removed. Centres are found only inside the image; a partly visible particle with its centre outside comes from manual correction.
 
 Codebase: `agglpy.core.detect.detect_hct`.
 
