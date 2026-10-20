@@ -79,7 +79,8 @@ class HCTRange:
     The values go to ``cv2.HoughCircles`` (``HOUGH_GRADIENT``, ``dp=1``)
     as ``minRadius = floor(d_min / 2)`` and ``maxRadius = ceil(d_max /
     2)`` (rounded outward, so the search covers every diameter from
-    ``d_min`` to ``d_max``), ``minDist = min_dist_ratio * d_max /
+    ``d_min`` to ``d_max``; an odd ``d_max`` may also find a circle
+    1 px larger), ``minDist = min_dist_ratio * d_max /
     2``, ``param1 = canny_threshold``, ``param2 =
     accumulator_threshold``.
 

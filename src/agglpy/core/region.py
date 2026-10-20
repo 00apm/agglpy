@@ -67,8 +67,8 @@ def region_bounds(region: RegionParams, width: int, height: int) -> Bounds:
     for name, value in (("width", width), ("height", height)):
         if _integer(name, value) < 1:
             raise ParamsError(f"{name} must be >= 1, got {value!r}")
-    # exact decimals: in floats (1 - 0.8) * 10 is 1.999... and
-    # (1 - 0.34) * 25 is 16.499..., which round to the wrong row
+    # exact decimals: in floats (1 - 0.34) * 25 is 16.499..., which
+    # would round down instead of up
     kept = (1 - Fraction(str(region.bottom_fraction))) * int(height)
     rows = math.floor(kept + Fraction(1, 2))
     if rows < 1:
