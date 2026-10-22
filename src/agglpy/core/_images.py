@@ -103,9 +103,12 @@ def group_images(
 
     Raises:
         TableError: If a ``by`` column is not in the images table.
-        ParamsError: If ``by`` is not column names.
+        ParamsError: If ``by`` is not column names or repeats one.
     """
     columns = names(by, "by")
+    repeated = sorted({c for c in columns if columns.count(c) > 1})
+    if repeated:
+        raise ParamsError(f"by: {repeated} given more than once")
     missing = [c for c in columns if c not in images.columns]
     if missing:
         raise TableError(f"by: no column {missing} in the images table")
@@ -124,6 +127,22 @@ def group_images(
     # One row per group, in group order: its first image's values.
     first = np.unique(codes, return_index=True)[1]
     return Grouping(columns, codes, keyed.iloc[first].reset_index(drop=True))
+
+
+def with_labels(labels: pd.DataFrame, out: pd.DataFrame) -> pd.DataFrame:
+    """The ``by`` columns of each row's group, then the output columns.
+
+    Raises:
+        TableError: If a ``by`` column has the name of an output column
+            (the table would hold two columns of that name).
+    """
+    clash = [c for c in labels.columns if c in out.columns]
+    if clash:
+        raise TableError(
+            f"by: {clash} would repeat output columns of the same name; "
+            f"rename them in the images table"
+        )
+    return pd.concat([labels, out], axis=1)
 
 
 def image_positions(

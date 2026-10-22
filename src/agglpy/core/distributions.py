@@ -26,6 +26,7 @@ from agglpy.core._images import (
     names,
     numbers,
     require,
+    with_labels,
 )
 from agglpy.core.metrics import values_across_images
 from agglpy.errors import ParamsError, TableError, ValuesNotCountedWarning
@@ -142,7 +143,8 @@ def distribution(
 
     Raises:
         TableError: If a column is missing or not numeric, a weight is
-            not finite on a counted value, or an image is unknown.
+            not finite on a counted value, an image is unknown, or a
+            ``by`` column has the name of an output column.
         ParamsError: If ``edges`` or ``closed`` is invalid, or a weight
             column is called ``"number"`` (the name of the count basis).
 
@@ -217,7 +219,7 @@ def distribution(
         "_group", kind="stable", ignore_index=True
     )
     labels = groups.labels.iloc[out.pop("_group")].reset_index(drop=True)
-    return pd.concat([labels, out], axis=1)
+    return with_labels(labels, out)
 
 
 def distribution_across_images(
@@ -256,6 +258,7 @@ def distribution_across_images(
         per_image[["image", *keys, "fraction"]],
         by,
         keys=keys,
+        values="fraction",
         confidence=confidence,
     )
 

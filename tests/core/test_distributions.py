@@ -304,6 +304,13 @@ def test_weight_named_number_raises():
         distribution(images, table, "v", [0, 10], weights="number")
 
 
+def test_by_column_named_like_an_output_column_raises():
+    images, table = _one_image([5])
+    images["basis"] = ["SEM"]
+    with pytest.raises(TableError, match=r"by: .*'basis'"):
+        distribution(images, table, "v", [0, 10], by="basis")
+
+
 def test_missing_weight_column_raises():
     with pytest.raises(TableError, match="volume"):
         distribution(*_one_image([5]), "v", [0, 10], weights="volume")
@@ -390,6 +397,21 @@ def test_distribution_across_images():
     # A: 2/3, 1/3; B: 0, 1; the blank image has no fraction (n = 2)
     assert out["mean"].tolist() == pytest.approx([1 / 3, 2 / 3], rel=RTOL)
     assert out["n"].tolist() == [2, 2]
+
+
+def test_distribution_across_images_images_column_named_fraction():
+    # an images column "fraction" must not hide the fractions
+    images = pd.DataFrame({"image": ["A"], "fraction": ["x"]})
+    table = pd.DataFrame({"image": ["A", "A"], "v": [1, 3]})
+    out = distribution_across_images(images, table, "v", [0, 2, 4])
+    assert out["mean"].tolist() == [0.5, 0.5]
+
+
+def test_distribution_across_images_by_column_named_basis_raises():
+    images = pd.DataFrame({"image": ["A"], "basis": ["SEM"]})
+    table = pd.DataFrame({"image": ["A"], "v": [1]})
+    with pytest.raises(TableError, match=r"by: .*'basis'"):
+        distribution_across_images(images, table, "v", [0, 2], by="basis")
 
 
 def test_distribution_across_images_by_group_and_basis():
