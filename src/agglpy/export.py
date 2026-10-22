@@ -19,8 +19,8 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-import yaml
 
+from agglpy import _yaml
 from agglpy.errors import (
     OutputExistsError,
     OutputLockedError,
@@ -145,7 +145,7 @@ def write_results(
         **caller,
     }
 
-    text = yaml.safe_dump(full, sort_keys=False, allow_unicode=True)
+    text = _yaml.dumps(full)
 
     out = Path(folder)
     _clear(out, overwrite)
