@@ -435,6 +435,12 @@ def test_by_column_named_like_a_metric_raises():
     assert "Ra" in summary(images, particles, agglomerates).columns
 
 
+def test_repeated_by_column_raises():
+    images = _images("A", "B", g=["x", "y"])
+    per_image = pd.DataFrame({"image": ["A", "B"], "v": [1.0, 3.0]})
+    with pytest.raises(ParamsError, match=r"by: .*'g'"):
+        values_across_images(images, per_image, by=["g", "g"])
+
 
 # --- values_across_images and summary_across_images -------------------
 

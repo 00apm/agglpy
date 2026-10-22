@@ -103,9 +103,12 @@ def group_images(
 
     Raises:
         TableError: If a ``by`` column is not in the images table.
-        ParamsError: If ``by`` is not column names.
+        ParamsError: If ``by`` is not column names or repeats one.
     """
     columns = names(by, "by")
+    repeated = sorted({c for c in columns if columns.count(c) > 1})
+    if repeated:
+        raise ParamsError(f"by: {repeated} given more than once")
     missing = [c for c in columns if c not in images.columns]
     if missing:
         raise TableError(f"by: no column {missing} in the images table")
