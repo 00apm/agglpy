@@ -215,3 +215,26 @@ def test_remove_after_key_without_comment(text: str, expected: str) -> None:
     d = _yaml.loads(text, "t")
     _yaml.remove(d, "b")
     assert _yaml.dumps(d) == expected
+
+
+def test_replace_block_value_keeps_next_keys_comment() -> None:
+    d = _doc()
+    _yaml.replace(d["defaults"]["preprocess"], "rolling_ball", None)
+    assert _yaml.dumps(d) == TEMPLATE_LIKE.replace(
+        "    rolling_ball:\n      radius: 50            # px\n",
+        "    rolling_ball: null\n",
+    )
+
+
+def test_replace_scalar_keeps_its_comment() -> None:
+    d = _doc()
+    _yaml.replace(d["defaults"]["preprocess"], "median_blur", 5)
+    assert _yaml.dumps(d) == TEMPLATE_LIKE.replace(
+        "median_blur: 3          # kernel", "median_blur: 5          # kernel"
+    )
+
+
+def test_replace_appends_a_new_key() -> None:
+    d = _yaml.loads("a: 1\n", "t")
+    _yaml.replace(d, "b", {"c": [1]})
+    assert _yaml.dumps(d) == "a: 1\nb:\n  c:\n  - 1\n"

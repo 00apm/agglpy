@@ -9,7 +9,7 @@ PyYAML-based tools read them the same.
 
 import io
 import re
-from collections.abc import MutableMapping
+from collections.abc import Mapping, MutableMapping
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +27,7 @@ __all__ = [
     "loads",
     "new_mapping",
     "remove",
+    "replace",
     "set_comment",
     "set_top_comment",
 ]
@@ -144,6 +145,39 @@ def remove(mapping: MutableMapping[str, Any], key: str) -> None:
         _append_after(cmap, keys[index - 1], kept)
     else:
         _prepend_start(cmap, kept)
+
+
+def replace(mapping: MutableMapping[str, Any], key: str, value: Any) -> None:
+    """Set ``mapping[key] = value``, keeping the comments after it.
+
+    A new key is appended. A replaced scalar keeps its end-of-line
+    comment; a replaced block takes the comments inside it, and the
+    comment lines after it stay after the key. Plain dicts in
+    ``value`` become mappings that can carry comments.
+    """
+    cmap = _commented(mapping)
+    value = _document(value)
+    if key not in cmap or not _is_block(cmap[key]):
+        cmap[key] = value
+        return
+    kept = _kept_after(_end_token(cmap, key))
+    cmap[key] = value
+    cmap.ca.items.pop(key, None)
+    if kept:
+        _append_after(cmap, key, kept)
+
+
+def _document(value: Any) -> Any:
+    if isinstance(value, CommentedMap | CommentedSeq):
+        return value
+    if isinstance(value, Mapping):
+        result = CommentedMap()
+        for key, item in value.items():
+            result[key] = _document(item)
+        return result
+    if isinstance(value, list | tuple):
+        return [_document(item) for item in value]
+    return value
 
 
 def _commented(mapping: MutableMapping[str, Any]) -> CommentedMap:
