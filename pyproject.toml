@@ -220,10 +220,12 @@ source_modules = [
 ]
 forbidden_modules = ["agglpy.pipeline"]
 
-# The YAML library may change: one module wraps it.
+# The YAML library may change: one module wraps it. Others use that
+# module, so only direct imports are checked.
 [[tool.importlinter.contracts]]
 name = "Only agglpy._yaml imports ruamel"
 type = "forbidden"
+allow_indirect_imports = true
 source_modules = [
     "agglpy.core",
     "agglpy.draw",
