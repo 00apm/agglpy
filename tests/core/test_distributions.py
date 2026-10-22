@@ -399,6 +399,21 @@ def test_distribution_across_images():
     assert out["n"].tolist() == [2, 2]
 
 
+def test_distribution_across_images_images_column_named_fraction():
+    # an images column "fraction" must not hide the fractions
+    images = pd.DataFrame({"image": ["A"], "fraction": ["x"]})
+    table = pd.DataFrame({"image": ["A", "A"], "v": [1, 3]})
+    out = distribution_across_images(images, table, "v", [0, 2, 4])
+    assert out["mean"].tolist() == [0.5, 0.5]
+
+
+def test_distribution_across_images_by_column_named_basis_raises():
+    images = pd.DataFrame({"image": ["A"], "basis": ["SEM"]})
+    table = pd.DataFrame({"image": ["A"], "v": [1]})
+    with pytest.raises(TableError, match=r"by: .*'basis'"):
+        distribution_across_images(images, table, "v", [0, 2], by="basis")
+
+
 def test_distribution_across_images_by_group_and_basis():
     images = pd.DataFrame({"image": ["A", "B"], "condition": ["x", "y"]})
     table = pd.DataFrame(

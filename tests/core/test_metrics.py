@@ -435,6 +435,7 @@ def test_by_column_named_like_a_metric_raises():
     assert "Ra" in summary(images, particles, agglomerates).columns
 
 
+
 # --- values_across_images and summary_across_images -------------------
 
 # t(0.975, 1): the 95 % quantile factor for two images (scipy gives it).
@@ -648,6 +649,24 @@ def test_summary_across_images_by_group():
     assert out["condition"].tolist() == ["x"] * 4 + ["y"] * 4
     ra = out[out["metric"] == "Ra"]
     assert ra["mean"].tolist() == [0.5, 0.1]
+
+
+def test_images_column_named_like_a_metric_keeps_the_metric():
+    # an images column "Ra" (e.g. a roughness label) is not the metric Ra
+    images, particles, agglomerates = _scene(RA_EXAMPLE)
+    images["Ra"] = ["smooth", "rough"]
+    out = summary_across_images(
+        images, particles, agglomerates, metrics="ratios"
+    )
+    assert "Ra" in out["metric"].tolist()
+
+
+def test_values_given_are_averaged_even_if_images_has_them():
+    images = _images("A", "B", v=["x", "y"])
+    per_image = pd.DataFrame({"image": ["A", "B"], "v": [1.0, 3.0]})
+    assert values_across_images(images, per_image)["metric"].empty
+    out = values_across_images(images, per_image, values="v")
+    assert out["mean"].tolist() == [2.0]
 
 
 def test_summary_across_images_warns_about_nothing():

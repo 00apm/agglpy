@@ -139,7 +139,8 @@ def summary(
             or the particle and agglomerate tables do not match: in each
             image, the agglomerates' ``member_count`` must add up to the
             particle rows (filter both with
-            ``agglomerates.select_agglomerates``).
+            ``agglomerates.select_agglomerates``), or a ``by`` column
+            has the name of an output column.
         ParamsError: If a family name is unknown.
     """
     families = _families(metrics)
@@ -230,7 +231,10 @@ def summary_across_images(
     per_image = summary(
         images, particles, agglomerates, by="image", metrics=metrics
     ).drop(columns="n_images")
-    return values_across_images(images, per_image, by, confidence=confidence)
+    values = [c for c in per_image.columns if c != "image"]
+    return values_across_images(
+        images, per_image, by, values=values, confidence=confidence
+    )
 
 
 def values_across_images(
@@ -239,6 +243,7 @@ def values_across_images(
     by: str | Iterable[str] | None = None,
     *,
     keys: str | Iterable[str] = (),
+    values: str | Iterable[str] | None = None,
     confidence: float = 0.95,
 ) -> pd.DataFrame:
     """Mean, std, n and confidence interval of per-image values.
@@ -259,11 +264,13 @@ def values_across_images(
     Args:
         images: The images table; the groups come from it.
         per_image: ``image``, the ``keys`` columns and the value
-            columns: every other column not in ``images`` (columns of
-            the images table describe the image and are not values).
+            columns.
         by: As ``summary``.
         keys: Columns that tell several values of one image apart
             (e.g. size class and basis); they are kept in the output.
+        values: The value columns; ``None``: every other column of
+            ``per_image`` not in ``images`` (columns of the images table
+            describe the image and are not values).
         confidence: Level of the interval, between 0 and 1.
 
     Returns:
@@ -274,7 +281,8 @@ def values_across_images(
     Raises:
         TableError: If ``per_image`` lacks a column, names an unknown
             image, repeats an image (and key) or has a value column
-            that is not numeric.
+            that is not numeric, or a ``by`` column has the name of an
+            output column.
         ParamsError: If ``confidence`` is not between 0 and 1.
 
     Warns:
@@ -289,11 +297,17 @@ def values_across_images(
     require(per_image, key_columns, "per_image")
     image_positions(images, per_image, "per_image")
     _check_one_row_per_image(per_image, key_columns)
-    values = [
-        c
-        for c in per_image.columns
-        if c != "image" and c not in key_columns and c not in images.columns
-    ]
+    if values is None:
+        values = [
+            c
+            for c in per_image.columns
+            if c != "image"
+            and c not in key_columns
+            and c not in images.columns
+        ]
+    else:
+        values = names(values, "values")
+        require(per_image, values, "per_image")
     for column in values:
         if not pd.api.types.is_numeric_dtype(per_image[column]):
             raise TableError(
