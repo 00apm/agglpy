@@ -30,6 +30,7 @@ dependencies:
   - matplotlib<4
   - openpyxl<4
   - pyyaml<7
+  - ruamel.yaml<0.20
   - tqdm<5
   # notebook kernel (Jupyter Lab itself lives in a separate env)
   - ipykernel
