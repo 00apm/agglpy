@@ -5,12 +5,15 @@ import copy
 import numpy as np
 import pytest
 
+from agglpy import _yaml
 from agglpy.app._config import (
+    COMMENTS,
     NEUTRAL,
     ImageParams,
     Problem,
     merge,
     plain,
+    template,
     to_params,
 )
 from agglpy.errors import ParamsError
@@ -270,3 +273,50 @@ def test_problems_after_a_failed_list_are_kept() -> None:
         "hct.ranges[0]",
         "region.x",
     ]
+
+
+# ---------------------------------------------------------------------
+# template
+# ---------------------------------------------------------------------
+
+SPEC_TEMPLATE = """# agglpy parameters. Lengths in px.
+# "defaults" apply to every image; "images" lists per-image differences only.
+# A list given for one image replaces the default list.
+defaults:
+  region:
+    bottom_fraction: 0.0        # fraction of the height cut off at the bottom (info bar)
+  preprocess:
+    median_blur: null           # odd kernel size in px, e.g. 3; null = off
+    rolling_ball: null          # e.g. {radius: 50}; null = off
+    clahe: null                 # e.g. {clip_limit: 2.0, tile_grid: [8, 8]}; null = off
+  hct:
+    ranges: []                  # required before detection, e.g.
+                                # - {d_min: 8, d_max: 30}
+images: {}
+"""
+
+
+def test_template_is_the_spec_text() -> None:
+    assert template() == SPEC_TEMPLATE
+
+
+def test_template_reads_back_as_neutral() -> None:
+    doc = _yaml.loads(template(), "t")
+    assert to_params(doc["defaults"]) == (NEUTRAL, [])
+    assert doc["images"] == {}
+
+
+def _leaf_paths(mapping: dict, prefix: str = "") -> set[str]:
+    paths = set()
+    for key, value in mapping.items():
+        path = f"{prefix}{key}"
+        if isinstance(value, dict) and value:
+            paths |= _leaf_paths(value, f"{path}.")
+        else:
+            paths.add(path)
+    return paths
+
+
+def test_every_template_key_has_a_comment() -> None:
+    defaults = _yaml.loads(template(), "t")["defaults"]
+    assert set(COMMENTS) == _leaf_paths(defaults)

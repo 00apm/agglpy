@@ -16,6 +16,7 @@ from typing import Any, NamedTuple
 
 import numpy as np
 
+from agglpy import _yaml
 from agglpy.errors import ParamsError
 from agglpy.params import (
     HCTParams,
@@ -24,12 +25,14 @@ from agglpy.params import (
 )
 
 __all__ = [
+    "COMMENTS",
     "NEUTRAL",
     "SECTIONS",
     "ImageParams",
     "Problem",
     "merge",
     "plain",
+    "template",
     "to_params",
 ]
 
@@ -301,3 +304,49 @@ def _unknown_keys(
 
 def _show(value: Any) -> str:
     return repr(_copy(value))
+
+
+# One line per template key; a test checks that every key has one.
+COMMENTS: dict[str, str] = {
+    "region.bottom_fraction": (
+        "fraction of the height cut off at the bottom (info bar)"
+    ),
+    "preprocess.median_blur": "odd kernel size in px, e.g. 3; null = off",
+    "preprocess.rolling_ball": "e.g. {radius: 50}; null = off",
+    "preprocess.clahe": "e.g. {clip_limit: 2.0, tile_grid: [8, 8]}; null = off",
+    "hct.ranges": "required before detection, e.g.\n- {d_min: 8, d_max: 30}",
+}
+
+_TEMPLATE_TOP = (
+    "agglpy parameters. Lengths in px.\n"
+    '"defaults" apply to every image; "images" lists per-image '
+    "differences only.\n"
+    "A list given for one image replaces the default list."
+)
+_COMMENT_COLUMN = 32
+
+
+def template() -> str:
+    """The text of a new ``agglpy.yml``: every key at its neutral value.
+
+    Built from the params fields, so it cannot drift from them.
+    """
+    sections = {
+        "region": dataclasses.asdict(NEUTRAL.region),
+        "preprocess": dataclasses.asdict(NEUTRAL.preprocess),
+        "hct": {"ranges": []},
+    }
+    defaults = _yaml.new_mapping()
+    for name, fields in sections.items():
+        section = _yaml.new_mapping()
+        for key, value in fields.items():
+            section[key] = value
+            _yaml.set_comment(
+                section, key, COMMENTS[f"{name}.{key}"], _COMMENT_COLUMN
+            )
+        defaults[name] = section
+    doc = _yaml.new_mapping()
+    doc["defaults"] = defaults
+    doc["images"] = _yaml.new_mapping()
+    _yaml.set_top_comment(doc, _TEMPLATE_TOP)
+    return _yaml.dumps(doc)
