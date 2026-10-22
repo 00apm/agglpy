@@ -154,6 +154,7 @@ name = "New code never imports the legacy modules (D-019)"
 type = "forbidden"
 source_modules = [
     "agglpy._yaml",
+    "agglpy.app",
     "agglpy.core",
     "agglpy.draw",
     "agglpy.errors",
@@ -220,6 +221,24 @@ source_modules = [
 ]
 forbidden_modules = ["agglpy.pipeline"]
 
+# Dependencies point down: only frontends use the application layer.
+[[tool.importlinter.contracts]]
+name = "Nothing below the application imports it"
+type = "forbidden"
+source_modules = [
+    "agglpy._yaml",
+    "agglpy.core",
+    "agglpy.draw",
+    "agglpy.errors",
+    "agglpy.export",
+    "agglpy.io",
+    "agglpy.logger",
+    "agglpy.params",
+    "agglpy.pipeline",
+    "agglpy.tables",
+]
+forbidden_modules = ["agglpy.app"]
+
 # The YAML library may change: one module wraps it. Others use that
 # module, so only direct imports are checked.
 [[tool.importlinter.contracts]]
@@ -227,6 +246,7 @@ name = "Only agglpy._yaml imports ruamel"
 type = "forbidden"
 allow_indirect_imports = true
 source_modules = [
+    "agglpy.app",
     "agglpy.core",
     "agglpy.draw",
     "agglpy.errors",
