@@ -30,6 +30,7 @@ __all__ = [
     "SECTIONS",
     "ImageParams",
     "Problem",
+    "check_key",
     "merge",
     "plain",
     "template",
@@ -281,6 +282,36 @@ def _field(
             items.append(obj)
         return items, ok
     return value, True
+
+
+def check_key(key: str) -> None:
+    """Check a dotted params key such as ``"preprocess.rolling_ball"``.
+
+    Raises ParamsError naming the first part that is not a key, with
+    the valid keys at that level.
+    """
+    valid: tuple[str, ...] = SECTIONS
+    hint: Any = None
+    done: list[str] = []
+    for part in key.split("."):
+        if hint is not None:
+            inner = [a for a in typing.get_args(hint) if a is not type(None)]
+            cls = inner[0] if len(inner) == 1 else hint
+            if not _is_params_class(cls):
+                raise ParamsError(
+                    f"{key}: {'.'.join(done)} holds a value, not keys"
+                )
+            valid = tuple(f.name for f in dataclasses.fields(cls))
+        if part not in valid:
+            where = ".".join([*done, part])
+            raise ParamsError(
+                f"{where}: unknown key (valid: {', '.join(valid)})"
+            )
+        if hint is None:
+            hint = _SECTION_CLASSES[part]
+        else:
+            hint = typing.get_type_hints(cls)[part]
+        done.append(part)
 
 
 def _is_params_class(hint: Any) -> typing.TypeGuard[type]:

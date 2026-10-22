@@ -7,7 +7,7 @@ import pytest
 from agglpy.app._config import NEUTRAL, template
 from agglpy.app._config_file import CONFIG_NAME, ConfigFile
 from agglpy.errors import FileFormatError, ParamsError
-from agglpy.params import RollingBallParams
+from agglpy.params import HCTParams, HCTRange, RollingBallParams
 
 YML = """\
 defaults:
@@ -173,3 +173,200 @@ def test_text_keeps_the_file(cfg) -> None:
 
 def test_path_is_kept(cfg, tmp_path: Path) -> None:
     assert cfg(YML).path == tmp_path / CONFIG_NAME
+
+
+# ---------------------------------------------------------------------
+# set / reset
+# ---------------------------------------------------------------------
+
+
+def again(c: ConfigFile, tmp_path: Path) -> ConfigFile:
+    """The file as written: the text read back."""
+    path = tmp_path / "again.yml"
+    path.write_text(c.text(), encoding="utf-8")
+    return ConfigFile.read(path)
+
+
+def test_set_image_writes_differences_only(cfg) -> None:
+    c = cfg(YML)
+    c.set("D7-017", {"preprocess": {"rolling_ball": {"radius": 30}}})
+    assert (
+        "  D7-017:\n    preprocess:\n      rolling_ball:\n        radius: 30\n"
+    ) in c.text()
+    assert c.params("D7-017").preprocess.rolling_ball == RollingBallParams(
+        30.0, light_background=True
+    )
+
+
+def test_set_equal_to_default_writes_nothing(cfg) -> None:
+    c = cfg(YML)
+    c.set("D7-017", {"preprocess": {"rolling_ball": {"radius": 50.0}}})
+    assert c.text() == YML
+
+
+def test_set_back_to_default_prunes_the_entry(cfg) -> None:
+    c = cfg(YML)
+    c.set("D7-019", {"preprocess": {"rolling_ball": {"radius": 50}}})
+    assert "D7-019" not in c.text()
+    assert "  D7-021:\n" in c.text()
+
+
+def test_pruning_touches_only_the_call_keys(cfg) -> None:
+    text = YML.replace(
+        "rolling_ball: {radius: 30}",
+        "rolling_ball: {radius: 30}\n    region: {bottom_fraction: 0.0}",
+    )
+    c = cfg(text)
+    c.set("D7-019", {"preprocess": {"rolling_ball": {"radius": 31}}})
+    assert "region: {bottom_fraction: 0.0}" in c.text()
+    assert "radius: 31" in c.text()
+
+
+def test_set_defaults_leaves_image_entries(cfg, tmp_path: Path) -> None:
+    c = cfg(YML)
+    c.set(None, {"preprocess": {"rolling_ball": {"radius": 40}}})
+    c = again(c, tmp_path)
+    assert c.params("D7-019").preprocess.rolling_ball.radius == 30.0
+    assert c.params("D7-017").preprocess.rolling_ball.radius == 40.0
+    # Defaults are never pruned, even when equal to the neutral value.
+    c.set(None, {"region": {"bottom_fraction": 0.0}})
+    assert "  region:\n    bottom_fraction: 0.0\n" in c.text()
+
+
+def test_set_list_replaces(cfg) -> None:
+    c = cfg(YML)
+    c.set(None, {"hct": {"ranges": [{"d_min": 5, "d_max": 9}]}})
+    assert c.params(None).hct.ranges == (HCTRange(5, 9),)
+
+
+def test_set_null_turns_step_off_for_image(cfg, tmp_path: Path) -> None:
+    c = cfg(YML)
+    c.set("D7-017", {"preprocess": {"rolling_ball": None}})
+    assert "rolling_ball: null" in c.text()
+    assert again(c, tmp_path).params("D7-017").preprocess.rolling_ball is None
+
+
+def test_set_mapping_over_null(cfg) -> None:
+    c = cfg(YML)
+    c.set("D7-021", {"preprocess": {"rolling_ball": {"radius": 20}}})
+    assert c.params("D7-021").preprocess.rolling_ball == RollingBallParams(
+        20.0, light_background=True
+    )
+
+
+def test_set_params_object(cfg, tmp_path: Path) -> None:
+    c = cfg(YML)
+    c.set("D7-017", {"hct": HCTParams((HCTRange(5, 9),))})
+    assert again(c, tmp_path).params("D7-017").hct == HCTParams(
+        (HCTRange(5, 9),)
+    )
+
+
+def test_set_unknown_section(cfg) -> None:
+    with pytest.raises(
+        ParamsError,
+        match=r"unknown section 'hcts' \(valid: region, preprocess, hct\)",
+    ):
+        cfg(YML).set(None, {"hcts": {}})
+
+
+def test_set_rejects_other_value_types(cfg) -> None:
+    with pytest.raises(ParamsError, match=r"preprocess\.median_blur"):
+        cfg(YML).set(None, {"preprocess": {"median_blur": object()}})
+
+
+def test_set_into_empty_images_is_block_style(cfg) -> None:
+    c = cfg(template())
+    c.set("A", {"region": {"bottom_fraction": 0.1}})
+    assert c.text().endswith(
+        "images:\n  A:\n    region:\n      bottom_fraction: 0.1\n"
+    )
+
+
+def test_set_into_missing_sections(cfg) -> None:
+    c = cfg("defaults:\n")
+    c.set("A", {"region": {"bottom_fraction": 0.1}})
+    c.set(None, {"region": {"bottom_fraction": 0.2}})
+    assert c.params("A").region.bottom_fraction == 0.1
+    assert c.params(None).region.bottom_fraction == 0.2
+
+
+def test_set_params_quotes_names_yaml_would_type(cfg, tmp_path) -> None:
+    c = cfg(YML)
+    names = ["007", "2024-01-02", "true", "1e3"]
+    for name in names:
+        c.set(name, {"region": {"bottom_fraction": 0.1}})
+    c = again(c, tmp_path)
+    for name in names:
+        assert c.params(name).region.bottom_fraction == 0.1
+
+
+def test_set_keeps_comments_elsewhere(cfg) -> None:
+    text = "# mine\n" + YML.replace(
+        "  D7-021:", "  # tuned by hand\n  D7-021:"
+    )
+    c = cfg(text)
+    c.set("D7-017", {"region": {"bottom_fraction": 0.1}})
+    assert c.text().startswith("# mine\n")
+    assert "  # tuned by hand\n  D7-021:" in c.text()
+
+
+def test_removed_key_takes_its_comment(cfg) -> None:
+    text = YML.replace(
+        "rolling_ball: {radius: 30}", "rolling_ball: {radius: 30}   # thinner"
+    )
+    c = cfg(text)
+    c.set("D7-019", {"preprocess": {"rolling_ball": {"radius": 50}}})
+    assert "thinner" not in c.text()
+
+
+def test_reset_key(cfg) -> None:
+    c = cfg(YML)
+    c.reset("D7-019", "preprocess.rolling_ball")
+    assert c.params("D7-019") == c.params(None)
+    assert "D7-019" not in c.text()
+
+
+def test_reset_part_of_an_entry(cfg) -> None:
+    c = cfg(
+        YML.replace(
+            "rolling_ball: null",
+            "rolling_ball: null\n    region: {bottom_fraction: 0.1}",
+        )
+    )
+    c.reset("D7-021", "preprocess")
+    assert "  D7-021:\n    region: {bottom_fraction: 0.1}\n" in c.text()
+
+
+def test_reset_whole_entry(cfg) -> None:
+    c = cfg(YML)
+    c.reset("D7-021")
+    assert "D7-021" not in c.text()
+    assert "D7-019" in c.text()
+
+
+def test_reset_bad_key(cfg) -> None:
+    with pytest.raises(
+        ParamsError,
+        match=r"preprocess\.rolling_bal: unknown key "
+        r"\(valid: median_blur, rolling_ball, clahe\)",
+    ):
+        cfg(YML).reset("D7-019", "preprocess.rolling_bal")
+
+
+def test_reset_key_below_a_value(cfg) -> None:
+    with pytest.raises(ParamsError, match=r"hct\.ranges\.d_min"):
+        cfg(YML).reset("D7-019", "hct.ranges.d_min")
+
+
+def test_reset_unset_key_is_a_no_op(cfg) -> None:
+    c = cfg(YML)
+    c.reset("D7-017", "region")
+    c.reset("D7-019", "region.bottom_fraction")
+    assert c.text() == YML
+
+
+def test_set_empty_section_writes_nothing(cfg) -> None:
+    c = cfg(YML)
+    c.set("D7-017", {"preprocess": {}, "hct": {}})
+    assert c.text() == YML

@@ -7,16 +7,19 @@ written.
 """
 
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping, MutableMapping, Sequence
 from pathlib import Path
 from typing import Any
 
 from agglpy import _yaml
 from agglpy.app._config import (
     NEUTRAL,
+    SECTIONS,
     ImageParams,
     Problem,
+    check_key,
     merge,
+    plain,
     to_params,
 )
 from agglpy.errors import ParamsError
@@ -94,6 +97,95 @@ class ConfigFile:
             problems.append(Problem(f"images.{name}", message))
         _raise(self.path, problems)
 
+    def set(self, image: str | None, sections: Mapping[str, object]) -> None:
+        """Write params for ``image`` (None: the defaults), in memory.
+
+        ``sections`` maps section names to mappings shaped like the
+        yml or to params objects; mappings are merged into what is
+        there, other values replace it. For an image, each key the
+        call set is removed again when the image's params are the same
+        without it, so the entry holds differences only. Nothing is
+        checked or written here: the caller checks, then writes.
+        """
+        data: dict[str, Any] = {}
+        for name, value in sections.items():
+            if name not in SECTIONS:
+                raise ParamsError(
+                    f"unknown section {name!r} (valid: {', '.join(SECTIONS)})"
+                )
+            data[name] = plain(value, name)
+        if image is None:
+            _merge_into(self._section("defaults"), data)
+            return
+        images = self._section("images")
+        if not isinstance(images.get(image), Mapping):
+            _yaml.replace(images, image, {})
+        _merge_into(images[image], data)
+        self._prune(image, _leaf_paths(data))
+
+    def reset(self, image: str, key: str | None = None) -> None:
+        """Remove ``key`` (dotted, e.g. ``"preprocess.rolling_ball"``)
+        from the entry of ``image``, or the whole entry, in memory.
+
+        Raises ParamsError when ``key`` is not a params key; a key the
+        entry does not set changes nothing.
+        """
+        images = self._entries()
+        if key is not None:
+            check_key(key)
+        if image not in images:
+            return
+        if key is None:
+            _yaml.remove(self._section("images"), image)
+            return
+        parts = key.split(".")
+        self._remove_path(image, parts)
+        self._remove_empty(image, parts[:-1])
+
+    def _section(self, name: str) -> Any:
+        """The top-level mapping ``name``, created when missing."""
+        if not isinstance(self._doc.get(name), Mapping):
+            _yaml.replace(self._doc, name, {})
+        return self._doc[name]
+
+    def _prune(self, image: str, paths: list[list[str]]) -> None:
+        """Remove the touched keys that make no difference.
+
+        Compared on converted params, so 50 equals 50.0. Deepest paths
+        first; then emptied mappings on those paths, then an emptied
+        entry.
+        """
+        defaults = self._defaults()
+        for parts in sorted(paths, key=len, reverse=True):
+            entry = merge({}, self._entry(image))
+            parent = _walk(entry, parts[:-1])
+            if not isinstance(parent, dict) or parts[-1] not in parent:
+                continue
+            before, _ = to_params(merge(defaults, entry))
+            del parent[parts[-1]]
+            after, _ = to_params(merge(defaults, entry))
+            if before is None or after != before:
+                continue
+            self._remove_path(image, parts)
+            self._remove_empty(image, parts[:-1])
+
+    def _remove_path(self, image: str, parts: list[str]) -> None:
+        parent = _walk(self._entry(image), parts[:-1])
+        if isinstance(parent, MutableMapping) and parts[-1] in parent:
+            _yaml.remove(parent, parts[-1])
+
+    def _remove_empty(self, image: str, parts: list[str]) -> None:
+        """Remove empty mappings along ``parts``, then an empty entry."""
+        for depth in range(len(parts), 0, -1):
+            parent = _walk(self._entry(image), parts[: depth - 1])
+            value = parent.get(parts[depth - 1]) if parent else None
+            if isinstance(value, Mapping) and not value:
+                _yaml.remove(parent, parts[depth - 1])
+        images = self._section("images")
+        entry = images.get(image)
+        if isinstance(entry, Mapping) and not entry:
+            _yaml.remove(images, image)
+
     def _defaults(self) -> Mapping[str, Any]:
         return self._doc.get("defaults") or {}
 
@@ -123,6 +215,37 @@ class ConfigFile:
             )
         # Without params the defaults have problems, which are raised.
         return params or NEUTRAL, problems
+
+
+def _merge_into(target: Any, data: Mapping[str, Any]) -> None:
+    for key, value in data.items():
+        old = target.get(key)
+        if isinstance(value, Mapping) and isinstance(old, Mapping):
+            _merge_into(old, value)
+        else:
+            _yaml.replace(target, key, value)
+
+
+def _leaf_paths(data: Mapping[str, Any]) -> list[list[str]]:
+    """Paths of the values set by ``data``.
+
+    Mappings are walked into; an empty one is a value (pruned too).
+    """
+    paths: list[list[str]] = []
+    for key, value in data.items():
+        if isinstance(value, Mapping) and value:
+            paths.extend([key, *sub] for sub in _leaf_paths(value))
+        else:
+            paths.append([key])
+    return paths
+
+
+def _walk(value: Any, parts: list[str]) -> Any:
+    for part in parts:
+        if not isinstance(value, Mapping) or part not in value:
+            return None
+        value = value[part]
+    return value
 
 
 def _sets(entry: Mapping[str, Any], path: str) -> bool:
