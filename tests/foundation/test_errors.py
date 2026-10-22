@@ -16,6 +16,7 @@ from agglpy.errors import (
     ParticlesOutsideRegionWarning,
     ParticleTableError,
     PixelSizeWarning,
+    SheetError,
     TableError,
     ValuesNotCountedWarning,
 )
@@ -23,7 +24,14 @@ from agglpy.errors import (
 
 @pytest.mark.parametrize(
     "error",
-    [ParamsError, TableError, ParticleTableError, FileFormatError, ImageError],
+    [
+        ParamsError,
+        TableError,
+        ParticleTableError,
+        FileFormatError,
+        ImageError,
+        SheetError,
+    ],
 )
 def test_errors_share_one_base_and_are_value_errors(
     error: type[Exception],

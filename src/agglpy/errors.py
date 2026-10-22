@@ -99,6 +99,13 @@ class ImageError(AgglpyError, ValueError):
     """
 
 
+class SheetError(AgglpyError, ValueError):
+    """Raised when the image sheet of a collection has invalid content.
+
+    The message lists every problem by row and column.
+    """
+
+
 class OutputExistsError(AgglpyError, FileExistsError):
     """Raised when a folder already holds an export and overwrite is off.
 
