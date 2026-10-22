@@ -26,6 +26,7 @@ from agglpy.core._images import (
     names,
     numbers,
     require,
+    with_labels,
 )
 from agglpy.core.metrics import values_across_images
 from agglpy.errors import ParamsError, TableError, ValuesNotCountedWarning
@@ -217,7 +218,7 @@ def distribution(
         "_group", kind="stable", ignore_index=True
     )
     labels = groups.labels.iloc[out.pop("_group")].reset_index(drop=True)
-    return pd.concat([labels, out], axis=1)
+    return with_labels(labels, out)
 
 
 def distribution_across_images(

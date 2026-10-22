@@ -425,6 +425,16 @@ def test_unknown_by_column_raises():
         summary(*_scene(RA_EXAMPLE), by="condition")
 
 
+def test_by_column_named_like_a_metric_raises():
+    # the group label "Ra" next to the metric Ra: two columns "Ra"
+    images, particles, agglomerates = _scene(RA_EXAMPLE)
+    images["Ra"] = ["smooth", "rough"]
+    with pytest.raises(TableError, match=r"by: .*'Ra'"):
+        summary(images, particles, agglomerates, by="Ra")
+    # harmless while nobody groups by it
+    assert "Ra" in summary(images, particles, agglomerates).columns
+
+
 # --- values_across_images and summary_across_images -------------------
 
 # t(0.975, 1): the 95 % quantile factor for two images (scipy gives it).
@@ -533,6 +543,13 @@ def test_images_table_columns_are_not_values():
     )
     out = values_across_images(images, per_image, by="condition")
     assert out["metric"].tolist() == ["v"]
+
+
+def test_by_column_named_like_an_output_column_raises():
+    images = _images("A", "B", mean=["x", "y"])
+    per_image = pd.DataFrame({"image": ["A", "B"], "v": [1.0, 3.0]})
+    with pytest.raises(TableError, match=r"by: .*'mean'"):
+        values_across_images(images, per_image, by="mean")
 
 
 def test_text_value_column_raises():

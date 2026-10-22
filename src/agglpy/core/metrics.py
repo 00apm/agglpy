@@ -31,6 +31,7 @@ from agglpy.core._images import (
     names,
     numbers,
     require,
+    with_labels,
 )
 from agglpy.errors import MissingImagesWarning, ParamsError, TableError
 from agglpy.params import _number
@@ -125,7 +126,8 @@ def summary(
             ``member_count``, ``D``, ``area``.
         by: ``None`` (all images, one row), ``"image"``, an images-table
             column or a list of them (one row per existing
-            combination; an empty cell is its own group).
+            combination; an empty cell is its own group). A ``by``
+            column must not share a name with an output column.
         metrics: Family names; narrows the table.
 
     Returns:
@@ -199,8 +201,7 @@ def summary(
         for q in _QUANTILES:
             name = f"aerosol_member_count_q{round(q * 100)}"
             columns[name] = described[q].to_numpy()
-    out = pd.concat([groups.labels, pd.DataFrame(columns)], axis=1)
-    return out
+    return with_labels(groups.labels, pd.DataFrame(columns))
 
 
 def summary_across_images(
@@ -328,7 +329,7 @@ def values_across_images(
     out["n"] = out["n"].astype(np.int64)
     out[["ci_low", "ci_high"]] = _interval(out, level)
     labels = groups.labels.iloc[out.pop("_group")].reset_index(drop=True)
-    return pd.concat([labels, out], axis=1)
+    return with_labels(labels, out)
 
 
 def _families(metrics: str | Iterable[str] | None) -> list[str]:

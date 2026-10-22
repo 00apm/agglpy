@@ -304,6 +304,13 @@ def test_weight_named_number_raises():
         distribution(images, table, "v", [0, 10], weights="number")
 
 
+def test_by_column_named_like_an_output_column_raises():
+    images, table = _one_image([5])
+    images["basis"] = ["SEM"]
+    with pytest.raises(TableError, match=r"by: .*'basis'"):
+        distribution(images, table, "v", [0, 10], by="basis")
+
+
 def test_missing_weight_column_raises():
     with pytest.raises(TableError, match="volume"):
         distribution(*_one_image([5]), "v", [0, 10], weights="volume")

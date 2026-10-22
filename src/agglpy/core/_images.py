@@ -126,6 +126,22 @@ def group_images(
     return Grouping(columns, codes, keyed.iloc[first].reset_index(drop=True))
 
 
+def with_labels(labels: pd.DataFrame, out: pd.DataFrame) -> pd.DataFrame:
+    """The ``by`` columns of each row's group, then the output columns.
+
+    Raises:
+        TableError: If a ``by`` column has the name of an output column
+            (the table would hold two columns of that name).
+    """
+    clash = [c for c in labels.columns if c in out.columns]
+    if clash:
+        raise TableError(
+            f"by: {clash} would repeat output columns of the same name; "
+            f"rename them in the images table"
+        )
+    return pd.concat([labels, out], axis=1)
+
+
 def image_positions(
     images: pd.DataFrame, table: pd.DataFrame, name: str
 ) -> NDArray[np.intp]:
