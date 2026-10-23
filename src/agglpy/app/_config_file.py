@@ -22,7 +22,7 @@ from agglpy.app._config import (
     plain,
     to_params,
 )
-from agglpy.errors import ParamsError
+from agglpy.errors import FileFormatError, ParamsError
 
 __all__ = ["CONFIG_NAME", "ConfigFile"]
 
@@ -59,8 +59,23 @@ class ConfigFile:
         return config
 
     def text(self) -> str:
-        """The document as YAML text, comments included."""
-        return _yaml.dumps(self._doc)
+        """The document as YAML text, comments included.
+
+        Raises RuntimeError when the text would not read back as the
+        same data: the file is then not written.
+        """
+        text = _yaml.dumps(self._doc)
+        try:
+            same = _data(_yaml.loads(text, self.path.name)) == _data(self._doc)
+        except FileFormatError:
+            same = False
+        if not same:
+            raise RuntimeError(
+                f"agglpy could not write {self.path.name} so that it reads "
+                "back the same (a bug in agglpy; please report it); the "
+                "file was not changed"
+            )
+        return text
 
     def images(self) -> list[str]:
         """The image names that have an entry, in file order."""
@@ -219,6 +234,15 @@ class ConfigFile:
             )
         # Without params the defaults have problems, which are raised.
         return params or NEUTRAL, problems
+
+
+def _data(value: Any) -> Any:
+    """The plain data of a loaded document, without comments."""
+    if isinstance(value, Mapping):
+        return {k: _data(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_data(v) for v in value]
+    return value
 
 
 def _merge_into(target: Any, data: Mapping[str, Any]) -> None:

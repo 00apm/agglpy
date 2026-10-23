@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from agglpy import _yaml
 from agglpy.app._config import NEUTRAL, template
 from agglpy.app._config_file import CONFIG_NAME, ConfigFile
 from agglpy.errors import FileFormatError, ParamsError
@@ -370,3 +371,13 @@ def test_set_empty_section_writes_nothing(cfg) -> None:
     c = cfg(YML)
     c.set("D7-017", {"preprocess": {}, "hct": {}})
     assert c.text() == YML
+
+
+def test_text_refuses_yaml_that_does_not_read_back(
+    cfg, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A last guard: never write a file agglpy can't read again.
+    c = cfg(template())
+    monkeypatch.setattr(_yaml, "dumps", lambda data: "images:\n  # x\n{}\n")
+    with pytest.raises(RuntimeError, match=r"agglpy\.yml"):
+        c.text()
