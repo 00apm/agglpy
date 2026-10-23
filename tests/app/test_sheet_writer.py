@@ -272,3 +272,18 @@ def test_replace_file_writes_new_file(tmp_path: Path) -> None:
     replace_file(path, lambda tmp: tmp.write_text("x", encoding="utf-8"))
     assert path.read_text(encoding="utf-8") == "x"
     assert os.listdir(tmp_path) == ["agglpy.yml"]
+
+
+def test_removed_column_shrinks_excel_table(tmp_path: Path) -> None:
+    path = write_xlsx(tmp_path / "images.xlsx", [H, *ROWS])
+    wb = openpyxl.load_workbook(path)
+    wb.active.add_table(Table(displayName="T1", ref="A1:F4"))
+    wb.active.auto_filter.ref = "A1:F4"
+    wb.save(path)
+    header = [h for h in H if h != "note"]
+    write_sheet(path, header, [[*r[:4], r[5]] for r in ROWS])
+    sheet = openpyxl.load_workbook(path).active
+    table = sheet.tables["T1"]
+    assert table.ref == "A1:E4"
+    assert [c.name for c in table.tableColumns] == header
+    assert sheet.auto_filter.ref == "A1:E4"

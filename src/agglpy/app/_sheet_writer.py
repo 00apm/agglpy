@@ -121,6 +121,7 @@ def _write_xlsx(path: Path, header: list[str], rows: list[list[Any]]) -> None:
 
     for i in sorted(plan.removed_columns, reverse=True):
         sheet.delete_cols(i + 1)
+        _remove_table_column(sheet, i + 1)
     for number in sorted(plan.removed_rows, reverse=True):
         sheet.delete_rows(number)
     position = {name: i + 1 for i, name in enumerate(plan.columns) if name}
@@ -154,6 +155,36 @@ def _write_xlsx(path: Path, header: list[str], rows: list[list[Any]]) -> None:
                 sheet.cell(row=last, column=position[name], value=value)
     _resize_ranges(sheet, last)
     replace_file(path, book.save)
+
+
+def _remove_table_column(sheet: Worksheet, column: int) -> None:
+    """Shrink the Excel tables and the filter over a deleted column
+    (openpyxl does not; Excel would report the file as damaged)."""
+    for table in sheet.tables.values():
+        min_col, _, max_col, _ = range_boundaries(table.ref)
+        if min_col is not None and min_col <= column <= (max_col or 0):
+            del table.tableColumns[column - min_col]
+        table.ref = _without_column(table.ref, column)
+        if table.autoFilter is not None and table.autoFilter.ref:
+            table.autoFilter.ref = _without_column(
+                table.autoFilter.ref, column
+            )
+    if sheet.auto_filter.ref:
+        sheet.auto_filter.ref = _without_column(sheet.auto_filter.ref, column)
+
+
+def _without_column(ref: str, column: int) -> str:
+    min_col, min_row, max_col, max_row = range_boundaries(ref)
+    if min_col is None or min_row is None or max_col is None:
+        return ref
+    if column < min_col:
+        min_col -= 1
+    if column <= max_col:
+        max_col -= 1
+    return (
+        f"{get_column_letter(min_col)}{min_row}:"
+        f"{get_column_letter(max_col)}{max_row}"
+    )
 
 
 def _resize_ranges(sheet: Worksheet, last: int) -> None:
