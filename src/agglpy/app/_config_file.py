@@ -62,6 +62,10 @@ class ConfigFile:
         """The document as YAML text, comments included."""
         return _yaml.dumps(self._doc)
 
+    def images(self) -> list[str]:
+        """The image names that have an entry, in file order."""
+        return list(self._entries())
+
     def params(self, image: str | None) -> ImageParams:
         """The params of ``image``; ``None`` gives the defaults.
 

@@ -5,6 +5,7 @@ A collection is a folder with an image sheet (what to analyse) and
 them again.
 """
 
+from agglpy.app._collection import Collection
 from agglpy.app._config import ImageParams
 
-__all__ = ["ImageParams"]
+__all__ = ["Collection", "ImageParams"]
