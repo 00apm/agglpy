@@ -2,6 +2,7 @@
 
 import dataclasses
 import enum
+import json
 from datetime import datetime
 from pathlib import Path
 
@@ -11,7 +12,7 @@ import pandas as pd
 import pytest
 import yaml
 
-from agglpy import export
+from agglpy import _yaml, export
 from agglpy.errors import (
     OutputExistsError,
     OutputLockedError,
@@ -49,8 +50,8 @@ def sheet_rows(folder: Path, name: str) -> list[tuple]:
 
 
 def record(folder: Path) -> dict:
-    with (folder / "record.yml").open(encoding="utf-8") as fh:
-        return yaml.safe_load(fh)
+    # Plain dicts and lists, so results compare with ==.
+    return json.loads(json.dumps(_yaml.load(folder / "record.yml")))
 
 
 # ---------------------------------------------------------------------
@@ -222,6 +223,14 @@ def test_record_reads_back_unicode(tmp_path):
     out = write(tmp_path, record={"sample": "Fe₂O₃ µm"})
     assert record(out)["sample"] == "Fe₂O₃ µm"
     assert "Fe₂O₃" in (out / "record.yml").read_text(encoding="utf-8")
+
+
+def test_record_is_readable_by_pyyaml(tmp_path):
+    # PyYAML follows YAML 1.1: unquoted yes would read back as True.
+    out = write(tmp_path, record={"params": {"flag": "yes", "none": None}})
+    with (out / "record.yml").open(encoding="utf-8") as fh:
+        params = yaml.safe_load(fh)["params"]
+    assert params == {"flag": "yes", "none": None}
 
 
 @pytest.mark.parametrize(

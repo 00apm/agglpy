@@ -99,6 +99,13 @@ class ImageError(AgglpyError, ValueError):
     """
 
 
+class SheetError(AgglpyError, ValueError):
+    """Raised when the image sheet of a collection has invalid content.
+
+    The message lists every problem by row and column.
+    """
+
+
 class OutputExistsError(AgglpyError, FileExistsError):
     """Raised when a folder already holds an export and overwrite is off.
 
@@ -108,7 +115,7 @@ class OutputExistsError(AgglpyError, FileExistsError):
 
 
 class OutputLockedError(AgglpyError, PermissionError):
-    """Raised when a file of an earlier export can't be replaced.
+    """Raised when a file agglpy writes can't be replaced.
 
     Usually the file is open in another program (on Windows, Excel
     locks an open workbook). The message names the file; nothing is
@@ -170,4 +177,11 @@ class ParticlesOutsideRegionWarning(UserWarning):
     """Warns that particles outside the analysed region were left out.
 
     Each of them lies entirely outside the region.
+    """
+
+
+class UnmatchedPathsWarning(UserWarning):
+    """Warns that image paths did not match the filename rule.
+
+    Their columns were left empty.
     """

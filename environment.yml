@@ -30,6 +30,7 @@ dependencies:
   - matplotlib<4
   - openpyxl<4
   - pyyaml<7
+  - ruamel.yaml<0.20
   - tqdm<5
   # notebook kernel (Jupyter Lab itself lives in a separate env)
   - ipykernel
@@ -53,6 +54,7 @@ dependencies:
   # typing
   - mypy<2
   - pandas-stubs<3
+  - types-openpyxl
   - types-pyyaml
   - types-tqdm
   # lint: same version as CI (.github/workflows/ci.yml); bump both together

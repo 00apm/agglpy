@@ -21,6 +21,9 @@ dependencies = [
     "matplotlib >= 3.8.4, < 4",
     "openpyxl >= 3.1.5, < 4",
     "pyyaml >= 6.0.2, < 7",
+    # Round-trip YAML keeps the comments in agglpy.yml. Minor releases
+    # of 0.x have broken the API: stop at the next one.
+    "ruamel.yaml >= 0.18.6, < 0.20",
     "tqdm >= 4.66.5, < 5",
 ]
 
@@ -50,6 +53,7 @@ test = ["pytest >= 8.3.3, < 9", "pytest-regressions >= 2.5, < 3"]
 typing = [
     "mypy >= 1.11.2, < 2",
     "pandas-stubs >= 2.1.1.230928, < 3",
+    "types-openpyxl >= 3.1.5",
     "types-pyyaml >= 6.0.12.20240917",
     "types-tqdm >= 4.66.0.20240417",
 ]
@@ -150,6 +154,8 @@ include_external_packages = true
 name = "New code never imports the legacy modules (D-019)"
 type = "forbidden"
 source_modules = [
+    "agglpy._yaml",
+    "agglpy.app",
     "agglpy.core",
     "agglpy.draw",
     "agglpy.errors",
@@ -166,6 +172,7 @@ forbidden_modules = ["agglpy._legacy"]
 name = "Foundation, core, pipeline, io and export never import plotting or progress bars (rules 1, 4)"
 type = "forbidden"
 source_modules = [
+    "agglpy._yaml",
     "agglpy.core",
     "agglpy.errors",
     "agglpy.export",
@@ -183,6 +190,7 @@ forbidden_modules = ["matplotlib", "tqdm"]
 name = "Foundation, core and pipeline never import the edges"
 type = "forbidden"
 source_modules = [
+    "agglpy._yaml",
     "agglpy.core",
     "agglpy.errors",
     "agglpy.logger",
@@ -205,6 +213,7 @@ forbidden_modules = ["agglpy.core"]
 name = "Foundation and core never import the pipeline"
 type = "forbidden"
 source_modules = [
+    "agglpy._yaml",
     "agglpy.core",
     "agglpy.errors",
     "agglpy.logger",
@@ -212,6 +221,44 @@ source_modules = [
     "agglpy.tables",
 ]
 forbidden_modules = ["agglpy.pipeline"]
+
+# Dependencies point down: only frontends use the application layer.
+[[tool.importlinter.contracts]]
+name = "Nothing below the application imports it"
+type = "forbidden"
+source_modules = [
+    "agglpy._yaml",
+    "agglpy.core",
+    "agglpy.draw",
+    "agglpy.errors",
+    "agglpy.export",
+    "agglpy.io",
+    "agglpy.logger",
+    "agglpy.params",
+    "agglpy.pipeline",
+    "agglpy.tables",
+]
+forbidden_modules = ["agglpy.app"]
+
+# The YAML library may change: one module wraps it. Others use that
+# module, so only direct imports are checked.
+[[tool.importlinter.contracts]]
+name = "Only agglpy._yaml imports ruamel"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = [
+    "agglpy.app",
+    "agglpy.core",
+    "agglpy.draw",
+    "agglpy.errors",
+    "agglpy.export",
+    "agglpy.io",
+    "agglpy.logger",
+    "agglpy.params",
+    "agglpy.pipeline",
+    "agglpy.tables",
+]
+forbidden_modules = ["ruamel"]
 
 [build-system]
 requires = ["setuptools==69"]
