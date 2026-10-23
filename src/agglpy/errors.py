@@ -178,3 +178,10 @@ class ParticlesOutsideRegionWarning(UserWarning):
 
     Each of them lies entirely outside the region.
     """
+
+
+class UnmatchedPathsWarning(UserWarning):
+    """Warns that image paths did not match the filename rule.
+
+    Their columns were left empty.
+    """

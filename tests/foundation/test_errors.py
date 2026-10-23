@@ -18,6 +18,7 @@ from agglpy.errors import (
     PixelSizeWarning,
     SheetError,
     TableError,
+    UnmatchedPathsWarning,
     ValuesNotCountedWarning,
 )
 
@@ -64,6 +65,7 @@ def test_particle_table_error_is_a_table_error() -> None:
         PixelSizeWarning,
         NonCircularParticlesWarning,
         ParticlesOutsideRegionWarning,
+        UnmatchedPathsWarning,
     ],
 )
 def test_warnings_are_user_warnings(warning: type[Warning]) -> None:
