@@ -249,7 +249,8 @@ class Collection:
         old = [row + [None] * (width - len(row)) for row in old]
         validate(Grid(sheet.path, new_header, _numbered(old + rows)))
         write_sheet(sheet.path, new_header, old + rows)
-        return [str(row[0]) for row in rows]
+        column = new_header.index("image")
+        return [str(row[column]) for row in rows]
 
     def _new_rows(
         self,

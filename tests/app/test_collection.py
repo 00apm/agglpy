@@ -19,6 +19,8 @@ from agglpy.errors import (
 )
 from agglpy.params import PreprocessParams
 
+from support.sheets import write_xlsx
+
 H = ["image", "file", "include", "pixel_size_nm", "note"]
 
 
@@ -419,3 +421,13 @@ def test_removing_the_only_entry_keeps_yml_readable(
     assert "# tuned by hand" in text
     assert Collection.open(col.folder).params("D7-019") == NEUTRAL
 
+
+def test_add_images_names_with_image_not_first_column(
+    raw: Path, col: Collection
+) -> None:
+    col.sheet_path.unlink()
+    write_xlsx(
+        col.folder / "images.xlsx",
+        [["note", "image", "file"], [None, "D7-017", "../raw/D7-017.tif"]],
+    )
+    assert col.add_images(raw) == ["D7-019", "D7-021"]
