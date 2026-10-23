@@ -89,7 +89,12 @@ def load(path: Path) -> Any:
 
 
 def dumps(data: Any) -> str:
-    """Write ``data`` as block-style YAML text (UTF-8, not wrapped)."""
+    """Write ``data`` as block-style YAML text (UTF-8, not wrapped).
+
+    Comments held by an empty mapping or list (written ``{}`` / ``[]``)
+    move to the lines after it, where they stay valid YAML.
+    """
+    _settle(data)
     stream = io.StringIO()
     _yaml().dump(data, stream)
     return stream.getvalue()
@@ -127,17 +132,21 @@ def remove(mapping: MutableMapping[str, Any], key: str) -> None:
     The key takes its end-of-line comment and every comment inside its
     block. Comments after it stay: the YAML library stores them on the
     removed key, so they move to the previous key (or above the first
-    key). An emptied mapping loses its comments (it is written ``{}``).
+    key). An emptied mapping carries them, and ``dumps`` writes them
+    after it.
     """
     cmap = _commented(mapping)
     keys = list(cmap)
     index = keys.index(key)
-    kept = _kept_after(_end_token(cmap, key))
+    kept = _carried(cmap, key) + _kept_after(_end_token(cmap, key))
+    kept += _take_end(cmap[key])
     del cmap[key]
     cmap.ca.items.pop(key, None)
     if not cmap:
-        cmap.ca.comment = None
         cmap.ca.items.clear()
+        text = _take_start(cmap) + kept
+        if text:
+            _set_start(cmap, text)
         return
     if not kept:
         return
@@ -150,17 +159,24 @@ def remove(mapping: MutableMapping[str, Any], key: str) -> None:
 def replace(mapping: MutableMapping[str, Any], key: str, value: Any) -> None:
     """Set ``mapping[key] = value``, keeping the comments after it.
 
-    A new key is appended. A replaced scalar keeps its end-of-line
-    comment; a replaced block takes the comments inside it, and the
-    comment lines after it stay after the key. Plain dicts in
-    ``value`` become mappings that can carry comments.
+    A new key is appended, after the comment lines that followed the
+    last key. A replaced scalar keeps its end-of-line comment; a
+    replaced block takes the comments inside it. Comment lines after
+    the key stay after it. Plain dicts in ``value`` become mappings
+    that can carry comments.
     """
     cmap = _commented(mapping)
     value = _document(value)
     if key not in cmap or not _is_block(cmap[key]):
+        # The comment lines after the last key (or after a scalar
+        # becoming a block) would end up above the new lines.
+        anchor = key if key in cmap else next(reversed(cmap), None)
+        moved = "" if anchor is None else _take_after(cmap, anchor)
         cmap[key] = value
+        if moved:
+            _append_after(cmap, key, moved)
         return
-    kept = _kept_after(_end_token(cmap, key))
+    kept = _kept_after(_end_token(cmap, key)) + _take_end(cmap[key])
     cmap[key] = value
     cmap.ca.items.pop(key, None)
     if kept:
@@ -176,7 +192,7 @@ def _document(value: Any) -> Any:
             result[key] = _document(item)
         return result
     if isinstance(value, list | tuple):
-        return [_document(item) for item in value]
+        return CommentedSeq(_document(item) for item in value)
     return value
 
 
@@ -208,6 +224,11 @@ def _end_slot(container: Any, key: Any) -> tuple[list[Any], int]:
             else len(value) - 1
         )
         return _end_slot(value, last)
+    if isinstance(value, CommentedMap | CommentedSeq) and not value:
+        # An empty ``{}`` / ``[]`` holds the comment written after it.
+        if value.ca.comment is None:
+            value.ca.comment = [None, None]
+        return value.ca.comment, 0
     slots = container.ca.items.setdefault(key, [None, None, None, None])
     # A mapping keeps the end-of-line comment in slot 2, a sequence in 0.
     return slots, 2 if isinstance(container, CommentedMap) else 0
@@ -232,6 +253,136 @@ def _kept_after(token: CommentToken | None) -> str:
         while lines and lines[0].startswith(indent):
             lines.pop(0)
     return "".join(lines)
+
+
+def _take_after(container: Any, key: Any) -> str:
+    """Detach the comment lines after the key's end-of-line comment."""
+    slots, i = _end_slot(container, key)
+    token = slots[i]
+    text = _kept_after(token)
+    if text:
+        token.value = token.value[: len(token.value) - len(text)]
+        if not token.value.strip():
+            slots[i] = None
+            _drop_shared(container, key, token)
+    return text + _take_end(container[key])
+
+
+def _take_end(value: Any) -> str:
+    """Detach the comment lines the YAML library keeps after a block
+    (``ca.end``, e.g. after a list ending in ``- {d_min: 5}``)."""
+    if not _is_block(value):
+        return ""
+    last = next(reversed(value)) if isinstance(value, CommentedMap) else -1
+    text = _take_end(value[last])
+    tokens = getattr(value.ca, "end", None) or []
+    text += "".join(_render(t) for t in tokens if t is not None)
+    if tokens:
+        value.ca.end = []
+    return text
+
+
+def _drop_shared(container: Any, key: Any, token: CommentToken) -> None:
+    """Clear the parent's slot 2 of ``key`` when it holds ``token``.
+
+    A loaded ``key: []  # x`` keeps the same token on the parent's
+    slot and on the empty value.
+    """
+    if isinstance(container, CommentedMap):
+        slots = container.ca.items.get(key)
+        if slots and slots[2] is token:
+            slots[2] = None
+
+
+def _render(token: CommentToken) -> str:
+    """A comment token as full lines of text."""
+    text: str = token.value
+    if text.startswith("\n"):
+        return text[1:]
+    return " " * token.column + text
+
+
+def _take_start(value: Any) -> str:
+    """Detach the comment lines above the first item of ``value``.
+
+    Slot 0 starts with the end-of-line comment of the line that opens
+    ``value`` (``ranges: []  # none``); it belongs to the parent key
+    and stays. Its further lines and slot 1 are detached.
+    """
+    comment = value.ca.comment
+    if not comment:
+        return ""
+    text = ""
+    if comment[0] is not None:
+        text = _kept_after(comment[0])
+        if text:
+            comment[0].value = comment[0].value[: -len(text)]
+        if not comment[0].value.strip():
+            comment[0] = None
+    if len(comment) > 1 and comment[1]:
+        text += "".join(_render(t) for t in comment[1] if t is not None)
+        comment[1] = None
+    if comment[0] is None:
+        value.ca.comment = None
+    return text
+
+
+def _set_start(value: Any, text: str) -> None:
+    """Make ``text`` the comment lines above the first item."""
+    if value.ca.comment is None:
+        value.ca.comment = [None, None]
+    value.ca.comment[1] = [CommentToken(text, CommentMark(0), None)]
+
+
+def _carried(container: Any, key: Any) -> str:
+    """Detach the comments an empty mapping or list carries.
+
+    The YAML library also keeps the comment lines above the first item
+    on the parent's slot 3 of the key (the same lines as the value's
+    slot 1); an emptied value no longer has a first item.
+    """
+    value = container[key]
+    if not isinstance(value, CommentedMap | CommentedSeq) or value:
+        return ""
+    text = ""
+    if isinstance(container, CommentedMap):
+        slots = container.ca.items.get(key)
+        if slots and slots[3]:
+            comment = value.ca.comment
+            if not (comment and len(comment) > 1 and comment[1]):
+                text = "".join(_render(t) for t in slots[3] if t is not None)
+            slots[3] = None
+    comment = value.ca.comment
+    eol = comment[0] if comment else None
+    text += _take_start(value)
+    if eol is not None and not eol.value.strip():
+        _drop_shared(container, key, eol)
+    if isinstance(container, CommentedMap) and not any(
+        container.ca.items.get(key) or ()
+    ):
+        # An entry of empty slots hides the value's own comment.
+        container.ca.items.pop(key, None)
+    return text
+
+
+def _settle(node: Any) -> None:
+    """Move the comments of empty mappings and lists after them."""
+    if isinstance(node, CommentedMap):
+        keys: list[Any] = list(node)
+    elif isinstance(node, CommentedSeq):
+        keys = list(range(len(node)))
+    else:
+        return
+    for key in keys:
+        value = node[key]
+        if isinstance(value, CommentedMap | CommentedSeq) and not value:
+            # Written {} / [] either way; in flow style its comment goes
+            # after it, not between the key and the {}.
+            value.fa.set_flow_style()
+        text = _carried(node, key)
+        if text:
+            _append_after(node, key, text)
+        _settle(value)
 
 
 def _append_after(container: Any, key: Any, text: str) -> None:

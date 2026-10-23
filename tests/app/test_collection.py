@@ -395,3 +395,27 @@ def test_moved_tree_keeps_relative_paths(tmp_path: Path) -> None:
         path = resolve_stored(text, col.folder)
         assert path.exists()
         assert path.is_relative_to(moved.resolve())
+
+
+# Final review
+
+
+COMMENTED = (
+    "defaults: {}\nimages:\n  # tuned by hand\n  D7-019:\n    preprocess:\n"
+    "      median_blur: 3\n"
+)
+
+
+@pytest.mark.parametrize("how", ["reset", "prune"])
+def test_removing_the_only_entry_keeps_yml_readable(
+    col: Collection, how: str
+) -> None:
+    yml(col).write_text(COMMENTED, encoding="utf-8")
+    if how == "reset":
+        col.reset_params("D7-019")
+    else:
+        col.set_params("D7-019", preprocess={"median_blur": None})
+    text = yml(col).read_text(encoding="utf-8")
+    assert "# tuned by hand" in text
+    assert Collection.open(col.folder).params("D7-019") == NEUTRAL
+

@@ -192,13 +192,17 @@ def test_remove_first_key_of_nested_map() -> None:
 
 
 def test_remove_all_images_gives_empty_mapping() -> None:
+    # Comments above a removed key stay; with no key left they follow
+    # the {}.
     d = _doc()
     for name in ("A", "B", "C"):
         _remove(d["images"], name)
     text = _yaml.dumps(d)
     head = TEMPLATE_LIKE[: TEMPLATE_LIKE.index("images:")]
-    assert text == head + "images: {}\n"
-    assert text.endswith("# before images\nimages: {}\n")
+    assert text == head + (
+        "images: {}\n  # before B\n  # before C\n  # end of images\n"
+    )
+    _yaml.loads(text, "t")
 
 
 @pytest.mark.parametrize(
@@ -238,3 +242,77 @@ def test_replace_appends_a_new_key() -> None:
     d = _yaml.loads("a: 1\n", "t")
     _yaml.replace(d, "b", {"c": [1]})
     assert _yaml.dumps(d) == "a: 1\nb:\n  c:\n  - 1\n"
+
+
+def _assert_reads_back(text: str) -> None:
+    # Text agglpy writes must stay valid YAML.
+    _yaml.loads(text, "t")
+
+
+def test_emptied_mapping_keeps_comment_above_its_first_key() -> None:
+    d = _yaml.loads(
+        "defaults: {}\nimages:\n  # tuned by hand\n  a:\n    m: 3\n", "t"
+    )
+    _yaml.remove(d["images"], "a")
+    text = _yaml.dumps(d)
+    _assert_reads_back(text)
+    assert text == "defaults: {}\nimages: {}\n  # tuned by hand\n"
+
+
+def test_emptied_mapping_passes_comments_after_it_up() -> None:
+    d = _yaml.loads(
+        "images:\n  a:\n    m: 3\n  b:\n    p:\n      m: 5\n"
+        "# end-of-file note\n",
+        "t",
+    )
+    _yaml.remove(d["images"]["b"]["p"], "m")
+    _yaml.remove(d["images"]["b"], "p")
+    _yaml.remove(d["images"], "b")
+    text = _yaml.dumps(d)
+    _assert_reads_back(text)
+    assert text == "images:\n  a:\n    m: 3\n# end-of-file note\n"
+
+
+def test_emptied_nested_mapping_keeps_comment_after_it() -> None:
+    d = _yaml.loads("a:\n  p:\n    m: 3\n# note\nb: 1\n", "t")
+    _yaml.remove(d["a"]["p"], "m")
+    text = _yaml.dumps(d)
+    _assert_reads_back(text)
+    assert text == "a:\n  p: {}\n# note\nb: 1\n"
+
+
+def test_replace_new_key_keeps_following_comments_after_it() -> None:
+    d = _yaml.loads(
+        "a:\n  p:\n    m: 3   # noise\n  # b comes next\nb:\n  x: 1\n", "t"
+    )
+    _yaml.replace(d["a"]["p"], "r", {"radius": 30})
+    assert _yaml.dumps(d) == (
+        "a:\n  p:\n    m: 3   # noise\n    r:\n      radius: 30\n"
+        "  # b comes next\nb:\n  x: 1\n"
+    )
+
+
+def test_comment_after_list_of_flow_maps_survives_replace_and_removal() -> (
+    None
+):
+    # The YAML library keeps this comment on the list's end, not a key.
+    d = _yaml.loads(
+        "images:\n  a:\n    x: 1\n  b:\n    hct:\n      ranges:\n"
+        "      - {d_min: 5, d_max: 20}\n# trailing\n",
+        "t",
+    )
+    b = d["images"]["b"]
+    _yaml.replace(b["hct"], "ranges", [{"d_min": 8}])
+    assert _yaml.dumps(d).endswith("      - d_min: 8\n# trailing\n")
+    _yaml.remove(b["hct"], "ranges")
+    _yaml.remove(b, "hct")
+    _yaml.remove(d["images"], "b")
+    assert _yaml.dumps(d) == "images:\n  a:\n    x: 1\n# trailing\n"
+
+
+def test_scalar_becoming_block_keeps_following_comment_after_it() -> None:
+    d = _yaml.loads("a:\n  rb: null  # off\n# about b\nb: 1\n", "t")
+    _yaml.replace(d["a"], "rb", {"radius": 30})
+    text = _yaml.dumps(d)
+    _assert_reads_back(text)
+    assert text.endswith("    radius: 30\n# about b\nb: 1\n")
