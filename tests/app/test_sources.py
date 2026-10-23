@@ -149,3 +149,10 @@ def test_rule_reserved_group_name() -> None:
 def test_bad_regex() -> None:
     with pytest.raises(ParamsError, match="columns_from_path"):
         apply_rule(found("a.tif"), "(?P<x")
+
+
+def test_hidden_files_left_out_of_folder_listing(raw: Path) -> None:
+    # macOS writes ._<name> companions on FAT / exFAT / network drives.
+    (raw / "._D7-017.tif").touch()
+    (raw / ".hidden.png").touch()
+    assert keys(find_images(raw)) == ["D7-017.tif", "D7-019.TIF"]

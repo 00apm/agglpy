@@ -90,7 +90,11 @@ def _files(folder: Path, globs: Sequence[str] | None) -> list[Path]:
         return [
             p
             for p in folder.iterdir()
-            if p.suffix.lower() in IMAGE_SUFFIXES and p.is_file()
+            if p.suffix.lower() in IMAGE_SUFFIXES
+            # Hidden files: macOS writes ._<name> companions on FAT /
+            # exFAT / network drives.
+            and not p.name.startswith(".")
+            and p.is_file()
         ]
     # Several globs may match one file (case-insensitive on Windows).
     matched = {p for g in globs for p in folder.glob(g) if p.is_file()}
