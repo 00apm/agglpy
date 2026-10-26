@@ -1,9 +1,11 @@
 """``Collection.detect``: HCT detection into the work folders."""
 
-from collections.abc import Sequence
+import warnings
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import pandas as pd
+from tqdm.auto import tqdm
 
 from agglpy.app._config import ImageParams
 from agglpy.app._config_file import ConfigFile
@@ -18,7 +20,7 @@ from agglpy.app._records import (
     versions,
     write_record,
 )
-from agglpy.app._report import report
+from agglpy.app._report import class_names, report, warning_text
 from agglpy.app._sheet import Entry, Sheet
 from agglpy.app._sources import resolve_stored
 from agglpy.app._work import (
@@ -28,8 +30,13 @@ from agglpy.app._work import (
     image_folder,
     inspect,
 )
-from agglpy.errors import AgglpyError
+from agglpy.errors import (
+    AgglpyError,
+    IncompleteRunWarning,
+    LossyImageWarning,
+)
 from agglpy.io import read_image, write_particles
+from agglpy.logger import logger
 from agglpy.pipeline import detect_particles
 
 __all__ = ["run"]
@@ -40,6 +47,9 @@ _KEPT = {
     "no record": ("has no record", "had no record"),
     "unreadable": ("does not read", "did not read"),
 }
+_JPEG_START = b"\xff\xd8\xff"
+
+Caught = list[warnings.WarningMessage]
 
 
 def run(
@@ -53,18 +63,81 @@ def run(
 ) -> tuple[pd.DataFrame, list[tuple[type[Warning], str]]]:
     """Detect the images ``names`` (in sheet order, checked).
 
-    Returns the report and the summary warnings for the caller to emit.
+    Each image's warnings are caught, so the batch never stops on a
+    warning filter set to "error". Returns the report and the summary
+    warnings for the caller to emit at the user's line.
     """
     entries = {e.image: e for e in sheet.entries}
-    rows = [
-        _one(folder, entries[name], config.params(name), force)
-        for name in names
+    rows: list[dict[str, object]] = []
+    seen: dict[type[Warning], list[str]] = {}
+    bar = tqdm(total=len(names), disable=not progress, unit="image")
+    try:
+        for name in names:
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                row = _one(
+                    folder,
+                    entries[name],
+                    config.params(name),
+                    force,
+                    caught,
+                    _describe(bar, name),
+                )
+            row["warnings"] = class_names(warning_text(w) for w in caught)
+            for w in caught:
+                images = seen.setdefault(w.category, [])
+                if name not in images:
+                    images.append(name)
+            logger.info("%s: %s %s", name, row["outcome"], row["message"])
+            rows.append(row)
+            bar.update(1)
+    finally:
+        bar.close()
+    return report(rows), _summaries(seen, rows)
+
+
+def _describe(bar: tqdm, name: str) -> Callable[[str], None]:
+    """Show the image and its current step on the progress bar."""
+
+    def show(step: str) -> None:
+        bar.set_description(f"{name} · {step}")
+
+    return show
+
+
+def _summaries(
+    seen: dict[type[Warning], list[str]], rows: list[dict[str, object]]
+) -> list[tuple[type[Warning], str]]:
+    """One warning per caught class, then the count of images not done."""
+    found: list[tuple[type[Warning], str]] = [
+        (
+            cls,
+            f"{cls.__name__} in {', '.join(images)} (messages in the "
+            "returned table and the records)",
+        )
+        for cls, images in seen.items()
     ]
-    return report(rows), []
+    counts = {"skipped": 0, "kept": 0, "error": 0}
+    for row in rows:
+        outcome = row["outcome"]
+        # up-to-date skips are a normal resume, not something left undone
+        if outcome in counts and row["message"] != "up to date":
+            counts[str(outcome)] += 1
+    if any(counts.values()):
+        listed = ", ".join(f"{n} {o}" for o, n in counts.items() if n)
+        found.append(
+            (IncompleteRunWarning, f"{listed}; see the returned table")
+        )
+    return found
 
 
 def _one(
-    folder: Path, entry: Entry, params: ImageParams, force: bool
+    folder: Path,
+    entry: Entry,
+    params: ImageParams,
+    force: bool,
+    caught: Caught,
+    on_step: Callable[[str], None],
 ) -> dict[str, object]:
     """Decide and, if due, detect one image: its report row."""
     name = entry.image
@@ -111,16 +184,35 @@ def _one(
                 if not force:
                     return _row(name, "skipped", "up to date")
                 message = "was up to date"
-        count = _detect(entry, path, params, work)
+        count = _detect(entry, path, params, work, caught, on_step)
     except Exception as exc:
         # one image's failure is a row; Ctrl+C still stops the batch
-        return _row(name, "error", _error_text(exc))
+        text = _error_text(exc)
+        logger.exception("%s: error %s", name, text)
+        return _row(name, "error", text)
     return _row(name, outcome, message, count)
 
 
-def _detect(entry: Entry, path: Path, params: ImageParams, work: Path) -> int:
+def _detect(
+    entry: Entry,
+    path: Path,
+    params: ImageParams,
+    work: Path,
+    caught: Caught,
+    on_step: Callable[[str], None],
+) -> int:
     """Detect one image and write its CSV, then its record."""
     assert params.hct is not None
+    start = len(caught)  # the record keeps what this detection warned
+    with path.open("rb") as fh:
+        if fh.read(3) == _JPEG_START:
+            warnings.warn(
+                f"{entry.file} is JPEG-compressed; edges may shift by the "
+                "compression artefacts",
+                LossyImageWarning,
+                stacklevel=2,
+            )
+    on_step("reading")
     image = read_image(path)
     info = image_info(entry.file, path)
     table = detect_particles(
@@ -128,6 +220,7 @@ def _detect(entry: Entry, path: Path, params: ImageParams, work: Path) -> int:
         region=params.region,
         preprocess=params.preprocess,
         hct=params.hct,
+        on_step=on_step,
     )
     work.mkdir(parents=True, exist_ok=True)
     csv = work / HCT_CSV
@@ -143,7 +236,7 @@ def _detect(entry: Entry, path: Path, params: ImageParams, work: Path) -> int:
             image=info,
             params=params,
             particles=ParticlesInfo(HCT_CSV, len(table), sha256(csv)),
-            warnings=(),
+            warnings=tuple(warning_text(w) for w in caught[start:]),
         ),
     )
     return len(table)

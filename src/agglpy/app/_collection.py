@@ -3,6 +3,7 @@
 import contextlib
 import os
 import unicodedata
+import warnings
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Literal
@@ -384,7 +385,9 @@ class Collection:
 
         Outcomes: ``detected``, ``replaced`` (a person's file),
         ``skipped``, ``kept`` (a person's file) and ``error`` (the
-        image is left as it was; the other images go on).
+        image is left as it was; the other images go on). Warnings of
+        each image go into its record and the ``warnings`` column; after
+        the batch, each warning class is raised once, naming the images.
 
         Returns:
             One row per image in sheet order: ``image``, ``outcome``,
@@ -394,6 +397,11 @@ class Collection:
         Raises:
             ParamsError: If a name is not in the sheet or
                 ``agglpy.yml`` has problems; nothing runs.
+
+        Warns:
+            IncompleteRunWarning: If an image ended ``kept``, ``error``
+                or ``skipped`` for any reason but ``up to date``.
+            LossyImageWarning: If an image file is JPEG-compressed.
         """
         sheet, config = self._read(check=True)
         wanted = [images] if isinstance(images, str) else images
@@ -407,9 +415,13 @@ class Collection:
                 listed = ", ".join(repr(n) for n in unknown)
                 raise ParamsError(f"no image {listed} in {sheet.path.name}")
             names = [n for n in sheet.names if n in set(wanted)]
-        table, _ = run_detect(
+        table, summaries = run_detect(
             self._folder, sheet, config, names, force=force, progress=progress
         )
+        # after every file is written, so a filter set to "error" raises
+        # only once the batch is done
+        for cls, message in summaries:
+            warnings.warn(message, cls, stacklevel=2)
         return table
 
     # -----------------------------------------------------------------

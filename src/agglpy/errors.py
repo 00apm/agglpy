@@ -192,3 +192,17 @@ class UnreadableRecordWarning(UserWarning):
 
     agglpy treats it as missing.
     """
+
+
+class LossyImageWarning(UserWarning):
+    """Warns that an image is JPEG-compressed.
+
+    Compression artefacts can shift detected edges.
+    """
+
+
+class IncompleteRunWarning(UserWarning):
+    """Warns that a batch left images not done.
+
+    The returned table says which and why.
+    """

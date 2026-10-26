@@ -7,6 +7,8 @@ from agglpy.errors import (
     DuplicateParticlesWarning,
     FileFormatError,
     ImageError,
+    IncompleteRunWarning,
+    LossyImageWarning,
     MissingImagesWarning,
     NonCircularParticlesWarning,
     NoParticlesWarning,
@@ -68,6 +70,8 @@ def test_particle_table_error_is_a_table_error() -> None:
         ParticlesOutsideRegionWarning,
         UnmatchedPathsWarning,
         UnreadableRecordWarning,
+        LossyImageWarning,
+        IncompleteRunWarning,
     ],
 )
 def test_warnings_are_user_warnings(warning: type[Warning]) -> None:
