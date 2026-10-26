@@ -1,5 +1,8 @@
 """Detection on one image: ``detect_particles``."""
 
+import dataclasses
+from collections.abc import Callable
+
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
@@ -13,6 +16,13 @@ from agglpy.core.region import region_bounds, region_slices
 from agglpy.params import HCTParams, PreprocessParams, RegionParams
 from agglpy.tables import validate_particles
 
+# Progress name of each preprocessing step, by PreprocessParams field
+_STEP_NAMES = {
+    "median_blur": "median",
+    "rolling_ball": "rolling ball",
+    "clahe": "clahe",
+}
+
 
 def detect_particles(
     image: NDArray[np.uint8],
@@ -20,6 +30,7 @@ def detect_particles(
     region: RegionParams = RegionParams(),
     preprocess: PreprocessParams = PreprocessParams(),
     hct: HCTParams,
+    on_step: Callable[[str], None] | None = None,
 ) -> pd.DataFrame:
     """Detect the particles on one image's analysed region.
 
@@ -35,6 +46,9 @@ def detect_particles(
         region: The analysed region.
         preprocess: The preprocessing steps.
         hct: The HCT ranges.
+        on_step: Called with the name of each step as it starts:
+            ``"median"``, ``"rolling ball"``, ``"clahe"`` (those
+            configured), then ``"hct"``; for a progress display.
 
     Returns:
         A particle table ``id, x, y, r`` in px, in the raw image's
@@ -54,7 +68,17 @@ def detect_particles(
     height, width = check_grey_image(image).shape
     bounds = region_bounds(region, width, height)
     rows, cols = region_slices(bounds)
-    found = detect_hct(core_preprocess(image[rows, cols], preprocess), hct)
+    report = on_step or (lambda step: None)
+    cut = image[rows, cols]
+    # one step per call: the steps run in field order and each only
+    # transforms the image, so the result equals a single call
+    for field in dataclasses.fields(preprocess):
+        value = getattr(preprocess, field.name)
+        if value is not None:
+            report(_STEP_NAMES[field.name])
+            cut = core_preprocess(cut, PreprocessParams(**{field.name: value}))
+    report("hct")
+    found = detect_hct(cut, hct)
     # zero for a bottom cut; kept so a top or left cut stays right
     found["x"] += bounds.x_min + 0.5
     found["y"] += bounds.y_min + 0.5
