@@ -384,7 +384,7 @@ def test_new_mtime_same_bytes_is_up_to_date(
     assert rep["message"].tolist() == ["up to date"] * 3
 
 
-def test_folder_differing_in_case_is_not_leftover(
+def test_folder_differing_in_case_follows_the_file_system(
     particles_col: Collection,
 ) -> None:
     particles_col.detect(progress=False)
@@ -392,12 +392,20 @@ def test_folder_differing_in_case_is_not_leftover(
     # two steps: Windows refuses a rename that changes only the case
     (agglpy / "D7-017").rename(agglpy / "tmp")
     (agglpy / "tmp").rename(agglpy / "d7-017")
-    with warnings.catch_warnings():
-        warnings.simplefilter("error", LeftoverFoldersWarning)
-        r = row(particles_col)
-    if (agglpy / "D7-017").exists():  # a case-insensitive file system
+    if (agglpy / "D7-017").exists():
+        # Windows, macOS: the same folder, used, not left over
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", LeftoverFoldersWarning)
+            r = row(particles_col)
         assert r["particle_set"] == "hct"
         assert r["detection"] == "up to date"
+    else:
+        # Linux: another folder, never read, so it is named
+        with pytest.warns(
+            LeftoverFoldersWarning, match="rename the folder to D7-017"
+        ):
+            r = row(particles_col)
+        assert r["particle_set"] == "none"
 
 
 def test_folder_differing_in_unicode_form_is_leftover(tmp_path: Path) -> None:
