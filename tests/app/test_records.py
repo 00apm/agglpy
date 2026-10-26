@@ -224,3 +224,23 @@ def test_same_image_rehashes_after_new_mtime(tmp_path: Path) -> None:
     path.write_bytes(b"x" * info.size)
     os.utime(path, ns=(later, later))
     assert not same_image(info, path)
+
+
+def test_record_in_another_encoding_is_none_and_warns(
+    tmp_path: Path, detection: DetectionRecord
+) -> None:
+    path = tmp_path / "D7-017" / "particles_hct_record.yml"
+    path.parent.mkdir()
+    # re-saved by an editor in a Windows code page
+    path.write_bytes(
+        record_text(detection).replace("D7-017", "próbka").encode("cp1250")
+    )
+    with pytest.warns(UnreadableRecordWarning, match="treated as missing"):
+        assert read_record(path, DetectionRecord) is None
+
+
+def test_folder_in_place_of_record_is_none_and_warns(tmp_path: Path) -> None:
+    path = tmp_path / "D7-017" / "particles_hct_record.yml"
+    path.mkdir(parents=True)
+    with pytest.warns(UnreadableRecordWarning, match="treated as missing"):
+        assert read_record(path, DetectionRecord) is None

@@ -253,13 +253,13 @@ def read_record(path: Path, kind: type[R]) -> R | None:
     """
     try:
         text = path.read_text(encoding="utf-8-sig")
-    except FileNotFoundError:
-        return None
-    try:
         data = _yaml.loads(text, path.name)
         return cast(R, _parse(data, kind))
+    except FileNotFoundError:
+        return None
     except (FileFormatError, _UnreadableError) as exc:
         reason = str(exc)
+    # another encoding, a lock, a folder of that name
     except (OSError, UnicodeDecodeError) as exc:
         reason = f"{type(exc).__name__}: {exc}"
     warnings.warn(
