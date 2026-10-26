@@ -19,7 +19,7 @@ from agglpy.errors import (
     ParamsError,
     ParticleTableError,
 )
-from agglpy.io import read_particles, write_particles
+from agglpy.io import particle_format, read_particles, write_particles
 from agglpy.tables import PARTICLE_COLUMNS, make_particles
 
 from support.paths import DATA_DIR
@@ -80,6 +80,33 @@ def test_each_format_is_recognised_and_converted(
     assert list(table.columns) == list(PARTICLE_COLUMNS)
     assert tuple(table.iloc[0]) == expected
     assert table["id"].dtype == np.int64
+
+
+@pytest.mark.parametrize(
+    ("lines", "expected"),
+    [
+        (AGGLPY, "agglpy"),
+        (IMAGEJ, "imagej"),
+        (V04, "agglpy_v04"),
+        (V00, "agglpy_v00"),
+    ],
+)
+def test_particle_format_names_what_read_particles_uses(
+    tmp_path: Path, lines: tuple[str, str], expected: str
+) -> None:
+    path = write_csv(tmp_path / "p.csv", list(lines), bom=True)
+    assert particle_format(path) == expected
+
+
+def test_particle_format_unknown_header(tmp_path: Path) -> None:
+    path = write_csv(tmp_path / "p.csv", ["a,b", "1,2"])
+    with pytest.raises(FileFormatError, match="matches none"):
+        particle_format(path)
+
+
+def test_particle_format_missing_file(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError):
+        particle_format(tmp_path / "missing.csv")
 
 
 @pytest.mark.parametrize(
