@@ -22,6 +22,7 @@ from agglpy.errors import (
     NonCircularParticlesWarning,
     OutputExistsError,
     ParamsError,
+    UnreadableRecordWarning,
 )
 from agglpy.io import read_particles
 from agglpy.tables import make_particles
@@ -84,7 +85,7 @@ def test_import_writes_corrected_csv_and_record(
     rec = read_record(corrected_record(particles_col), CorrectionRecord)
     assert rec is not None
     assert rec.source.format == "imagej"
-    assert rec.source.path == str(fiji_csv)
+    assert rec.source.path == fiji_csv.resolve().as_posix()
     assert rec.source.sha256 == sha256(fiji_csv)
     assert rec.image.file == "../images/D7-017.tif"
     assert rec.particles.sha256 == sha256(corrected(particles_col))
@@ -123,7 +124,8 @@ def test_reimport_replaces_and_says_what(
     rep = particles_col.import_particles("D7-017", fiji_csv)
     assert rep["outcome"].tolist() == ["replaced"]
     assert rep["message"][0] == (
-        f"replaced correction from {fiji_csv} (2 particles, imported "
+        f"replaced correction from {fiji_csv.resolve().as_posix()} (2 "
+        "particles, imported "
         f"{date.today().isoformat()})"
     )
 
@@ -229,3 +231,27 @@ def test_old_fitting_csv_reads_as_imagej(
     rec = read_record(corrected_record(particles_col), CorrectionRecord)
     assert rec is not None
     assert rec.source.format == "imagej"
+
+
+def test_relative_source_is_stored_absolute(
+    particles_col: Collection,
+    fiji_csv: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(fiji_csv.parent.parent)
+    particles_col.import_particles("D7-017", Path("fiji") / fiji_csv.name)
+    rec = read_record(corrected_record(particles_col), CorrectionRecord)
+    assert rec is not None
+    assert rec.source.path == fiji_csv.resolve().as_posix()
+
+
+def test_replaced_record_keeps_only_its_own_warnings(
+    particles_col: Collection, fiji_csv: Path
+) -> None:
+    particles_col.import_particles("D7-017", fiji_csv)
+    corrected_record(particles_col).write_text("format: [", encoding="utf-8")
+    with pytest.warns(UnreadableRecordWarning):
+        particles_col.import_particles("D7-017", fiji_csv, force=True)
+    rec = read_record(corrected_record(particles_col), CorrectionRecord)
+    assert rec is not None
+    assert rec.warnings == ()

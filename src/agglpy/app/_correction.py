@@ -102,7 +102,10 @@ def run_import(
         warnings.simplefilter("always")
         resolved = particle_format(path) if format == "auto" else format
         table = read_particles(path, format=format)
-        source = SourceInfo(str(path), resolved, sha256(path))
+        # absolute and with "/": the notebook's working folder and the OS
+        # mean nothing to whoever reads the record later
+        source = SourceInfo(path.resolve().as_posix(), resolved, sha256(path))
+        read_end = len(caught)
         work = image_folder(folder, name)
         outcome, message = "imported", ""
         old = inspect(
@@ -122,6 +125,8 @@ def run_import(
                     f"{old.record.created[:10]})"
                 )
         started = _started_from(work, table)
+        # warnings about the files already there belong to their records
+        others_end = len(caught)
         if started is not None and not based_on_detection(started):
             warnings.warn(
                 f"correction keeps only {started.kept} of "
@@ -136,7 +141,8 @@ def run_import(
             if image_path.is_file()
             else missing_image(entry.file)
         )
-        texts = tuple(warning_text(w) for w in caught)
+        own = caught[:read_end] + caught[others_end:]
+        texts = tuple(warning_text(w) for w in own)
         work.mkdir(parents=True, exist_ok=True)
         csv = work / CORRECTED_CSV
         replace_file(
