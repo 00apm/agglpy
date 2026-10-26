@@ -19,6 +19,7 @@ from agglpy.errors import (
     SheetError,
     TableError,
     UnmatchedPathsWarning,
+    UnreadableRecordWarning,
     ValuesNotCountedWarning,
 )
 
@@ -66,6 +67,7 @@ def test_particle_table_error_is_a_table_error() -> None:
         NonCircularParticlesWarning,
         ParticlesOutsideRegionWarning,
         UnmatchedPathsWarning,
+        UnreadableRecordWarning,
     ],
 )
 def test_warnings_are_user_warnings(warning: type[Warning]) -> None:

@@ -185,3 +185,10 @@ class UnmatchedPathsWarning(UserWarning):
 
     Their columns were left empty.
     """
+
+
+class UnreadableRecordWarning(UserWarning):
+    """Warns that a particle record could not be read.
+
+    agglpy treats it as missing.
+    """
