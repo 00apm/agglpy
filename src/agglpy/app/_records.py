@@ -30,6 +30,7 @@ __all__ = [
     "ParticlesInfo",
     "SourceInfo",
     "StartedFrom",
+    "csv_sha256",
     "image_info",
     "missing_image",
     "nanometres",
@@ -138,6 +139,16 @@ def sha256(path: Path) -> str:
     """The SHA-256 of a file's bytes, as hex."""
     with path.open("rb") as fh:
         return hashlib.file_digest(fh, "sha256").hexdigest()
+
+
+def csv_sha256(path: Path) -> str:
+    """The SHA-256 of a particle CSV, the same for LF and CRLF lines.
+
+    Git on Windows checks text files out with CRLF line endings; the
+    particles are the same, so the file still matches its record.
+    """
+    data = path.read_bytes().replace(b"\r\n", b"\n")
+    return hashlib.sha256(data).hexdigest()
 
 
 def image_info(stored: str, path: Path) -> ImageInfo:

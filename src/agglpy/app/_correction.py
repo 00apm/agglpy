@@ -14,6 +14,7 @@ from agglpy.app._records import (
     ParticlesInfo,
     SourceInfo,
     StartedFrom,
+    csv_sha256,
     image_info,
     missing_image,
     now,
@@ -157,7 +158,7 @@ def run_import(
                 dependencies=dependencies,
                 image=image,
                 particles=ParticlesInfo(
-                    CORRECTED_CSV, len(table), sha256(csv)
+                    CORRECTED_CSV, len(table), csv_sha256(csv)
                 ),
                 warnings=texts,
                 source=source,

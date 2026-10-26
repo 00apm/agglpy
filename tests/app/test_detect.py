@@ -569,3 +569,16 @@ def test_warnings_as_errors_raise_after_the_batch(
     for name in NAMES:
         assert csv(particles_col, name).is_file()
         assert record_path(particles_col, name).is_file()
+
+
+def test_csv_with_crlf_line_endings_still_matches(
+    particles_col: Collection,
+) -> None:
+    # git on Windows checks text files out with CRLF line endings
+    particles_col.detect(progress=False)
+    for name in NAMES:
+        path = csv(particles_col, name)
+        path.write_bytes(path.read_bytes().replace(b"\n", b"\r\n"))
+    rep = particles_col.detect(progress=False)
+    assert rep["message"].tolist() == ["up to date"] * 3
+    assert particles_col.status()["detection"].tolist() == ["up to date"] * 3

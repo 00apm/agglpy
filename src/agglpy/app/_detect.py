@@ -13,10 +13,10 @@ from agglpy.app._files import replace_file
 from agglpy.app._records import (
     DetectionRecord,
     ParticlesInfo,
+    csv_sha256,
     image_info,
     now,
     same_image,
-    sha256,
     versions,
     write_record,
 )
@@ -235,7 +235,7 @@ def _detect(
             dependencies=dependencies,
             image=info,
             params=params,
-            particles=ParticlesInfo(HCT_CSV, len(table), sha256(csv)),
+            particles=ParticlesInfo(HCT_CSV, len(table), csv_sha256(csv)),
             warnings=tuple(warning_text(w) for w in caught[start:]),
         ),
     )

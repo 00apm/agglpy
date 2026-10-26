@@ -10,8 +10,8 @@ import pandas as pd
 from agglpy.app._records import (
     CorrectionRecord,
     DetectionRecord,
+    csv_sha256,
     read_record,
-    sha256,
 )
 from agglpy.errors import FileFormatError
 from agglpy.io import read_particles
@@ -76,7 +76,7 @@ def inspect(
     """
     if not csv.is_file():
         return None
-    digest = sha256(csv)
+    digest = csv_sha256(csv)
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
