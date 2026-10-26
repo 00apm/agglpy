@@ -11,6 +11,7 @@ import pandas as pd
 
 from agglpy.app._config import ImageParams, template
 from agglpy.app._config_file import CONFIG_NAME, ConfigFile
+from agglpy.app._detect import run as run_detect
 from agglpy.app._files import replace_file
 from agglpy.app._sheet import (
     _NUMERIC_TEXT,
@@ -31,12 +32,11 @@ from agglpy.app._sources import (
     resolve_stored,
     stored_path,
 )
+from agglpy.app._work import WORK_FOLDER
 from agglpy.errors import OutputExistsError, ParamsError, SheetError
 from agglpy.params import HCTParams, PreprocessParams, RegionParams
 
 __all__ = ["Collection"]
-
-WORK_FOLDER = "agglpy"
 
 _FORMATS = ("xlsx", "csv")
 
@@ -360,6 +360,57 @@ class Collection:
             _known(sheet, image)
         config.reset(image, key)
         self._write_config(sheet, config)
+
+    # -----------------------------------------------------------------
+    # Particles
+    # -----------------------------------------------------------------
+
+    def detect(
+        self,
+        images: str | Sequence[str] | None = None,
+        *,
+        force: bool = False,
+        progress: bool = True,
+    ) -> pd.DataFrame:
+        """Detect particles (HCT) on the images, one after another.
+
+        Writes ``agglpy/<name>/particles_hct.csv`` and its record per
+        image. ``images`` is a name or a list of names (also images
+        with ``include`` false); None takes every included image. An
+        image is skipped while its record matches its params and image
+        file; ``force=True`` detects it again. A
+        ``particles_hct.csv`` changed by a person is kept unless
+        ``force=True``. ``particles_corrected.csv`` is never touched.
+
+        Outcomes: ``detected``, ``replaced`` (a person's file),
+        ``skipped``, ``kept`` (a person's file) and ``error`` (the
+        image is left as it was; the other images go on).
+
+        Returns:
+            One row per image in sheet order: ``image``, ``outcome``,
+            ``particle_count`` (when written), ``message``,
+            ``warnings``.
+
+        Raises:
+            ParamsError: If a name is not in the sheet or
+                ``agglpy.yml`` has problems; nothing runs.
+        """
+        sheet, config = self._read(check=True)
+        wanted = [images] if isinstance(images, str) else images
+        if wanted is None:
+            names = [e.image for e in sheet.entries if e.include]
+        else:
+            unknown = [
+                n for n in dict.fromkeys(wanted) if n not in sheet.names
+            ]
+            if unknown:
+                listed = ", ".join(repr(n) for n in unknown)
+                raise ParamsError(f"no image {listed} in {sheet.path.name}")
+            names = [n for n in sheet.names if n in set(wanted)]
+        table, _ = run_detect(
+            self._folder, sheet, config, names, force=force, progress=progress
+        )
+        return table
 
     # -----------------------------------------------------------------
     # Files
