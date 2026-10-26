@@ -213,3 +213,10 @@ class LeftoverFoldersWarning(UserWarning):
 
     They are never moved or deleted.
     """
+
+
+class NoParticleSetError(AgglpyError, FileNotFoundError):
+    """Raised when an image has no particles yet.
+
+    Neither a detection nor an imported correction.
+    """

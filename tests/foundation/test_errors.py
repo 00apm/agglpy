@@ -12,6 +12,7 @@ from agglpy.errors import (
     LossyImageWarning,
     MissingImagesWarning,
     NonCircularParticlesWarning,
+    NoParticleSetError,
     NoParticlesWarning,
     OutputExistsError,
     OutputLockedError,
@@ -90,6 +91,7 @@ def test_image_error_is_not_a_table_error() -> None:
     [
         (OutputExistsError, FileExistsError),
         (OutputLockedError, PermissionError),
+        (NoParticleSetError, FileNotFoundError),
     ],
 )
 def test_output_errors_are_agglpy_and_os_errors(

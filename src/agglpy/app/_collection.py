@@ -15,6 +15,7 @@ from agglpy.app._config_file import CONFIG_NAME, ConfigFile
 from agglpy.app._correction import run_import
 from agglpy.app._detect import run as run_detect
 from agglpy.app._files import replace_file
+from agglpy.app._image import Image
 from agglpy.app._report import reemit
 from agglpy.app._sheet import (
     _NUMERIC_TEXT,
@@ -158,6 +159,17 @@ class Collection:
     def sheet_path(self) -> Path:
         """The image sheet: ``images.xlsx`` or ``images.csv``."""
         return find_sheet(self._folder)
+
+    def __getitem__(self, name: str) -> Image:
+        """A handle on image ``name``; it reads the files on access.
+
+        Raises:
+            KeyError: If ``name`` is not in the sheet.
+        """
+        sheet = validate(read_grid(self.sheet_path))
+        if name not in sheet.names:
+            raise KeyError(name)
+        return Image(self, name)
 
     def __repr__(self) -> str:
         shown = self._folder.as_posix()
