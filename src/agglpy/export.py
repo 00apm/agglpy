@@ -130,9 +130,7 @@ def write_results(
             "exported": datetime.now()
             .astimezone()
             .isoformat(timespec="seconds"),
-            "versions": {
-                key: _version(names) for key, names in _VERSIONS.items()
-            },
+            "versions": _dependency_versions(),
             "tables": [
                 {
                     "name": name,
@@ -269,6 +267,11 @@ def _info(record: Mapping[str, Any]) -> pd.DataFrame:
 
     walk(record, "")
     return pd.DataFrame(rows, columns=["key", "value"])
+
+
+def _dependency_versions() -> dict[str, str | None]:
+    """The installed version of each dependency in ``_VERSIONS``."""
+    return {key: _version(names) for key, names in _VERSIONS.items()}
 
 
 def _version(names: tuple[str, ...]) -> str | None:
