@@ -221,12 +221,13 @@ def _warn_leftovers(folder: Path, sheet: Sheet) -> None:
     work = folder / WORK_FOLDER
     if not work.is_dir():
         return
-    # ignoring case, as Windows does: agglpy/d7-017/ is D7-017's folder
-    owned = {_fold(name) for name in sheet.names}
+    by_fold: dict[str, list[str]] = {}
+    for name in sheet.names:
+        by_fold.setdefault(_fold(name), []).append(name)
     by_file = {e.file: e.image for e in sheet.entries}
     listed = []
     for path in sorted(work.iterdir()):
-        if not path.is_dir() or _fold(path.name) in owned:
+        if not path.is_dir() or _owned(folder, path, by_fold):
             continue
         listed.append(path.name + _hint(path, by_file))
     if listed:
@@ -236,6 +237,20 @@ def _warn_leftovers(folder: Path, sheet: Sheet) -> None:
             LeftoverFoldersWarning,
             stacklevel=2,
         )
+
+
+def _owned(folder: Path, path: Path, by_fold: dict[str, list[str]]) -> bool:
+    """Whether ``path`` is the folder agglpy opens for a sheet image.
+
+    Decided by the file system: on Windows and macOS ``agglpy/d7-017/``
+    is the folder of ``D7-017``; on Linux it is another folder, never
+    read, so it is listed.
+    """
+    for name in by_fold.get(_fold(path.name), []):
+        own = image_folder(folder, name)
+        if path.name == name or (own.is_dir() and own.samefile(path)):
+            return True
+    return False
 
 
 def _hint(path: Path, by_file: dict[str, str]) -> str:

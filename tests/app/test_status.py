@@ -398,3 +398,16 @@ def test_folder_differing_in_case_is_not_leftover(
     if (agglpy / "D7-017").exists():  # a case-insensitive file system
         assert r["particle_set"] == "hct"
         assert r["detection"] == "up to date"
+
+
+def test_folder_differing_in_unicode_form_is_leftover(tmp_path: Path) -> None:
+    # NTFS keeps "ó" as one character and as "o" + accent apart, as a
+    # case-sensitive file system keeps "d7-017" and "D7-017" apart
+    write_disc_image(tmp_path / "images" / "pr\u00f3bka.tif", OTHER_DISCS)
+    col = Collection.create(tmp_path / "col", images=tmp_path / "images")
+    other = col.folder / "agglpy" / "pro\u0301bka"
+    other.mkdir()
+    if (col.folder / "agglpy" / "pr\u00f3bka").exists():
+        pytest.skip("this file system joins the two forms")
+    with pytest.warns(LeftoverFoldersWarning, match="pro\u0301bka"):
+        col.status()
