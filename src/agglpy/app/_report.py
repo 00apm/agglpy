@@ -5,7 +5,7 @@ from collections.abc import Iterable, Mapping, Sequence
 
 import pandas as pd
 
-__all__ = ["REPORT_COLUMNS", "class_names", "report", "warning_text"]
+__all__ = ["REPORT_COLUMNS", "class_names", "reemit", "report", "warning_text"]
 
 REPORT_COLUMNS = ("image", "outcome", "particle_count", "message", "warnings")
 
@@ -33,3 +33,13 @@ def class_names(texts: Iterable[str]) -> str:
     """The classes of record warning texts, once each, in order."""
     names = dict.fromkeys(text.split(":", 1)[0] for text in texts)
     return ", ".join(names)
+
+
+def reemit(caught: Iterable[warnings.WarningMessage], stacklevel: int) -> None:
+    """Warn the caught warnings again, as they are.
+
+    ``stacklevel`` counts from this function: 3 points at the line
+    that called the public method calling ``reemit``.
+    """
+    for w in caught:
+        warnings.warn(w.message, w.category, stacklevel=stacklevel)

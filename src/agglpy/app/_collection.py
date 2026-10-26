@@ -12,8 +12,10 @@ import pandas as pd
 
 from agglpy.app._config import ImageParams, template
 from agglpy.app._config_file import CONFIG_NAME, ConfigFile
+from agglpy.app._correction import run_import
 from agglpy.app._detect import run as run_detect
 from agglpy.app._files import replace_file
+from agglpy.app._report import reemit
 from agglpy.app._sheet import (
     _NUMERIC_TEXT,
     FIXED_COLUMNS,
@@ -422,6 +424,50 @@ class Collection:
         # only once the batch is done
         for cls, message in summaries:
             warnings.warn(message, cls, stacklevel=2)
+        return table
+
+    def import_particles(
+        self,
+        name: str,
+        path: PathLike,
+        *,
+        format: str = "auto",
+        force: bool = False,
+    ) -> pd.DataFrame:
+        """Import a corrected particle file for image ``name``.
+
+        Reads ``path`` (an ImageJ / Fiji ROI CSV, an agglpy file or an
+        older agglpy file; ``format`` as in ``agglpy.io.read_particles``)
+        and writes it as ``agglpy/<name>/particles_corrected.csv`` with
+        its record; from then on the image uses it. The source file is
+        only read. The record names the source and the detection the
+        correction started from, with how many detected circles it
+        kept. Works without the image file and without a detection.
+
+        Returns:
+            A one-row table like ``detect``'s; ``outcome`` is
+            ``imported`` or ``replaced``.
+
+        Raises:
+            ParamsError: If ``name`` is not in the sheet.
+            FileNotFoundError: If ``path`` doesn't exist.
+            FileFormatError: If ``path`` is not a particle file.
+            OutputExistsError: If ``particles_corrected.csv`` was
+                changed by a person and ``force`` is False; nothing is
+                written.
+
+        Warns:
+            UserWarning: If the correction keeps less than half of the
+                detected circles: it is then shown as not based on the
+                detection.
+        """
+        sheet, _ = self._read()
+        _known(sheet, name)
+        entry = next(e for e in sheet.entries if e.image == name)
+        table, caught = run_import(
+            self._folder, entry, Path(path), format=format, force=force
+        )
+        reemit(caught, stacklevel=3)
         return table
 
     # -----------------------------------------------------------------
