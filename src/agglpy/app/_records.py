@@ -57,6 +57,7 @@ class ImageInfo:
     sha256: str | None
     size: int | None
     modified: int | None  # st_mtime_ns
+    file_id: int | None  # st_ino: stays with the file on a rename
     width: int | None
     height: int | None
     pixel_size_nm: float | None
@@ -167,6 +168,7 @@ def image_info(stored: str, path: Path) -> ImageInfo:
         sha256=sha256(path),
         size=stat.st_size,
         modified=stat.st_mtime_ns,
+        file_id=stat.st_ino,
         width=meta.width,
         height=meta.height,
         pixel_size_nm=nanometres(meta.pixel_size),
@@ -184,17 +186,22 @@ def nanometres(metres: float | None) -> float | None:
 
 def missing_image(stored: str) -> ImageInfo:
     """The image facts of an image that was missing: only the path."""
-    return ImageInfo(stored, None, None, None, None, None, None)
+    return ImageInfo(stored, None, None, None, None, None, None, None)
 
 
 def same_image(info: ImageInfo, path: Path) -> bool:
     """Whether the file at ``path`` is the image ``info`` describes.
 
-    Equal size and time are trusted without hashing; otherwise (a copy
-    or a clone sets new times) the bytes are hashed again.
+    The same file (its id survives a rename) with equal size and time
+    is trusted without hashing; otherwise (a copy, a clone, files
+    swapped by renaming) the bytes are hashed again.
     """
     stat = path.stat()
-    if stat.st_size == info.size and stat.st_mtime_ns == info.modified:
+    if (
+        stat.st_size == info.size
+        and stat.st_mtime_ns == info.modified
+        and stat.st_ino == info.file_id
+    ):
         return True
     return info.sha256 is not None and sha256(path) == info.sha256
 
@@ -337,6 +344,7 @@ def _image(data: Mapping[str, Any]) -> ImageInfo:
         sha256=_str(data, "sha256", "image", optional=True),
         size=_int(data, "size", "image", optional=True),
         modified=_int(data, "modified", "image", optional=True),
+        file_id=_int(data, "file_id", "image", optional=True),
         width=_int(data, "width", "image", optional=True),
         height=_int(data, "height", "image", optional=True),
         pixel_size_nm=_float(data, "pixel_size_nm", "image"),

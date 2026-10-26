@@ -411,3 +411,26 @@ def test_folder_differing_in_unicode_form_is_leftover(tmp_path: Path) -> None:
         pytest.skip("this file system joins the two forms")
     with pytest.warns(LeftoverFoldersWarning, match="pro\u0301bka"):
         col.status()
+
+
+def test_swapped_images_of_same_size_and_time_are_changed(
+    particles_col: Collection,
+) -> None:
+    # unpacked from one archive: same size, same time; then two files
+    # are swapped by renaming, as when fixing a mislabel
+    paths = [image(particles_col, n) for n in NAMES]
+    stamp = paths[0].stat().st_mtime_ns
+    for p in paths:
+        os.utime(p, ns=(stamp, stamp))
+    particles_col.detect(progress=False)
+    a, b = paths[0], paths[1]
+    a.rename(a.with_name("swap.tif"))
+    b.rename(a)
+    a.with_name("swap.tif").rename(b)
+    assert particles_col.status()["detection"].tolist() == [
+        "image changed",
+        "image changed",
+        "up to date",
+    ]
+    rep = particles_col.detect(progress=False)
+    assert rep["outcome"].tolist() == ["detected", "detected", "skipped"]

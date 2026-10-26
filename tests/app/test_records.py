@@ -42,6 +42,7 @@ IMAGE = ImageInfo(
     sha256="9c" * 32,
     size=10485760,
     modified=1727683872123456789,
+    file_id=281474976710656123,
     width=1024,
     height=943,
     pixel_size_nm=2.31,
@@ -191,6 +192,7 @@ def test_image_info_reads_size_hash_and_pixel_size(tmp_path: Path) -> None:
     assert (info.width, info.height) == (64, 48)
     assert info.size == path.stat().st_size
     assert info.modified == path.stat().st_mtime_ns
+    assert info.file_id == path.stat().st_ino
     assert info.sha256 == hashlib.sha256(path.read_bytes()).hexdigest()
     assert info.pixel_size_nm == pytest.approx(16.0)
 
@@ -198,7 +200,7 @@ def test_image_info_reads_size_hash_and_pixel_size(tmp_path: Path) -> None:
 def test_missing_image_keeps_only_the_stored_path() -> None:
     info = missing_image("images/a.tif")
     assert info == ImageInfo(
-        "images/a.tif", None, None, None, None, None, None
+        "images/a.tif", None, None, None, None, None, None, None
     )
 
 
