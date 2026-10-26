@@ -206,3 +206,10 @@ class IncompleteRunWarning(UserWarning):
 
     The returned table says which and why.
     """
+
+
+class LeftoverFoldersWarning(UserWarning):
+    """Warns that agglpy/ holds folders of images the sheet no longer lists.
+
+    They are never moved or deleted.
+    """

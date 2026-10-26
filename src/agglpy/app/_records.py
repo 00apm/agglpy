@@ -32,6 +32,7 @@ __all__ = [
     "StartedFrom",
     "image_info",
     "missing_image",
+    "nanometres",
     "now",
     "read_record",
     "record_text",
@@ -150,11 +151,6 @@ def image_info(stored: str, path: Path) -> ImageInfo:
     """
     meta = read_image_metadata(path)
     stat = path.stat()
-    nm = None
-    if meta.pixel_size is not None:
-        # 12 digits: drops the float noise of m -> nm, far below any
-        # calibration
-        nm = float(f"{meta.pixel_size * 1e9:.12g}")
     return ImageInfo(
         file=stored,
         sha256=sha256(path),
@@ -162,8 +158,17 @@ def image_info(stored: str, path: Path) -> ImageInfo:
         modified=stat.st_mtime_ns,
         width=meta.width,
         height=meta.height,
-        pixel_size_nm=nm,
+        pixel_size_nm=nanometres(meta.pixel_size),
     )
+
+
+def nanometres(metres: float | None) -> float | None:
+    """A pixel size in m as nm; None stays None.
+
+    Rounded to 12 digits: drops the float noise of the conversion, far
+    below any calibration.
+    """
+    return None if metres is None else float(f"{metres * 1e9:.12g}")
 
 
 def missing_image(stored: str) -> ImageInfo:

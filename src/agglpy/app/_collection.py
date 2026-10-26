@@ -35,6 +35,7 @@ from agglpy.app._sources import (
     resolve_stored,
     stored_path,
 )
+from agglpy.app._status import table as status_table
 from agglpy.app._work import WORK_FOLDER
 from agglpy.errors import OutputExistsError, ParamsError, SheetError
 from agglpy.params import HCTParams, PreprocessParams, RegionParams
@@ -467,6 +468,43 @@ class Collection:
         table, caught = run_import(
             self._folder, entry, Path(path), format=format, force=force
         )
+        reemit(caught, stacklevel=3)
+        return table
+
+    def status(self) -> pd.DataFrame:
+        """Where each image's particles come from, from the files now.
+
+        Writes nothing. Images are hashed again only when their size or
+        time differs from the record; particle files always.
+
+        Returns:
+            One row per sheet image, in sheet order: ``image``,
+            ``include``, ``file`` (``ok`` / ``missing`` /
+            ``unreadable``), ``pixel_size_nm`` and
+            ``pixel_size_source`` (the sheet, ``image file`` or
+            ``none``), ``particle_set`` (``corrected`` / ``hct`` /
+            ``none``), ``particle_count``, ``outside_image`` (circles
+            entirely outside the image), ``detection`` (``not set``,
+            ``not detected``, ``up to date``, ``params changed``,
+            ``image changed``, ``edited by hand``, ``no record``,
+            ``unreadable``), ``correction`` (empty, ``current
+            detection``, ``older detection``, ``not from detection``,
+            ``edited by hand``, ``no record``, ``unreadable``),
+            ``kept`` and ``warnings`` (of the set in use).
+
+        Raises:
+            ParamsError: If ``agglpy.yml`` has problems.
+
+        Warns:
+            LeftoverFoldersWarning: If ``agglpy/`` holds folders of
+                images the sheet does not list.
+            UnreadableRecordWarning: For each record that does not
+                read; it counts as missing.
+        """
+        sheet, config = self._read(check=True)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            table = status_table(self._folder, sheet, config)
         reemit(caught, stacklevel=3)
         return table
 
