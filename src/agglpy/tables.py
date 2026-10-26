@@ -160,11 +160,17 @@ def _duplicates_message(pairs: list[tuple[int, int]]) -> str:
     )
 
 
+# Shared with the matching of a correction to the detection it started
+# from: a circle counts as kept under the same tolerances.
+_DUPLICATE_XY_TOL = 2.0
+_DUPLICATE_R_REL_TOL = 0.1
+
+
 def find_duplicates(
     table: pd.DataFrame,
     *,
-    xy_tol: float = 2.0,
-    r_rel_tol: float = 0.1,
+    xy_tol: float = _DUPLICATE_XY_TOL,
+    r_rel_tol: float = _DUPLICATE_R_REL_TOL,
 ) -> list[tuple[int, int]]:
     """Find pairs of near-identical circles.
 
