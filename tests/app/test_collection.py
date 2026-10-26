@@ -9,6 +9,7 @@ import pytest
 
 import agglpy
 from agglpy.app import Collection
+from agglpy.app import _collection as collection_module
 from agglpy.app._config import NEUTRAL, template
 from agglpy.app._sources import resolve_stored
 from agglpy.errors import (
@@ -165,6 +166,51 @@ def test_create_bad_name_writes_nothing(tmp_path: Path) -> None:
     with pytest.raises(SheetError, match="device name"):
         Collection.create(tmp_path / "col", images=raw)
     assert not (tmp_path / "col" / "images.xlsx").exists()
+
+
+def _fail(path: Path, write: object) -> None:
+    raise OSError("disk full")
+
+
+def test_create_rolls_back_when_yml_write_fails(
+    tmp_path: Path, raw: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # replace_file in _collection writes only agglpy.yml; the sheet is
+    # written before it
+    monkeypatch.setattr(collection_module, "replace_file", _fail)
+    with pytest.raises(OSError, match="disk full"):
+        Collection.create(tmp_path / "col", images=raw)
+    assert not (tmp_path / "col").exists()
+    monkeypatch.undo()
+    Collection.create(tmp_path / "col", images=raw)
+
+
+def test_create_rollback_keeps_what_was_there(
+    tmp_path: Path, raw: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    folder = tmp_path / "col"
+    folder.mkdir()
+    (folder / "notes.txt").write_text("mine")
+    monkeypatch.setattr(collection_module, "replace_file", _fail)
+    with pytest.raises(OSError):
+        Collection.create(folder, images=raw)
+    assert sorted(p.name for p in folder.iterdir()) == ["notes.txt"]
+
+
+def test_create_rolls_back_when_work_folder_fails(
+    tmp_path: Path, raw: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real = collection_module.new_sheet
+
+    # a file named agglpy makes the later mkdir of agglpy/ fail
+    def new_sheet(path: Path, *args: object) -> None:
+        real(path, *args)
+        (path.parent / "agglpy").write_text("in the way")
+
+    monkeypatch.setattr(collection_module, "new_sheet", new_sheet)
+    with pytest.raises(FileExistsError):
+        Collection.create(tmp_path / "col", images=raw)
+    assert sorted(p.name for p in (tmp_path / "col").iterdir()) == ["agglpy"]
 
 
 def test_source_images_untouched(tmp_path: Path, raw: Path) -> None:

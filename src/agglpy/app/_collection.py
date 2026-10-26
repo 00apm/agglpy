@@ -1,5 +1,6 @@
 """``Collection``: a folder of what to analyse and how."""
 
+import contextlib
 import os
 import unicodedata
 from collections.abc import Mapping, Sequence
@@ -76,7 +77,8 @@ class Collection:
         Writes the sheet (one row per image), ``agglpy.yml`` (the
         template) and the empty folder ``agglpy/``. ``images``,
         ``pattern`` and ``columns_from_path`` work as in
-        ``add_images``.
+        ``add_images``. A write that fails removes what this call
+        wrote and re-raises the error.
 
         Raises:
             OutputExistsError: If ``folder`` already holds a sheet or
@@ -109,13 +111,24 @@ class Collection:
             columns_from_path,
         )
         validate(Grid(sheet_path, header, _numbered(rows)))
-        col.folder.mkdir(parents=True, exist_ok=True)
-        new_sheet(sheet_path, header, rows)
-        replace_file(
-            col.folder / CONFIG_NAME,
-            lambda tmp: tmp.write_bytes(template().encode()),
-        )
-        (col.folder / WORK_FOLDER).mkdir(exist_ok=True)
+        config_path = col.folder / CONFIG_NAME
+        made_folder = not col.folder.exists()
+        try:
+            col.folder.mkdir(parents=True, exist_ok=True)
+            new_sheet(sheet_path, header, rows)
+            replace_file(
+                config_path,
+                lambda tmp: tmp.write_bytes(template().encode()),
+            )
+            (col.folder / WORK_FOLDER).mkdir(exist_ok=True)
+        except BaseException:
+            # both files were checked absent above, so they are ours
+            sheet_path.unlink(missing_ok=True)
+            config_path.unlink(missing_ok=True)
+            if made_folder and col.folder.is_dir():
+                with contextlib.suppress(OSError):
+                    col.folder.rmdir()  # only if empty
+            raise
         return col
 
     @classmethod
