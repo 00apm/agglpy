@@ -3,6 +3,7 @@
 import contextlib
 import os
 import unicodedata
+import warnings
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Literal
@@ -11,7 +12,11 @@ import pandas as pd
 
 from agglpy.app._config import ImageParams, template
 from agglpy.app._config_file import CONFIG_NAME, ConfigFile
+from agglpy.app._correction import run_import
+from agglpy.app._detect import run as run_detect
 from agglpy.app._files import replace_file
+from agglpy.app._image import Image
+from agglpy.app._report import reemit
 from agglpy.app._sheet import (
     _NUMERIC_TEXT,
     FIXED_COLUMNS,
@@ -31,12 +36,12 @@ from agglpy.app._sources import (
     resolve_stored,
     stored_path,
 )
+from agglpy.app._status import table as status_table
+from agglpy.app._work import WORK_FOLDER
 from agglpy.errors import OutputExistsError, ParamsError, SheetError
 from agglpy.params import HCTParams, PreprocessParams, RegionParams
 
 __all__ = ["Collection"]
-
-WORK_FOLDER = "agglpy"
 
 _FORMATS = ("xlsx", "csv")
 
@@ -154,6 +159,17 @@ class Collection:
     def sheet_path(self) -> Path:
         """The image sheet: ``images.xlsx`` or ``images.csv``."""
         return find_sheet(self._folder)
+
+    def __getitem__(self, name: str) -> Image:
+        """A handle on image ``name``; it reads the files on access.
+
+        Raises:
+            KeyError: If ``name`` is not in the sheet.
+        """
+        sheet = validate(read_grid(self.sheet_path))
+        if name not in sheet.names:
+            raise KeyError(name)
+        return Image(self, name)
 
     def __repr__(self) -> str:
         shown = self._folder.as_posix()
@@ -360,6 +376,149 @@ class Collection:
             _known(sheet, image)
         config.reset(image, key)
         self._write_config(sheet, config)
+
+    # -----------------------------------------------------------------
+    # Particles
+    # -----------------------------------------------------------------
+
+    def detect(
+        self,
+        images: str | Sequence[str] | None = None,
+        *,
+        force: bool = False,
+        progress: bool = True,
+    ) -> pd.DataFrame:
+        """Detect particles (HCT) on the images, one after another.
+
+        Writes ``agglpy/<name>/particles_hct.csv`` and its record per
+        image. ``images`` is a name or a list of names (also images
+        with ``include`` false); None takes every included image. An
+        image is skipped while its record matches its params and image
+        file; ``force=True`` detects it again. A
+        ``particles_hct.csv`` changed by a person is kept unless
+        ``force=True``. ``particles_corrected.csv`` is never touched.
+
+        Outcomes: ``detected``, ``replaced`` (a person's file),
+        ``skipped``, ``kept`` (a person's file) and ``error`` (the
+        image is left as it was; the other images go on). Warnings of
+        each image go into its record and the ``warnings`` column; after
+        the batch, each warning class is raised once, naming the images.
+
+        Returns:
+            One row per image in sheet order: ``image``, ``outcome``,
+            ``particle_count`` (when written), ``message``,
+            ``warnings``.
+
+        Raises:
+            ParamsError: If a name is not in the sheet or
+                ``agglpy.yml`` has problems; nothing runs.
+
+        Warns:
+            IncompleteRunWarning: If an image ended ``kept``, ``error``
+                or ``skipped`` for any reason but ``up to date``.
+            LossyImageWarning: If an image file is JPEG-compressed.
+        """
+        sheet, config = self._read(check=True)
+        wanted = [images] if isinstance(images, str) else images
+        if wanted is None:
+            names = [e.image for e in sheet.entries if e.include]
+        else:
+            unknown = [
+                n for n in dict.fromkeys(wanted) if n not in sheet.names
+            ]
+            if unknown:
+                listed = ", ".join(repr(n) for n in unknown)
+                raise ParamsError(f"no image {listed} in {sheet.path.name}")
+            names = [n for n in sheet.names if n in set(wanted)]
+        table, summaries = run_detect(
+            self._folder, sheet, config, names, force=force, progress=progress
+        )
+        # after every file is written, so a filter set to "error" raises
+        # only once the batch is done
+        for cls, message in summaries:
+            warnings.warn(message, cls, stacklevel=2)
+        return table
+
+    def import_particles(
+        self,
+        name: str,
+        path: PathLike,
+        *,
+        format: str = "auto",
+        force: bool = False,
+    ) -> pd.DataFrame:
+        """Import a corrected particle file for image ``name``.
+
+        Reads ``path`` (an ImageJ / Fiji ROI CSV, an agglpy file or an
+        older agglpy file; ``format`` as in ``agglpy.io.read_particles``)
+        and writes it as ``agglpy/<name>/particles_corrected.csv`` with
+        its record; from then on the image uses it. The source file is
+        only read. The record names the source and the detection the
+        correction started from, with how many detected circles it
+        kept. Works without the image file and without a detection.
+
+        Returns:
+            A one-row table like ``detect``'s; ``outcome`` is
+            ``imported`` or ``replaced``.
+
+        Raises:
+            ParamsError: If ``name`` is not in the sheet.
+            FileNotFoundError: If ``path`` doesn't exist.
+            FileFormatError: If ``path`` is not a particle file.
+            OutputExistsError: If ``particles_corrected.csv`` was
+                changed by a person and ``force`` is False; nothing is
+                written.
+
+        Warns:
+            UserWarning: If the correction keeps less than half of the
+                detected circles: it is then shown as not based on the
+                detection.
+        """
+        sheet, _ = self._read()
+        _known(sheet, name)
+        entry = next(e for e in sheet.entries if e.image == name)
+        table, caught = run_import(
+            self._folder, entry, Path(path), format=format, force=force
+        )
+        reemit(caught, stacklevel=3)
+        return table
+
+    def status(self) -> pd.DataFrame:
+        """Where each image's particles come from, from the files now.
+
+        Writes nothing. Images are hashed again only when their size or
+        time differs from the record; particle files always.
+
+        Returns:
+            One row per sheet image, in sheet order: ``image``,
+            ``include``, ``file`` (``ok`` / ``missing`` /
+            ``unreadable``), ``pixel_size_nm`` and
+            ``pixel_size_source`` (the sheet, ``image file`` or
+            ``none``), ``particle_set`` (``corrected`` / ``hct`` /
+            ``none``), ``particle_count``, ``outside_image`` (circles
+            entirely outside the image), ``detection`` (``not set``,
+            ``not detected``, ``up to date``, ``params changed``,
+            ``image changed``, ``edited by hand``, ``no record``,
+            ``unreadable``), ``correction`` (empty, ``current
+            detection``, ``older detection``, ``not from detection``,
+            ``edited by hand``, ``no record``, ``unreadable``),
+            ``kept`` and ``warnings`` (of the set in use).
+
+        Raises:
+            ParamsError: If ``agglpy.yml`` has problems.
+
+        Warns:
+            LeftoverFoldersWarning: If ``agglpy/`` holds folders of
+                images the sheet does not list.
+            UnreadableRecordWarning: For each record that does not
+                read; it counts as missing.
+        """
+        sheet, config = self._read(check=True)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            table = status_table(self._folder, sheet, config)
+        reemit(caught, stacklevel=3)
+        return table
 
     # -----------------------------------------------------------------
     # Files

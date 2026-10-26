@@ -7,5 +7,6 @@ them again.
 
 from agglpy.app._collection import Collection
 from agglpy.app._config import ImageParams
+from agglpy.app._image import Image
 
-__all__ = ["Collection", "ImageParams"]
+__all__ = ["Collection", "Image", "ImageParams"]

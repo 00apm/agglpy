@@ -1,11 +1,13 @@
 """Particle table: schema, coercion, validation, duplicate warning."""
 
+import inspect
 import warnings
 
 import numpy as np
 import pandas as pd
 import pytest
 
+from agglpy import tables
 from agglpy.errors import (
     DuplicateParticlesWarning,
     ParticleTableError,
@@ -170,3 +172,9 @@ def test_make_particles_bad_input_is_a_table_error(
     # A frontend catching AgglpyError must catch these too.
     with pytest.raises(ParticleTableError):
         make_particles(*args, ids=ids)
+
+
+def test_find_duplicates_defaults_are_the_shared_tolerances() -> None:
+    params = inspect.signature(find_duplicates).parameters
+    assert params["xy_tol"].default == tables._DUPLICATE_XY_TOL == 2.0
+    assert params["r_rel_tol"].default == tables._DUPLICATE_R_REL_TOL == 0.1

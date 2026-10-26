@@ -2,42 +2,34 @@
 
 import warnings
 
-import cv2
 import numpy as np
+import pandas as pd
 import pytest
 
 import agglpy.pipeline._detection as detection
+from agglpy.core.detect import detect_hct
+from agglpy.core.preprocess import preprocess
 from agglpy.core.region import Bounds
 from agglpy.errors import ImageError, NoParticlesWarning
-from agglpy.params import HCTParams, HCTRange, PreprocessParams, RegionParams
+from agglpy.params import (
+    ClaheParams,
+    HCTParams,
+    HCTRange,
+    PreprocessParams,
+    RegionParams,
+    RollingBallParams,
+)
 from agglpy.pipeline import detect_particles
+from agglpy.tables import validate_particles
+
+from support.discs import draw_discs
 
 HCT = HCTParams(ranges=(HCTRange(12, 44),))
 CUT = RegionParams(bottom_fraction=0.25)
 
-# cv2.circle's sub-pixel mode: coordinates and radius in 1/16 px
-SHIFT = 4
-
-
-def _draw(height: int, width: int, discs) -> np.ndarray:
-    """Bright anti-aliased discs (x, y, r in px) on a dark image."""
-    image = np.full((height, width), 20, dtype=np.uint8)
-    for x, y, r in discs:
-        cv2.circle(
-            image,
-            (round(x * 2**SHIFT), round(y * 2**SHIFT)),
-            round(r * 2**SHIFT),
-            200,
-            thickness=-1,
-            lineType=cv2.LINE_AA,
-            shift=SHIFT,
-        )
-    return image
-
-
 # 200 x 160 px; a quarter cut off leaves rows 0..119: the second disc
 # lies on the cut-off bar
-IMAGE = _draw(160, 200, [(60.3, 50.6, 14.2), (150.4, 140.7, 14.2)])
+IMAGE = draw_discs(160, 200, [(60.3, 50.6, 14.2), (150.4, 140.7, 14.2)])
 
 
 def test_bottom_cut_keeps_raw_frame_coordinates_and_drops_the_bar():
@@ -114,3 +106,41 @@ def test_nothing_found_warns_once():
     assert [w.category for w in record] == [NoParticlesWarning]
     assert found.empty
     assert found.columns.tolist() == ["id", "x", "y", "r"]
+
+
+PRE = PreprocessParams(
+    median_blur=3,
+    rolling_ball=RollingBallParams(radius=50),
+    clahe=ClaheParams(2.0, (8, 8)),
+)
+
+
+def test_on_step_names_each_configured_step_in_order():
+    steps = []
+    detect_particles(IMAGE, preprocess=PRE, hct=HCT, on_step=steps.append)
+    assert steps == ["median", "rolling ball", "clahe", "hct"]
+    steps.clear()
+    detect_particles(
+        IMAGE,
+        preprocess=PreprocessParams(clahe=PRE.clahe),
+        hct=HCT,
+        on_step=steps.append,
+    )
+    assert steps == ["clahe", "hct"]
+
+
+def test_step_by_step_gives_the_same_circles():
+    # no region cut: detect_particles shifts by 0, so the core in one
+    # call is the reference
+    reference = validate_particles(
+        detect_hct(preprocess(IMAGE, PRE), HCT), warn_duplicates=False
+    )
+    pd.testing.assert_frame_equal(
+        detect_particles(IMAGE, preprocess=PRE, hct=HCT), reference
+    )
+
+
+def test_input_image_unchanged_without_preprocessing():
+    before = IMAGE.copy()
+    detect_particles(IMAGE, hct=HCT)
+    np.testing.assert_array_equal(IMAGE, before)

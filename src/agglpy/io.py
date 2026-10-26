@@ -403,6 +403,28 @@ def read_particles(path: PathLike, *, format: str = "auto") -> pd.DataFrame:
     return table
 
 
+def particle_format(path: PathLike) -> str:
+    """The format ``read_particles(path)`` recognises in a file.
+
+    Reads only the header. Besides ``"agglpy"`` and ``"imagej"``, the
+    result can be ``"agglpy_v04"`` or ``"agglpy_v00"``: files written
+    by older agglpy versions.
+
+    Raises:
+        FileNotFoundError: If the file doesn't exist.
+        FileFormatError: If no format or more than one matches, or the
+            file is not a UTF-8 CSV table.
+    """
+    path = Path(path)
+    try:
+        header = pd.read_csv(path, nrows=0, encoding="utf-8-sig")
+    except (pd.errors.EmptyDataError, pd.errors.ParserError) as exc:
+        raise FileFormatError(f"{path}: not a CSV table: {exc}") from exc
+    except UnicodeDecodeError as exc:
+        raise FileFormatError(f"{path}: not UTF-8 text: {exc}") from exc
+    return _detect(header, path)
+
+
 def _detect(raw: pd.DataFrame, path: Path) -> str:
     found = [
         name

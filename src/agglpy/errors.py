@@ -185,3 +185,38 @@ class UnmatchedPathsWarning(UserWarning):
 
     Their columns were left empty.
     """
+
+
+class UnreadableRecordWarning(UserWarning):
+    """Warns that a particle record could not be read.
+
+    agglpy treats it as missing.
+    """
+
+
+class LossyImageWarning(UserWarning):
+    """Warns that an image is JPEG-compressed.
+
+    Compression artefacts can shift detected edges.
+    """
+
+
+class IncompleteRunWarning(UserWarning):
+    """Warns that a batch left images not done.
+
+    The returned table says which and why.
+    """
+
+
+class LeftoverFoldersWarning(UserWarning):
+    """Warns that agglpy/ holds folders of images the sheet no longer lists.
+
+    They are never moved or deleted.
+    """
+
+
+class NoParticleSetError(AgglpyError, FileNotFoundError):
+    """Raised when an image has no particles yet.
+
+    Neither a detection nor an imported correction.
+    """

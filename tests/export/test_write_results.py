@@ -362,3 +362,10 @@ def test_a_failed_write_leaves_no_export(tmp_path):
         write(tmp_path, tables={"times": times})
     assert [p.name for p in tmp_path.iterdir()] == ["notes.txt"]
     write(tmp_path)  # a retry needs no overwrite=True
+
+
+def test_dependency_versions_match_the_record(tmp_path):
+    export.write_results(tmp_path / "out", {"t": pd.DataFrame({"a": [1]})})
+    versions = export._dependency_versions()
+    assert record(tmp_path / "out")["agglpy"]["versions"] == versions
+    assert versions["numpy"] == np.__version__

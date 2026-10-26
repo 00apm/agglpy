@@ -7,8 +7,12 @@ from agglpy.errors import (
     DuplicateParticlesWarning,
     FileFormatError,
     ImageError,
+    IncompleteRunWarning,
+    LeftoverFoldersWarning,
+    LossyImageWarning,
     MissingImagesWarning,
     NonCircularParticlesWarning,
+    NoParticleSetError,
     NoParticlesWarning,
     OutputExistsError,
     OutputLockedError,
@@ -19,6 +23,7 @@ from agglpy.errors import (
     SheetError,
     TableError,
     UnmatchedPathsWarning,
+    UnreadableRecordWarning,
     ValuesNotCountedWarning,
 )
 
@@ -66,6 +71,10 @@ def test_particle_table_error_is_a_table_error() -> None:
         NonCircularParticlesWarning,
         ParticlesOutsideRegionWarning,
         UnmatchedPathsWarning,
+        UnreadableRecordWarning,
+        LossyImageWarning,
+        IncompleteRunWarning,
+        LeftoverFoldersWarning,
     ],
 )
 def test_warnings_are_user_warnings(warning: type[Warning]) -> None:
@@ -82,6 +91,7 @@ def test_image_error_is_not_a_table_error() -> None:
     [
         (OutputExistsError, FileExistsError),
         (OutputLockedError, PermissionError),
+        (NoParticleSetError, FileNotFoundError),
     ],
 )
 def test_output_errors_are_agglpy_and_os_errors(
