@@ -8,6 +8,8 @@ import pandas as pd
 from agglpy import _yaml
 from agglpy.app._config import ImageParams
 from agglpy.app._records import CorrectionRecord, DetectionRecord, read_record
+from agglpy.app._sheet import read_grid, validate
+from agglpy.app._status import pixel_size
 from agglpy.app._work import (
     CORRECTED_CSV,
     CORRECTED_RECORD,
@@ -47,6 +49,21 @@ class Image:
     def params(self) -> ImageParams:
         """The image's params (``col.params(name)``)."""
         return self._collection.params(self._name)
+
+    @property
+    def pixel_size(self) -> float | None:
+        """The pixel size in m used for the results.
+
+        The sheet's ``pixel_size_nm``, else the image file's, else the
+        copy in a particle record (image missing or unreadable), else
+        None.
+        """
+        collection = self._collection
+        sheet = validate(read_grid(collection.sheet_path))
+        for entry in sheet.entries:
+            if entry.image == self._name:
+                return pixel_size(collection.folder, sheet, entry)[0]
+        raise KeyError(self._name)
 
     @property
     def particle_set(self) -> Literal["corrected", "hct"] | None:
