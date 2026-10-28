@@ -352,6 +352,44 @@ def agglomerates(
     return Drawing(fills, outlines, others_artist, bar, key)
 
 
+def color_scale(
+    values: pd.Series,
+    *,
+    cmap: str | Colormap | None = None,
+    norm: Normalize | None = None,
+    vmin: float | None = None,
+    vmax: float | None = None,
+    colors: Mapping[Any, ColorType] | None = None,
+) -> dict[str, Any]:
+    """The colour options that give ``values`` one scale.
+
+    Pass them to ``particles`` / ``agglomerates`` for each of several
+    images, so a value or label has the same colour on all, e.g.
+    ``scale = color_scale(all_images.D)`` and then ``particles(ax, p,
+    color_by="D", **scale)`` per image.
+
+    Args:
+        values: The ``color_by`` values of every image to be drawn.
+        cmap, norm, vmin, vmax, colors: As for ``particles``; an unset
+            range is taken from ``values``. ``norm`` is not modified.
+
+    Returns:
+        ``{"cmap": cmap, "norm": norm}`` with the range filled for
+        numbers, ``{"colors": {label: colour}}`` for labels.
+
+    Raises:
+        TableError: If a label has no colour (more than 10 labels need
+            ``colors=``).
+        ParamsError: If an option does not fit the values, as for
+            ``particles``.
+    """
+    palette = _palette(values, cmap, norm, vmin, vmax, colors)
+    if palette.labels is not None:
+        return {"colors": palette.labels}
+    assert palette.scale is not None
+    return {"cmap": cmap, "norm": palette.scale.norm}
+
+
 # ---------------------------------------------------------------------
 # Colours
 # ---------------------------------------------------------------------
