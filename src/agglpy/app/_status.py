@@ -5,7 +5,10 @@ Read-only: every value is worked out from the files as they are now.
 
 import unicodedata
 import warnings
+from collections.abc import Iterable, Iterator
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Literal
 
 import pandas as pd
 
@@ -37,7 +40,13 @@ from agglpy.errors import FileFormatError, LeftoverFoldersWarning
 from agglpy.io import ImageMetadata, read_image_metadata
 from agglpy.params import RegionParams
 
-__all__ = ["STATUS_COLUMNS", "table"]
+__all__ = [
+    "STATUS_COLUMNS",
+    "ImageFacts",
+    "image_facts",
+    "pixel_size",
+    "table",
+]
 
 STATUS_COLUMNS = (
     "image",
@@ -61,6 +70,59 @@ _DTYPES = {
 }
 
 
+@dataclass(frozen=True)
+class ImageFacts:
+    """What the files say about one sheet image now.
+
+    Read once by ``image_facts``, so ``status()`` and ``analyze()`` see
+    the same facts.
+
+    Attributes:
+        entry: The sheet row.
+        path: The image file, resolved.
+        file: ``ok``, ``missing`` or ``unreadable``.
+        meta: The image metadata; None unless ``file`` is ``ok``.
+        meta_warnings: The metadata reader's warnings (e.g.
+            ``PixelSizeWarning``), caught.
+        hct: The detection's particle file; None without its CSV.
+        corrected: The correction's particle file; None without its
+            CSV.
+        pixel_size: In m as read (the sheet's nm · 1e-9, the image
+            metadata, or a record's copy of it), or None.
+        pixel_size_source: ``images.xlsx`` / ``images.csv``, ``image
+            file`` or ``none``.
+        size: ``(width, height)`` in px from the image or a record;
+            None when neither gives it.
+        detection: The ``status()`` label of the detection.
+        correction: The ``status()`` label of the correction.
+    """
+
+    entry: Entry
+    path: Path
+    file: Literal["ok", "missing", "unreadable"]
+    meta: ImageMetadata | None
+    meta_warnings: tuple[warnings.WarningMessage, ...]
+    hct: ParticleFile | None
+    corrected: ParticleFile | None
+    pixel_size: float | None
+    pixel_size_source: str
+    size: tuple[int, int] | None
+    detection: str
+    correction: str
+
+    @property
+    def used(self) -> ParticleFile | None:
+        """The particle file in use: the correction if there is one."""
+        return self.corrected if self.corrected is not None else self.hct
+
+    @property
+    def particle_set(self) -> Literal["corrected", "hct"] | None:
+        """The set in use; None without particles."""
+        if self.corrected is not None:
+            return "corrected"
+        return "hct" if self.hct is not None else None
+
+
 def table(folder: Path, sheet: Sheet, config: ConfigFile) -> pd.DataFrame:
     """One row per sheet image, in sheet order.
 
@@ -71,7 +133,7 @@ def table(folder: Path, sheet: Sheet, config: ConfigFile) -> pd.DataFrame:
             images the sheet does not list.
     """
     rows = [
-        _row(folder, sheet, entry, config.params(entry.image))
+        _row(image_facts(folder, sheet, entry, config.params(entry.image)))
         for entry in sheet.entries
     ]
     _warn_leftovers(folder, sheet)
@@ -79,18 +141,25 @@ def table(folder: Path, sheet: Sheet, config: ConfigFile) -> pd.DataFrame:
     return result.astype({c: _DTYPES.get(c, object) for c in STATUS_COLUMNS})
 
 
-def _row(
+def image_facts(
     folder: Path, sheet: Sheet, entry: Entry, params: ImageParams
-) -> dict[str, object]:
+) -> ImageFacts:
+    """Read the facts of one image from its files.
+
+    Warns:
+        UserWarning: If a particle CSV does not read.
+        UnreadableRecordWarning: For each record that does not read.
+    """
     path = resolve_stored(entry.file, folder)
     meta: ImageMetadata | None = None
+    caught: list[warnings.WarningMessage] = []
+    file: Literal["ok", "missing", "unreadable"]
     if not path.is_file():
         file = "missing"
     else:
         try:
-            # the pixel-size warnings belong to the records of the runs
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
                 meta = read_image_metadata(path)
             file = "ok"
         except FileFormatError:
@@ -101,46 +170,99 @@ def _row(
         work / CORRECTED_CSV, work / CORRECTED_RECORD, CorrectionRecord
     )
     used = corr if corr is not None else hct
-    used_set = (
-        "none"
-        if used is None
-        else ("corrected" if corr is not None else "hct")
-    )
     records = [f.record for f in (used, hct, corr) if f and f.record]
-    nm, source = _pixel_size(sheet, entry, meta, records)
+    metres, source = _pixel_size(sheet, entry, meta, records)
+    return ImageFacts(
+        entry=entry,
+        path=path,
+        file=file,
+        meta=meta,
+        meta_warnings=tuple(caught),
+        hct=hct,
+        corrected=corr,
+        pixel_size=metres,
+        pixel_size_source=source,
+        size=_size(meta, records),
+        detection=_detection(hct, params, path, file),
+        correction=_correction(corr, hct),
+    )
+
+
+def pixel_size(
+    folder: Path, sheet: Sheet, entry: Entry
+) -> tuple[float | None, str]:
+    """The pixel size in m and its source, reading no more than needed.
+
+    The precedence of ``image_facts``; nothing is hashed and the
+    readers' warnings are dropped.
+    """
+    meta: ImageMetadata | None = None
+    path = resolve_stored(entry.file, folder)
+    if entry.pixel_size_nm is None and path.is_file():
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                meta = read_image_metadata(path)
+        except FileFormatError:
+            pass
+    return _pixel_size(sheet, entry, meta, _records(folder, entry.image))
+
+
+def _records(
+    folder: Path, name: str
+) -> Iterator[DetectionRecord | CorrectionRecord]:
+    """The records next to their CSVs, correction first, read lazily."""
+    work = image_folder(folder, name)
+    files: tuple[tuple[str, str, type[Any]], ...] = (
+        (CORRECTED_CSV, CORRECTED_RECORD, CorrectionRecord),
+        (HCT_CSV, HCT_RECORD, DetectionRecord),
+    )
+    for csv, path, kind in files:
+        if not (work / csv).is_file():
+            continue
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            record = read_record(work / path, kind)
+        if record is not None:
+            yield record
+
+
+def _row(facts: ImageFacts) -> dict[str, object]:
+    used = facts.used
     count: int | None = 0
     outside: int | None = 0
     if used is not None:
-        size = _size(meta, records)
         if used.particles is None:
             count = outside = None
         else:
             count = len(used.particles)
             outside = (
                 None
-                if size is None
+                if facts.size is None
                 else int(
                     outside_region(
-                        used.particles, region_bounds(RegionParams(), *size)
+                        used.particles,
+                        region_bounds(RegionParams(), *facts.size),
                     ).sum()
                 )
             )
+    corr = facts.corrected
     started = (
         corr.record.started_from
         if corr is not None and isinstance(corr.record, CorrectionRecord)
         else None
     )
     return {
-        "image": entry.image,
-        "include": entry.include,
-        "file": file,
-        "pixel_size_nm": nm,
-        "pixel_size_source": source,
-        "particle_set": used_set,
+        "image": facts.entry.image,
+        "include": facts.entry.include,
+        "file": facts.file,
+        "pixel_size_nm": nanometres(facts.pixel_size),
+        "pixel_size_source": facts.pixel_size_source,
+        "particle_set": facts.particle_set or "none",
         "particle_count": count,
         "outside_image": outside,
-        "detection": _detection(hct, params, path, file),
-        "correction": _correction(corr, hct),
+        "detection": facts.detection,
+        "correction": facts.correction,
         "kept": (
             ""
             if started is None
@@ -158,18 +280,19 @@ def _pixel_size(
     sheet: Sheet,
     entry: Entry,
     meta: ImageMetadata | None,
-    records: list[DetectionRecord | CorrectionRecord],
+    records: Iterable[DetectionRecord | CorrectionRecord],
 ) -> tuple[float | None, str]:
-    """Sheet > image metadata > a record's copy of it > none."""
+    """Sheet > image metadata > a record's copy of it > none, in m."""
     if entry.pixel_size_nm is not None:
-        return entry.pixel_size_nm, sheet.path.name
+        return entry.pixel_size_nm * 1e-9, sheet.path.name
     if meta is not None:
-        nm = nanometres(meta.pixel_size)
-        return (nm, "image file") if nm is not None else (None, "none")
+        if meta.pixel_size is None:
+            return None, "none"
+        return meta.pixel_size, "image file"
     # the image can't be read now: its metadata as the record stored it
     for record in records:
         if record.image.pixel_size_nm is not None:
-            return record.image.pixel_size_nm, "image file"
+            return record.image.pixel_size_nm * 1e-9, "image file"
     return None, "none"
 
 
