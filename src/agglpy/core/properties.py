@@ -225,7 +225,7 @@ def to_physical(table: pd.DataFrame, pixel_size: float) -> pd.DataFrame:
         table: The particle table or the agglomerate table of one
             image, in px.
         pixel_size: The length of one pixel in the unit wanted, e.g.
-            0.0025 for µm when one pixel is 2.5 nm.
+            2.5e-9 for m when one pixel is 2.5 nm.
 
     Returns:
         A converted copy; columns, rows and index are kept. Converting
