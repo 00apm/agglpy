@@ -12,7 +12,7 @@ import dataclasses
 import os
 import re
 import shutil
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -63,7 +63,7 @@ def write_results(
     tables: Mapping[str, pd.DataFrame],
     *,
     record: Mapping[str, object] | None = None,
-    units: Mapping[str, str] | None = None,
+    units: Mapping[str, Mapping[str, str]] | None = None,
     overwrite: bool = False,
 ) -> Path:
     """Write result tables, their units and a record into a folder.
@@ -96,8 +96,8 @@ def write_results(
             ..., "particle_set": {"D7-017": "corrected"}}``: text,
             numbers, bools, None, lists, dicts with text keys, and
             dataclasses such as the params (written as dicts).
-        units: ``{column: unit}`` for all tables, e.g. ``{"D": "m"}``;
-            columns without an entry are not listed.
+        units: ``{table: {column: unit}}``, e.g. ``{"particles": {"D":
+            "m"}}``; columns without an entry are not listed.
         overwrite: Replace an earlier export in ``folder``. Only
             ``results.xlsx``, ``record.yml`` and ``csv/`` are removed;
             other files are never touched.
@@ -106,8 +106,9 @@ def write_results(
         The folder.
 
     Raises:
-        TableError: If a name is not allowed or a table is not a
-            DataFrame or has MultiIndex columns.
+        TableError: If a name is not allowed, a table is not a
+            DataFrame or has MultiIndex columns, or ``units`` names a
+            table or column that is not there.
         ParamsError: If ``record`` has its own ``agglpy`` entry.
         TypeError: If a record value or a unit is of another type.
         OutputExistsError: If ``folder`` holds an export and
@@ -207,18 +208,24 @@ def _with_index(table: pd.DataFrame) -> pd.DataFrame:
 
 
 def _unit_rows(
-    tables: Mapping[str, pd.DataFrame], units: Mapping[str, str]
+    tables: Mapping[str, pd.DataFrame],
+    units: Mapping[str, Mapping[str, str]],
 ) -> pd.DataFrame | None:
     if not units:
         return None
-    for column, unit in units.items():
-        if not isinstance(unit, str):
-            raise TypeError(f"units: {column!r} has {unit!r}, not text")
+    for name, columns in units.items():
+        if name not in tables:
+            raise TableError(f"units for {name!r}: no such table")
+        for column, unit in columns.items():
+            if column not in tables[name].columns:
+                raise TableError(f"units for {name!r}: no column {column!r}")
+            if not isinstance(unit, str):
+                raise TypeError(f"units: {column!r} has {unit!r}, not text")
     rows = [
-        (name, column, units[column])
+        (name, column, units[name][column])
         for name, table in tables.items()
         for column in table.columns
-        if column in units
+        if column in units.get(name, {})
     ]
     return pd.DataFrame(rows, columns=["table", "column", "unit"])
 
@@ -294,10 +301,18 @@ def _clear(folder: Path, overwrite: bool) -> None:
             f"{folder} already holds an export ({names}); pass "
             "overwrite=True to replace it"
         )
-    # Renaming fails on a file another program holds open (Windows):
-    # try each first, so a locked file stops the export before anything
-    # is removed.
-    for path in old:
+    _check_replaceable(old)
+    _remove(old)
+
+
+def _check_replaceable(paths: Sequence[Path]) -> None:
+    """Raise ``OutputLockedError`` if one of ``paths`` is held open.
+
+    Renaming fails on a file another program holds open (Windows): each
+    is renamed and back, so a locked file stops a write before anything
+    is changed.
+    """
+    for path in paths:
         moved = path.with_name(path.name + ".agglpy-check")
         try:
             path.rename(moved)
@@ -307,7 +322,6 @@ def _clear(folder: Path, overwrite: bool) -> None:
                 "Close it and retry"
             ) from exc
         moved.rename(path)
-    _remove(old)
 
 
 def _export_items(folder: Path) -> list[Path]:
