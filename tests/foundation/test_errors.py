@@ -15,6 +15,7 @@ from agglpy.errors import (
     NoParticleSetError,
     NoParticlesWarning,
     NotReadyError,
+    OutdatedParticlesWarning,
     OutputExistsError,
     OutputLockedError,
     ParamsError,
@@ -77,6 +78,7 @@ def test_particle_table_error_is_a_table_error() -> None:
         LossyImageWarning,
         IncompleteRunWarning,
         LeftoverFoldersWarning,
+        OutdatedParticlesWarning,
     ],
 )
 def test_warnings_are_user_warnings(warning: type[Warning]) -> None:

@@ -1,24 +1,36 @@
 """``Collection.analyze``: the particle sets into one ``Results``."""
 
 import dataclasses
+import warnings
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
+from tqdm.auto import tqdm
 
 from agglpy.app._config import ImageParams, plain
 from agglpy.app._config_file import ConfigFile
-from agglpy.app._records import CorrectionRecord, DetectionRecord, now
+from agglpy.app._records import (
+    CorrectionRecord,
+    DetectionRecord,
+    nanometres,
+    now,
+)
+from agglpy.app._report import warning_text
 from agglpy.app._results import Origin, Results
 from agglpy.app._sheet import Entry, Sheet, typed_user_columns
 from agglpy.app._status import ImageFacts, image_facts
 from agglpy.app._work import CORRECTED_CSV, HCT_CSV
 from agglpy.core.properties import to_physical
-from agglpy.errors import NotReadyError
+from agglpy.errors import NotReadyError, OutdatedParticlesWarning
+from agglpy.logger import logger
 from agglpy.pipeline import ImageResult
 from agglpy.pipeline import analyze as analyze_image
 
-__all__ = ["run"]
+__all__ = ["run", "summary_text"]
+
+# Images named in a summary warning; the export record has them all.
+_LISTED = 10
 
 _DTYPES: dict[str, Any] = {
     "image": object,
@@ -37,8 +49,10 @@ def run(
 ) -> tuple[Results, list[tuple[type[Warning], str]]]:
     """Analyse every included image of ``sheet``, in sheet order.
 
-    Every image is checked before any is analysed. Returns the results
-    and the summary warnings for the caller to emit at the user's line.
+    Every image is checked before any is analysed. Each image's
+    warnings are caught; returns the results and the summary warnings
+    (outdated detections first, then one per class) for the caller to
+    emit at the user's line.
 
     Raises:
         NotReadyError: If no image is included or an included image is
@@ -60,24 +74,60 @@ def run(
     particles: list[pd.DataFrame] = []
     agglomerates: list[pd.DataFrame] = []
     records: dict[str, dict[str, object]] = {}
-    for f in facts:
-        name = f.entry.image
-        try:
-            result, row = _one(f, params[name])
-            p = row["pixel_size"]
-            assert isinstance(p, float)
-            for tables, table in (
-                (particles, result.particles),
-                (agglomerates, result.agglomerates),
-            ):
-                physical = to_physical(table, p)
-                physical.insert(0, "image", name)
-                tables.append(physical)
-        except Exception as exc:
-            exc.add_note(f"while analysing image {name}")
-            raise
-        rows.append(row)
-        records[name] = _record(f, params[name], row)
+    outdated: list[tuple[str, str]] = []
+    seen: dict[type[Warning], list[tuple[str, str]]] = {}
+    bar = tqdm(total=len(facts), disable=not progress, unit="image")
+    try:
+        for f in facts:
+            name = f.entry.image
+            bar.set_description(name)
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                try:
+                    result, row = _one(f, params[name])
+                    p = row["pixel_size"]
+                    assert isinstance(p, float)
+                    for tables, table in (
+                        (particles, result.particles),
+                        (agglomerates, result.agglomerates),
+                    ):
+                        physical = to_physical(table, p)
+                        physical.insert(0, "image", name)
+                        tables.append(physical)
+                except Exception as exc:
+                    exc.add_note(f"while analysing image {name}")
+                    raise
+            # a metadata warning counts only when the metadata gave the
+            # pixel size
+            found = [
+                *(f.meta_warnings if f.entry.pixel_size_nm is None else ()),
+                *caught,
+            ]
+            for w in found:
+                seen.setdefault(w.category, []).append((name, str(w.message)))
+            rows.append(row)
+            records[name] = _record(
+                f, params[name], row, [warning_text(w) for w in found]
+            )
+            reason = _outdated(f, params[name])
+            if reason is not None:
+                outdated.append((name, reason))
+                logger.warning("%s: %s", name, reason)
+            logger.info(
+                "%s: %d particles (%s), %d agglomerates, %d outside the "
+                "region; pixel size %s nm from %s",
+                name,
+                len(result.particles),
+                f.particle_set,
+                len(result.agglomerates),
+                row["outside_region"],
+                nanometres(p),
+                f.pixel_size_source,
+            )
+            bar.update(1)
+    finally:
+        bar.close()
+    logger.info("analysed %d images", len(facts))
 
     images = _images_table(sheet, included, rows)
     origin = Origin(
@@ -100,7 +150,63 @@ def run(
         pd.concat(agglomerates, ignore_index=True),
         origin,
     )
-    return results, []
+    summaries = [
+        (cls, summary_text(cls, found)) for cls, found in seen.items()
+    ]
+    if outdated:
+        summaries.insert(
+            0, (OutdatedParticlesWarning, _outdated_text(outdated))
+        )
+    return results, summaries
+
+
+def summary_text(cls: type[Warning], messages: list[tuple[str, str]]) -> str:
+    """One warning for a class: the images and their messages.
+
+    ``messages`` are ``(image, message)`` in order; the first
+    ``_LISTED`` images are listed, then how many more.
+    """
+    images = list(dict.fromkeys(name for name, _ in messages))
+    listed = set(images[:_LISTED])
+    noun = "image" if len(images) == 1 else "images"
+    lines = [
+        f"{len(images)} {noun}: {cls.__name__} (each message is in "
+        "res.export's record.yml)",
+        *(f"  {name}: {text}" for name, text in messages if name in listed),
+    ]
+    if len(images) > _LISTED:
+        lines.append(f"  and {len(images) - _LISTED} more")
+    return "\n".join(lines)
+
+
+def _outdated(f: ImageFacts, params: ImageParams) -> str | None:
+    """Why the detection in use no longer matches; None if it does."""
+    if f.particle_set != "hct":
+        return None  # a correction is the user's final word
+    if f.detection == "image changed":
+        return "image file changed since detect()"
+    if f.detection != "params changed":
+        return None
+    if params.hct is None:
+        return (
+            "detection was switched off in agglpy.yml after detect(); "
+            "set hct again or import_particles()"
+        )
+    return "params changed since detect()"
+
+
+def _outdated_text(outdated: list[tuple[str, str]]) -> str:
+    count = len(outdated)
+    were = "image was" if count == 1 else "images were"
+    return "\n".join(
+        [
+            f"{count} {were} analysed with particles from an outdated "
+            "detection:",
+            *(f"  {name}: {reason}" for name, reason in outdated),
+            "These results do not reflect the current params. Run "
+            "col.detect() to update them, then analyze() again.",
+        ]
+    )
 
 
 def _check_ready(sheet: Sheet, facts: list[ImageFacts]) -> None:
@@ -192,7 +298,10 @@ def _images_table(
 
 
 def _record(
-    f: ImageFacts, params: ImageParams, row: dict[str, object]
+    f: ImageFacts,
+    params: ImageParams,
+    row: dict[str, object],
+    texts: list[str],
 ) -> dict[str, object]:
     """The image's entry in the export record, as plain data."""
     used = f.used
@@ -215,7 +324,7 @@ def _record(
         "detection": f.detection,
         "correction": f.correction,
         "made_by": _made_by(used.record),
-        "warnings": [],
+        "warnings": texts,
     }
 
 

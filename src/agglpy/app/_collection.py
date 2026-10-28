@@ -533,19 +533,41 @@ class Collection:
         collection again. Writes nothing; run ``analyze()`` again after
         a change.
 
+        Each image's warnings are caught and kept for the export
+        record; after the loop each class is raised once, naming the
+        images with their messages. ``progress=True`` shows a bar over
+        the images; one log line per image.
+
         Raises:
             ParamsError: If ``agglpy.yml`` has problems.
             NotReadyError: If no image is included, or an included
                 image has no pixel size, no particles, or a file that is
                 missing or does not read; nothing is computed, the
                 message lists every such image.
+
+        Warns:
+            OutdatedParticlesWarning: First, if a detection in use was
+                made with other params or another image file: the
+                results don't reflect the current params.
+            ParticlesOutsideRegionWarning: If circles lying entirely
+                outside the region were left out (counted in
+                ``outside_region``).
+            DuplicateParticlesWarning: About duplicate enclosed
+                particles.
+            PixelSizeWarning: If an image file's pixel size, used for
+                the results, is doubtful.
+            UnreadableRecordWarning: For each record that does not
+                read; it counts as missing.
         """
         sheet, config = self._read(check=True)
-        results, summaries = run_analyze(
-            self._folder, sheet, config, progress=progress
-        )
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            results, summaries = run_analyze(
+                self._folder, sheet, config, progress=progress
+            )
         for cls, message in summaries:
             warnings.warn(message, cls, stacklevel=2)
+        reemit(caught, stacklevel=3)
         return results
 
     # -----------------------------------------------------------------
