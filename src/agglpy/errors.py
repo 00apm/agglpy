@@ -220,3 +220,10 @@ class NoParticleSetError(AgglpyError, FileNotFoundError):
 
     Neither a detection nor an imported correction.
     """
+
+
+class NotReadyError(AgglpyError, ValueError):
+    """Raised when images of a collection are not ready for a step.
+
+    The message lists every image and how to fix it.
+    """

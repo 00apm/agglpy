@@ -10,6 +10,7 @@ from typing import Literal
 
 import pandas as pd
 
+from agglpy.app._analyze import run as run_analyze
 from agglpy.app._config import ImageParams, template
 from agglpy.app._config_file import CONFIG_NAME, ConfigFile
 from agglpy.app._correction import run_import
@@ -17,6 +18,7 @@ from agglpy.app._detect import run as run_detect
 from agglpy.app._files import replace_file
 from agglpy.app._image import Image
 from agglpy.app._report import reemit
+from agglpy.app._results import Results
 from agglpy.app._sheet import (
     _NUMERIC_TEXT,
     FIXED_COLUMNS,
@@ -519,6 +521,32 @@ class Collection:
             table = status_table(self._folder, sheet, config)
         reemit(caught, stacklevel=3)
         return table
+
+    def analyze(self, *, progress: bool = True) -> Results:
+        """Group and measure the particles of every included image.
+
+        Reads the sheet, ``agglpy.yml``, each image's particle set in
+        use (``corrected`` if there is one, else ``hct``) and the image
+        metadata (no pixels). Each image is converted from px with its
+        own pixel size: every table of the ``Results`` is in SI units
+        (m, m², m³). The ``Results`` is a snapshot: it never reads the
+        collection again. Writes nothing; run ``analyze()`` again after
+        a change.
+
+        Raises:
+            ParamsError: If ``agglpy.yml`` has problems.
+            NotReadyError: If no image is included, or an included
+                image has no pixel size, no particles, or a file that is
+                missing or does not read; nothing is computed, the
+                message lists every such image.
+        """
+        sheet, config = self._read(check=True)
+        results, summaries = run_analyze(
+            self._folder, sheet, config, progress=progress
+        )
+        for cls, message in summaries:
+            warnings.warn(message, cls, stacklevel=2)
+        return results
 
     # -----------------------------------------------------------------
     # Files

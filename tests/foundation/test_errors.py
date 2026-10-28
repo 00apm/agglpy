@@ -14,6 +14,7 @@ from agglpy.errors import (
     NonCircularParticlesWarning,
     NoParticleSetError,
     NoParticlesWarning,
+    NotReadyError,
     OutputExistsError,
     OutputLockedError,
     ParamsError,
@@ -37,6 +38,7 @@ from agglpy.errors import (
         FileFormatError,
         ImageError,
         SheetError,
+        NotReadyError,
     ],
 )
 def test_errors_share_one_base_and_are_value_errors(
