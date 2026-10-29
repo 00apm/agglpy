@@ -70,3 +70,43 @@ def test_shape_from_numpy_integers():
     image = np.zeros((7, 9), dtype=np.uint8)
     fig, _ = draw.figure(image.shape, legend=False)
     assert render(fig).shape == (7, 9, 4)
+
+
+def test_image_at_its_origin():
+    # a region 10 rows high, drawn where it was cut: rows 10-19
+    fig, ax = draw.figure((20, 30), legend=False, background="black")
+    shown = draw.image(ax, np.full((10, 30), 255, np.uint8), origin=(0, 10))
+    pixels = render(fig)
+    assert (pixels[10:, :, :3] == 255).all()
+    assert (pixels[:10, :, :3] == 0).all()
+    # the axes keep the whole image's limits
+    assert ax.get_xlim() == (-0.5, 29.5)
+    assert ax.get_ylim() == (19.5, -0.5)
+    assert shown.get_alpha() == 1.0
+    # uint8 grey as it is: 100 stays 100, no contrast stretch
+    fig, ax = draw.figure((20, 30), legend=False)
+    draw.image(ax, np.full((20, 30), 100, np.uint8), alpha=1.0)
+    assert (render(fig)[..., :3] == 100).all()
+    for alpha in (-0.1, 1.5, True):
+        with pytest.raises(ParamsError, match="alpha must be within 0-1"):
+            draw.image(ax, np.zeros((2, 2), np.uint8), alpha=alpha)
+
+
+def test_figure_pair_two_linked_panels():
+    fig, left, right = draw.figure_pair((20, 30), legend=False)
+    assert render(fig).shape == (20, 60, 4)
+    assert left.get_shared_x_axes().joined(left, right)
+    assert left.get_shared_y_axes().joined(left, right)
+    for ax in (left, right):
+        assert ax.get_xlim() == (-0.5, 29.5)
+        assert ax.get_ylim() == (19.5, -0.5)
+        assert not ax.axison
+        box = ax.get_window_extent()
+        assert (box.width, box.height) == pytest.approx((30, 20))
+    # zooming one panel zooms the other
+    right.set_xlim(0, 10)
+    assert left.get_xlim() == (0, 10)
+    # the legend strip right of the second panel, sized by one panel
+    fig, left, right = draw.figure_pair((20, 30), background="black")
+    assert render(fig).shape == (20, 64, 4)  # 60 + round(0.12 * 30)
+    assert right.get_window_extent().x0 == pytest.approx(30)

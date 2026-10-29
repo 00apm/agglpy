@@ -128,3 +128,22 @@ def test_bool_colours_do_not_depend_on_the_values_present():
     np.testing.assert_array_equal(image_two[40, 70], rgba(TAB10(1)))
     assert legend_labels(drawing_one) == legend_labels(drawing_two)
     assert legend_labels(drawing_one) == ["False", "True"]
+
+
+def test_legend_from_colours():
+    colours = {"new (3)": "lime", "gone (1)": "red", "same (40)": "grey"}
+    _, ax = draw.figure((200, 300))
+    key = draw.legend(ax, colours, title="circles")
+    assert key.axes.get_label() == "agglpy legend"
+    assert [t.get_text() for t in key.get_texts()] == list(colours)
+    assert [
+        matplotlib.colors.to_rgba(h.get_color()) for h in key.legend_handles
+    ] == [matplotlib.colors.to_rgba(c) for c in colours.values()]
+    assert key.get_title().get_text() == "circles"
+    # the size of the label legends of particles: 10 % of the strip
+    assert key.get_texts()[0].get_fontsize() == pytest.approx(3.6)
+    # without a strip: in the axes, no title
+    _, ax = draw.figure((200, 300), legend=False)
+    key = draw.legend(ax, {"edges": "white"})
+    assert key.axes is ax
+    assert key.get_title().get_text() == ""
