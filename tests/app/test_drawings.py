@@ -195,11 +195,11 @@ def test_drawings_export_stops_on_a_missing_or_changed_image(
     with pytest.raises(FileNotFoundError, match=r"D7-018\.tif"):
         d.export(tmp_path / "png")
     assert not (tmp_path / "png").exists()  # checked before any PNG
-    # a size error shows only when D7-018 is drawn, after D7-017.png
+    # a resized image too: its header is read before any PNG
     tifffile.imwrite(images / "D7-018.tif", np.zeros((80, 100), np.uint8))
-    with pytest.raises(ImageError, match="analyze"):
-        d.export(tmp_path / "png")
-    assert list((tmp_path / "png").iterdir()) == []  # D7-017.png removed
+    with pytest.raises(ImageError, match=r"D7-018\.tif is now 100 x 80"):
+        d.export(tmp_path / "png", overwrite=True)
+    assert not (tmp_path / "png").exists()
     # without the image, no file is needed
     assert len(res.draw(color_by="D", image=False).export(tmp_path / "b")) == 3
 

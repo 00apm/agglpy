@@ -39,7 +39,7 @@ from agglpy.errors import (
     TableError,
 )
 from agglpy.export import _check_replaceable, write_results
-from agglpy.io import read_image
+from agglpy.io import read_image, read_image_metadata
 
 __all__ = ["Drawings", "Origin", "Results"]
 
@@ -736,7 +736,7 @@ class Drawings(Mapping[str, Figure]):
             FileNotFoundError: If an image file is gone (``image=True``);
                 nothing is written.
             ImageError: If an image file no longer has the analysed
-                size; the PNGs this call made are removed.
+                size; nothing is written.
         """
         folder = Path(folder)
         paths = [folder / f"{name}.png" for name in self]
@@ -749,11 +749,11 @@ class Drawings(Mapping[str, Figure]):
             )
         _check_replaceable(existing)
         if self._image:
+            # headers only: a changed image stops it before any PNG
             for sheet in self._sheets.values():
-                if not sheet.path.is_file():
-                    raise FileNotFoundError(
-                        f"image file not found: {sheet.path}"
-                    )
+                _check_file(sheet)
+                meta = read_image_metadata(sheet.path)
+                _check_size(sheet, meta.width, meta.height)
         folder.mkdir(parents=True, exist_ok=True)
         made: list[Path] = []
         try:
@@ -796,16 +796,24 @@ class Drawings(Mapping[str, Figure]):
 
 def _image(sheet: _Sheet) -> Any:
     """The image file of ``sheet``, checked against the analysed size."""
-    if not sheet.path.is_file():
-        raise FileNotFoundError(f"image file not found: {sheet.path}")
+    _check_file(sheet)
     image = read_image(sheet.path)
     height, width = image.shape
+    _check_size(sheet, width, height)
+    return image
+
+
+def _check_file(sheet: _Sheet) -> None:
+    if not sheet.path.is_file():
+        raise FileNotFoundError(f"image file not found: {sheet.path}")
+
+
+def _check_size(sheet: _Sheet, width: int, height: int) -> None:
     if (width, height) != (sheet.width, sheet.height):
         raise ImageError(
             f"{sheet.path.name} is now {width} x {height} px, analysed at "
             f"{sheet.width} x {sheet.height} px: run analyze() again"
         )
-    return image
 
 
 def _kept(table: pd.DataFrame, of: pd.DataFrame) -> dict[str, int]:
