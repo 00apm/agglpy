@@ -1,17 +1,32 @@
-"""``res.draw``: one figure per image, one colour scale, made on access."""
+"""``res.draw``: one figure per image, one colour scale, made on access.
+
+``Drawings.export`` writes one PNG per image; a notebook shows four.
+"""
+
+import warnings
+from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import pytest
 import tifffile
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
+from PIL import Image
 
+from agglpy import _yaml
 from agglpy.app import Collection, Drawings
 from agglpy.app._results import Results
-from agglpy.errors import ImageError, ParamsError, TableError
+from agglpy.errors import (
+    ImageError,
+    OutputExistsError,
+    OutputLockedError,
+    ParamsError,
+    TableError,
+)
 from agglpy.io import read_particles
 
-from support.collection import work
+from support.collection import DISCS, HCT, work, write_disc_image
 from support.render import render
 
 
@@ -143,3 +158,106 @@ def test_added_column_and_select_can_be_drawn(res: Results) -> None:
     # changing the table afterwards does not change the drawings
     res.agglomerates.drop(columns="dense", inplace=True)
     assert isinstance(d["D7-018"], Figure)
+
+
+def _images(analysis_col: Collection) -> Path:
+    return analysis_col.folder.parent / "images"
+
+
+def test_drawings_export_one_png_per_image(
+    res: Results, tmp_path: Path
+) -> None:
+    d = res.draw(color_by="D", legend=False)
+    folder = tmp_path / "png" / "a"
+    paths = d.export(folder)
+    assert [p.name for p in paths] == [
+        "D7-017.png",
+        "D7-018.png",
+        "D7-019.png",
+    ]
+    with Image.open(paths[0]) as png:
+        assert png.size == (200, 160)  # pixel for pixel, no strip
+    with pytest.raises(OutputExistsError, match=r"D7-017\.png"):
+        d.export(folder)
+    before = paths[1].read_bytes()
+    assert d.export(folder, overwrite=True) == paths
+    assert paths[1].read_bytes() == before  # the same drawing again
+    # no temporary files left
+    assert sorted(p.name for p in folder.iterdir()) == [p.name for p in paths]
+
+
+def test_drawings_export_stops_on_a_missing_or_changed_image(
+    res: Results, analysis_col: Collection, tmp_path: Path
+) -> None:
+    d = res.draw(color_by="D")
+    images = _images(analysis_col)
+    (images / "D7-018.tif").unlink()
+    with pytest.raises(FileNotFoundError, match=r"D7-018\.tif"):
+        d.export(tmp_path / "png")
+    assert not (tmp_path / "png").exists()  # checked before any PNG
+    # a size error shows only when D7-018 is drawn, after D7-017.png
+    tifffile.imwrite(images / "D7-018.tif", np.zeros((80, 100), np.uint8))
+    with pytest.raises(ImageError, match="analyze"):
+        d.export(tmp_path / "png")
+    assert list((tmp_path / "png").iterdir()) == []  # D7-017.png removed
+    # without the image, no file is needed
+    assert len(res.draw(color_by="D", image=False).export(tmp_path / "b")) == 3
+
+
+def test_drawings_export_locked_png_changes_nothing(
+    res: Results, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    d = res.draw(color_by="D")
+    folder = tmp_path / "png"
+    d.export(folder)
+    before = {p: p.read_bytes() for p in folder.iterdir()}
+    rename = Path.rename
+
+    def locked(self: Path, target: Path) -> Path:
+        if self.name == "D7-018.png":  # open in an image viewer
+            raise PermissionError(13, "in use", str(self))
+        return rename(self, target)
+
+    monkeypatch.setattr(Path, "rename", locked)
+    with pytest.raises(OutputLockedError, match=r"D7-018\.png"):
+        d.export(folder, overwrite=True)
+    assert {p: p.read_bytes() for p in folder.iterdir()} == before
+
+
+NAMES = ["D7-017", "D7-018", "D7-019 ł", "D7-021", "D7-022"]
+
+
+@pytest.fixture
+def five(tmp_path: Path) -> Results:
+    """Five detected disc images, one named with a Polish letter."""
+    tmp_path = tmp_path / "five"  # beside analysis_col's folders
+    folder = tmp_path / "images"
+    for name, discs in zip(NAMES, [*DISCS.values(), *DISCS.values()]):
+        write_disc_image(folder / f"{name}.tif", discs)
+    col = Collection.create(tmp_path / "col", images=folder)
+    col.set_params(None, hct=HCT)
+    sheet = col.read_sheet()
+    sheet["pixel_size_nm"] = 2.5
+    col.write_sheet(sheet)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        col.detect(progress=False)
+    return col.analyze(progress=False)
+
+
+def test_drawings_export_non_ascii_name(five: Results, tmp_path: Path) -> None:
+    paths = five.draw("D7-019 ł", color_by="D").export(tmp_path / "png")
+    assert [p.name for p in paths] == ["D7-019 ł.png"]
+    out = five.export(tmp_path / "results")
+    sheet = pd.read_excel(out / "results.xlsx", sheet_name="images")
+    assert "D7-019 ł" in list(sheet.image)
+    assert "D7-019 ł" in _yaml.load(out / "record.yml")["images"]
+
+
+def test_repr_html_shows_four_then_more(five: Results, res: Results) -> None:
+    html = five.draw(color_by="D")._repr_html_()
+    assert html.count("<img ") == 4
+    assert "D7-019 ł" in html and "and 1 more" in html
+    assert 'd["D7-022"]' in html
+    html = res.draw(color_by="D")._repr_html_()
+    assert html.count("<img ") == 3 and "more" not in html

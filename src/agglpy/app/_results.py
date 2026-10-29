@@ -1,6 +1,9 @@
 """``Results``: what ``Collection.analyze`` found, as plain tables."""
 
+import base64
 import dataclasses
+import html
+import io
 import warnings
 from collections.abc import (
     Callable,
@@ -11,6 +14,7 @@ from collections.abc import (
     Sequence,
 )
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import Any, Literal
 
@@ -21,14 +25,20 @@ from matplotlib.typing import ColorType
 from numpy.typing import ArrayLike
 
 from agglpy import draw as _draw
+from agglpy.app._files import replace_file
 from agglpy.app._report import reemit
 from agglpy.app._sources import PathLike
 from agglpy.core import distributions
 from agglpy.core import metrics as _metrics
 from agglpy.core.agglomerates import select_agglomerates
 from agglpy.core.properties import DIMENSIONS
-from agglpy.errors import ImageError, ParamsError, TableError
-from agglpy.export import write_results
+from agglpy.errors import (
+    ImageError,
+    OutputExistsError,
+    ParamsError,
+    TableError,
+)
+from agglpy.export import _check_replaceable, write_results
 from agglpy.io import read_image
 
 __all__ = ["Drawings", "Origin", "Results"]
@@ -616,6 +626,8 @@ class Results:
         return out
 
 
+# Figures a notebook shows inline; a whole collection would be tens of MB.
+_THUMBNAILS = 4
 # The colour column of the tables ``Drawings`` holds.
 _VALUES = "agglpy color_by"
 
@@ -698,6 +710,88 @@ class Drawings(Mapping[str, Figure]):
 
     def __len__(self) -> int:
         return len(self._sheets)
+
+    def export(
+        self, folder: PathLike, *, overwrite: bool = False
+    ) -> list[Path]:
+        """Write one ``<image>.png`` per image into ``folder``.
+
+        Each PNG has 72 dpi and the figure's size: with
+        ``legend=False`` it lies pixel for pixel over the image. No
+        record is written: export next to ``res.export`` of the same
+        results, whose record covers the drawings.
+
+        Args:
+            folder: The folder to write into; created with its parents.
+            overwrite: Replace PNGs of these images already there.
+
+        Returns:
+            The PNG files, in the order of the results.
+
+        Raises:
+            OutputExistsError: If a PNG of a drawn image is there and
+                ``overwrite`` is False; nothing is written.
+            OutputLockedError: If a PNG to replace is open in another
+                program; nothing is changed.
+            FileNotFoundError: If an image file is gone (``image=True``);
+                nothing is written.
+            ImageError: If an image file no longer has the analysed
+                size; the PNGs this call made are removed.
+        """
+        folder = Path(folder)
+        paths = [folder / f"{name}.png" for name in self]
+        existing = [p for p in paths if p.exists()]
+        if existing and not overwrite:
+            names = ", ".join(p.name for p in existing)
+            raise OutputExistsError(
+                f"{folder} already holds {names}; pass overwrite=True to "
+                "replace them"
+            )
+        _check_replaceable(existing)
+        if self._image:
+            for sheet in self._sheets.values():
+                if not sheet.path.is_file():
+                    raise FileNotFoundError(
+                        f"image file not found: {sheet.path}"
+                    )
+        folder.mkdir(parents=True, exist_ok=True)
+        made: list[Path] = []
+        try:
+            for name, path in zip(self, paths, strict=True):
+                fig = self[name]
+                new = not path.exists()
+                replace_file(
+                    path, partial(fig.savefig, format="png", dpi="figure")
+                )
+                if new:
+                    made.append(path)
+        except BaseException:
+            # the new files only: a replaced PNG can't be put back
+            for path in made:
+                path.unlink(missing_ok=True)
+            raise
+        return paths
+
+    def _repr_html_(self) -> str:
+        """The first figures for a notebook, and how to see the rest."""
+        names = list(self)
+        parts = []
+        for name in names[:_THUMBNAILS]:
+            buffer = io.BytesIO()
+            self[name].savefig(buffer, format="png", dpi="figure")
+            data = base64.b64encode(buffer.getvalue()).decode("ascii")
+            parts.append(
+                f"<p>{html.escape(name)}</p>"
+                f'<img src="data:image/png;base64,{data}" '
+                'style="max-width:100%">'
+            )
+        rest = names[_THUMBNAILS:]
+        if rest:
+            hint = html.escape(f'd["{rest[0]}"]', quote=False)
+            parts.append(
+                f"<p>and {len(rest)} more: {hint} or d.export(folder)</p>"
+            )
+        return "".join(parts)
 
 
 def _image(sheet: _Sheet) -> Any:
