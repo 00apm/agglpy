@@ -3,12 +3,16 @@
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, TypeVar
 
+import numpy as np
 import pandas as pd
+from numpy.typing import NDArray
 
 from agglpy import _yaml
 from agglpy.app._config import ImageParams
+from agglpy.app._preview import Preview, make
 from agglpy.app._records import CorrectionRecord, DetectionRecord, read_record
-from agglpy.app._sheet import read_grid, validate
+from agglpy.app._sheet import Entry, read_grid, validate
+from agglpy.app._sources import resolve_stored
 from agglpy.app._status import pixel_size
 from agglpy.app._work import (
     CORRECTED_CSV,
@@ -19,7 +23,7 @@ from agglpy.app._work import (
     particle_set,
 )
 from agglpy.errors import NoParticleSetError
-from agglpy.io import read_particles
+from agglpy.io import read_image, read_particles
 
 if TYPE_CHECKING:
     from agglpy.app._collection import Collection
@@ -49,6 +53,48 @@ class Image:
     def params(self) -> ImageParams:
         """The image's params (``col.params(name)``)."""
         return self._collection.params(self._name)
+
+    @property
+    def array(self) -> NDArray[np.uint8]:
+        """The image file as ``io.read_image`` returns it: whole, uncut.
+
+        Read on each access.
+
+        Raises:
+            FileNotFoundError: If the image file is missing.
+            FileFormatError: If OpenCV can't decode it.
+        """
+        return read_image(self._path())
+
+    def preview(
+        self, *, params: ImageParams | None = None, progress: bool = True
+    ) -> Preview:
+        """Detect this image in memory, to look at and tune the params.
+
+        Reads the image file, cuts the region, runs the preprocessing
+        steps, then one HCT pass per range: the circles ``detect()``
+        would store with the same params. Writes nothing and emits no
+        warning: what ``detect()`` would warn is in ``p.warnings``.
+        Works for every image of the sheet, excluded ones too.
+
+        Args:
+            params: The params to use, e.g. another image's
+                (``col["other"].params``) or another preview's
+                (``p.params``); None for this image's params in
+                ``agglpy.yml``. Change them with the preview's change
+                methods.
+            progress: Show a progress bar of the steps.
+
+        Returns:
+            The preview.
+
+        Raises:
+            ParamsError: If ``params`` is not an ``ImageParams`` or
+                ``agglpy.yml`` has problems.
+            FileNotFoundError: If the image file is missing.
+            FileFormatError: If OpenCV can't decode it.
+        """
+        return make(self._collection, self._name, params, progress)
 
     @property
     def pixel_size(self) -> float | None:
@@ -102,6 +148,17 @@ class Image:
 
     def __repr__(self) -> str:
         return f"Image({self._name!r}, particle_set={self.particle_set!r})"
+
+    def _entry(self) -> Entry:
+        sheet = validate(read_grid(self._collection.sheet_path))
+        for entry in sheet.entries:
+            if entry.image == self._name:
+                return entry
+        raise KeyError(self._name)
+
+    def _path(self) -> Path:
+        """The image file of the sheet entry, resolved."""
+        return resolve_stored(self._entry().file, self._collection.folder)
 
     @property
     def _folder(self) -> Path:

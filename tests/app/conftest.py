@@ -3,8 +3,11 @@
 import warnings
 from pathlib import Path
 
+import cv2
+import numpy as np
 import pandas as pd
 import pytest
+import tifffile
 
 from agglpy.app import Collection
 from agglpy.io import read_image, write_particles
@@ -17,6 +20,7 @@ from support.collection import (
     write_blank_image,
     write_disc_image,
 )
+from support.discs import draw_discs
 from support.tiffs import write_zeiss
 
 
@@ -107,3 +111,67 @@ def fiji_csv(particles_col: Collection, tmp_path: Path) -> Path:
     lines = [IMAGEJ_HEADER, *_imagej_rows(particles_col, "D7-017")]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
+
+
+# Small discs (r 6) for the first range, large ones (r 14) for the
+# second, and on T1 one disc (r 8.5) that both ranges find
+TUNING_DISCS = {
+    "T1": [
+        (30.3, 30.6, 6),
+        (80.2, 40.4, 6),
+        (130.6, 30.2, 6),
+        (40.5, 100.3, 14),
+        (150.6, 90.2, 14),
+        (95.4, 110.7, 8.5),
+    ],
+    "T2": [
+        (50.3, 20.6, 6),
+        (170.2, 40.4, 6),
+        (60.5, 80.3, 14),
+        (130.6, 110.2, 14),
+    ],
+}
+TUNING_PARAMS = {
+    "region": {"bottom_fraction": 0.1},
+    "preprocess": {
+        "median_blur": 3,
+        "rolling_ball": {"radius": 20},
+        "clahe": {"clip_limit": 2.0, "tile_grid": [4, 4]},
+    },
+    "hct": {"ranges": [{"d_min": 8, "d_max": 18}, {"d_min": 16, "d_max": 44}]},
+}
+
+
+@pytest.fixture
+def tuning_col(tmp_path: Path) -> Collection:
+    """Three 200 x 160 px images with two HCT ranges set, for tuning.
+
+    With the defaults (region bottom 10 % cut, median 3, rolling ball
+    r 20, CLAHE) range 1 (d 8-18) finds T1's three small discs and its
+    r 8.5 disc, range 2 (d 16-44) the two large ones and the r 8.5 disc
+    again (a duplicate pair). T2 has two small and two large discs and
+    its own entry (range 1 with accumulator 14); T3.jpg is T1 as a
+    JPEG.
+    """
+    folder = tmp_path / "images"
+    folder.mkdir()
+    t1 = draw_discs(160, 200, TUNING_DISCS["T1"])
+    tifffile.imwrite(folder / "T1.tif", t1)
+    tifffile.imwrite(
+        folder / "T2.tif", draw_discs(160, 200, TUNING_DISCS["T2"])
+    )
+    ok, jpeg = cv2.imencode(".jpg", t1, [cv2.IMWRITE_JPEG_QUALITY, 95])
+    assert ok
+    np.asarray(jpeg).tofile(folder / "T3.jpg")
+    col = Collection.create(tmp_path / "col", images=folder)
+    col.set_params(None, **TUNING_PARAMS)
+    col.set_params(
+        "T2",
+        hct={
+            "ranges": [
+                {"d_min": 8, "d_max": 18, "accumulator_threshold": 14},
+                {"d_min": 16, "d_max": 44},
+            ]
+        },
+    )
+    return col
