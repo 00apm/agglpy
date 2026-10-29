@@ -10,10 +10,13 @@ import pandas as pd
 from numpy.typing import ArrayLike
 
 from agglpy.app._report import reemit
+from agglpy.app._sources import PathLike
 from agglpy.core import distributions
 from agglpy.core import metrics as _metrics
 from agglpy.core.agglomerates import select_agglomerates
+from agglpy.core.properties import DIMENSIONS
 from agglpy.errors import ParamsError, TableError
+from agglpy.export import write_results
 
 __all__ = ["Origin", "Results"]
 
@@ -45,6 +48,15 @@ class Origin:
 
 
 _TABLES = ("particles", "agglomerates")
+
+_SI = {1: "m", 2: "m²", 3: "m³"}
+_GEOMETRY = {"x": 1, "y": 1, "r": 1}
+_IMAGES_UNITS = {
+    "pixel_size": "m",
+    "fov_area": "m²",
+    "width": "px",
+    "height": "px",
+}
 
 
 class Results:
@@ -303,6 +315,81 @@ class Results:
             origin,
         )
 
+    def export(
+        self,
+        folder: PathLike,
+        *,
+        tables: Mapping[str, pd.DataFrame] | None = None,
+        overwrite: bool = False,
+    ) -> Path:
+        """Write the tables, their units and a record into ``folder``.
+
+        Writes ``results.xlsx`` (the sheets ``images``,
+        ``agglomerates``, ``particles``, the extra ``tables``, then
+        ``units`` and ``info``), ``csv/`` (one CSV per table and
+        ``units.csv``) and ``record.yml``: per image the particle set,
+        pixel size, region and the detection or correction the numbers
+        come from, the rows with ``include`` false and the subset
+        steps. Drawings of the same results fit in a folder next to it
+        (``Drawings.export``).
+
+        Args:
+            folder: The folder to write into; created if missing.
+            tables: Extra tables made from these results, e.g.
+                ``{"summary": res.summary(by="series")}``; written
+                after the three, without units.
+            overwrite: Replace an earlier export in ``folder``.
+
+        Returns:
+            The folder.
+
+        Raises:
+            ParamsError: If an extra table is called ``images``,
+                ``agglomerates`` or ``particles``.
+            OutputExistsError: If ``folder`` has an export and
+                ``overwrite`` is False.
+            OutputLockedError: If a file to replace is open in another
+                program.
+        """
+        extra = dict(tables or {})
+        for name in ("images", "agglomerates", "particles"):
+            if name in extra:
+                raise ParamsError(
+                    f"tables: {name!r} is a table of the results; give "
+                    "the extra table another name"
+                )
+        written = {
+            "images": self.images,
+            "agglomerates": self.agglomerates,
+            "particles": self.particles,
+        }
+        origin = self._origin
+        record = {
+            "analysis": {
+                "analyzed": origin.analyzed,
+                "collection": origin.collection.as_posix(),
+                "sheet": origin.sheet,
+                "unit": "m",
+            },
+            "images": dict(origin.images),
+            "excluded": list(origin.excluded),
+            "subset": list(origin.steps),
+        }
+        units = {
+            "images": {
+                c: u for c, u in _IMAGES_UNITS.items() if c in self.images
+            },
+            "agglomerates": _si_units(self.agglomerates),
+            "particles": _si_units(self.particles),
+        }
+        return write_results(
+            folder,
+            {**written, **extra},
+            record=record,
+            units=units,
+            overwrite=overwrite,
+        )
+
     def _image_mask(
         self, images: pd.Series | str | Sequence[str]
     ) -> pd.Series:
@@ -354,3 +441,13 @@ class Results:
 
 def _kept(table: pd.DataFrame, of: pd.DataFrame) -> dict[str, int]:
     return {"kept": len(table), "of": len(of)}
+
+
+def _si_units(table: pd.DataFrame) -> dict[str, str]:
+    """``m`` / ``m²`` / ``m³`` for agglpy's columns present in ``table``."""
+    dimensions = {**_GEOMETRY, **DIMENSIONS}
+    return {
+        column: _SI[dimensions[column]]
+        for column in table.columns
+        if dimensions.get(column, 0) > 0
+    }

@@ -1,17 +1,24 @@
-"""``Results``: the statistics methods over the analysed tables."""
+"""``Results``: statistics, subset and export."""
 
 import os
 import warnings
 from collections.abc import Callable
+from pathlib import Path
 
 import pandas as pd
 import pytest
 
+from agglpy import _yaml
 from agglpy.app import Collection
 from agglpy.app._results import Results
 from agglpy.core import distributions, metrics
 from agglpy.core.distributions import size_classes
-from agglpy.errors import MissingImagesWarning, ParamsError, TableError
+from agglpy.errors import (
+    MissingImagesWarning,
+    OutputExistsError,
+    ParamsError,
+    TableError,
+)
 
 EDGES = size_classes(1e-9, 1e-6, step=10**0.1, scale="log")
 
@@ -196,3 +203,81 @@ def test_added_column_travels(res: Results) -> None:
     res.agglomerates["dense"] = res.agglomerates.member_count > 1
     s = res.subset(images=["D7-018"])
     assert "dense" in s.agglomerates.columns
+
+
+# ---------------------------------------------------------------------
+# export
+# ---------------------------------------------------------------------
+
+
+def test_export_writes_tables_units_and_record(
+    res: Results, tmp_path: Path
+) -> None:
+    out = res.subset(images=["D7-017", "D7-018"], label="two").export(
+        tmp_path / "out", tables={"summary": res.summary("series")}
+    )
+    assert out == tmp_path / "out"
+    xl = pd.ExcelFile(out / "results.xlsx")
+    assert xl.sheet_names == [
+        "images",
+        "agglomerates",
+        "particles",
+        "summary",
+        "units",
+        "info",
+    ]
+    xl.close()
+    rows = pd.read_csv(out / "csv" / "units.csv").values.tolist()
+    for row in (
+        ["images", "pixel_size", "m"],
+        ["images", "fov_area", "m²"],
+        ["images", "width", "px"],
+        ["images", "height", "px"],
+        ["particles", "x", "m"],
+        ["particles", "r", "m"],
+        ["particles", "volume", "m³"],
+        ["agglomerates", "area", "m²"],
+        ["agglomerates", "D_feret_max", "m"],
+    ):
+        assert row in rows
+    listed = {(table, column) for table, column, _ in rows}
+    assert ("agglomerates", "member_count") not in listed  # no dimension
+    assert not any(table == "summary" for table, _ in listed)
+    rec = _yaml.load(out / "record.yml")
+    analysis = rec["analysis"]
+    assert analysis["unit"] == "m" and analysis["sheet"] == "images.xlsx"
+    assert analysis["collection"] == res._origin.collection.as_posix()
+    assert analysis["analyzed"] == res._origin.analyzed
+    assert list(rec["images"]) == ["D7-017", "D7-018"]
+    made_by = rec["images"]["D7-017"]["made_by"]
+    assert made_by["kind"] == "detection" and "hct" in made_by["params"]
+    d18 = rec["images"]["D7-018"]
+    assert d18["made_by"]["source"]["format"] == "agglpy"
+    assert d18["particles"]["state"] == "matching"
+    assert d18["particle_set"] == "corrected"
+    assert rec["excluded"] == [{"image": "D7-020", "note": "out of focus"}]
+    assert [s["label"] for s in rec["subset"]] == ["two"]
+    with pytest.raises(OutputExistsError):
+        res.export(out)
+    res.export(out, overwrite=True)
+    assert _yaml.load(out / "record.yml")["subset"] == []
+
+
+@pytest.mark.parametrize("name", ["images", "agglomerates", "particles"])
+def test_export_extra_table_named_like_a_result(
+    res: Results, tmp_path: Path, name: str
+) -> None:
+    with pytest.raises(ParamsError, match=f"{name!r}"):
+        res.export(tmp_path / "out", tables={name: res.summary()})
+    assert not (tmp_path / "out").exists()
+
+
+def test_added_column_is_exported_without_unit(
+    res: Results, tmp_path: Path
+) -> None:
+    res.agglomerates["dense"] = res.agglomerates.member_count > 1
+    out = res.subset(images=["D7-018"]).export(tmp_path / "out")
+    header = (out / "csv" / "agglomerates.csv").read_text("utf-8")
+    assert "dense" in header.splitlines()[0].split(",")
+    units = pd.read_csv(out / "csv" / "units.csv")
+    assert "dense" not in set(units.column)
