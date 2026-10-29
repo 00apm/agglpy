@@ -49,6 +49,16 @@ def test_colour_is_the_agglomerate_value():
     np.testing.assert_array_equal(image[90, 50], rgba(VIRIDIS(0.0)))
 
 
+def test_image_alpha_dims_the_image():
+    p, agg = tables()
+    image = np.full((120, 100), 200, dtype=np.uint8)
+    rendered, _ = drawn(
+        p, agg, color_by="member_count", image=image, image_alpha=0.4
+    )
+    # 0.4 * 200 + 0.6 * 255 on the white figure
+    np.testing.assert_allclose(rendered[5, 5, :3], 233, atol=1)
+
+
 def test_no_inner_circle_lines():
     p, agg = tables()
     image, _ = drawn(p, agg, color_by="member_count", alpha=0.0, linewidth=4)

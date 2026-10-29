@@ -134,6 +134,23 @@ def test_the_image_is_drawn_underneath_as_it_is():
     np.testing.assert_array_equal(rendered[0, 0], [101, 101, 101, 255])
 
 
+@pytest.mark.parametrize(
+    ("background", "expected"),
+    [("black", 80), ("white", 233)],  # 0.4 * 200 + 0.6 * (0 or 255)
+)
+def test_image_alpha_dims_the_image_towards_the_background(
+    background, expected
+):
+    image = np.full((120, 100), 200, dtype=np.uint8)
+    fig, ax = draw.figure((120, 100), legend=False, background=background)
+    draw.particles(
+        ax, table(), color_by="D", image=image, image_alpha=0.4, legend=False
+    )
+    rendered = render(fig)
+    np.testing.assert_allclose(rendered[5, 5, :3], expected, atol=1)
+    assert rendered[5, 5, 3] == 255
+
+
 def test_a_colorbar_goes_into_the_strip():
     fig, ax = draw.figure((120, 100))
     drawing = draw.particles(ax, table(), color_by="D")
@@ -253,6 +270,7 @@ def test_select_is_matched_by_index_not_position():
         ({"colors": {"a": "red"}}, "colors="),
         ({"norm": Normalize(), "vmax": 3}, "norm="),
         ({"alpha": 1.5}, "alpha"),
+        ({"image_alpha": -0.1}, "image_alpha"),
         ({"linewidth": -1}, "linewidth"),
     ],
 )
