@@ -1,6 +1,7 @@
 """``Preview``: one image's detection in memory, for tuning params."""
 
 import dataclasses
+import html
 import numbers
 import warnings
 from collections.abc import Callable, Mapping, Sequence
@@ -14,6 +15,7 @@ import matplotlib as mpl
 import numpy as np
 import pandas as pd
 from matplotlib.axes import Axes
+from matplotlib.colors import to_hex
 from matplotlib.figure import Figure
 from matplotlib.patches import Rectangle
 from matplotlib.typing import ColorType
@@ -66,6 +68,16 @@ _EDGE_COLOURS = {
 }
 # Panel labels as large as a legend's text: this share of the width
 _LABEL_SIZE = 0.012
+# Column heads of the card's table of passes
+_CARD_HEADS = (
+    "range",
+    "d (px)",
+    "canny",
+    "accumulator",
+    "min dist",
+    "circles",
+    "reused",
+)
 
 # The preprocessing steps that take a params object, by field
 _NESTED: dict[str, type] = {
@@ -105,6 +117,22 @@ class _Pass:
     circles: NDArray[np.float32]
     seconds: float
     reused: bool
+
+
+@dataclass(frozen=True)
+class _Card:
+    """What the card shows, as plain texts.
+
+    ``table`` is one row per pass then the total, empty with no
+    ranges; ``colours`` the pass colour of each pass row.
+    """
+
+    header: list[str]
+    table: list[list[str]]
+    colours: list[str]
+    lines: list[str]
+    views: list[tuple[str, str]]
+    calls: list[str]
 
 
 @dataclass(frozen=True)
@@ -622,11 +650,191 @@ class Preview:
             )
 
     def __repr__(self) -> str:
-        state = self._state
-        return (
-            f"Preview({state.name!r}, {len(state.particles)} circles in "
-            f"{len(state.passes)} ranges)"
+        """The card as text: the same lines as in a notebook."""
+        card = self._card()
+        parts = ["\n".join(card.header)]
+        if card.table:
+            parts.append(_text_table(card.table))
+        if card.lines:
+            parts.append("\n".join(card.lines))
+        width = max(len(call) for call, _ in card.views)
+        views = [f"  {call:<{width}}  {what}" for call, what in card.views]
+        parts.append("\n".join(["Views", *views]))
+        calls = [f"  {call}" for call in card.calls]
+        parts.append("\n".join(["Change and keep (current values)", *calls]))
+        return "\n\n".join(parts)
+
+    def _repr_html_(self) -> str:
+        """The card for a notebook: the lines and tables, no figures."""
+        card = self._card()
+        parts = ["<div>" + "<br>".join(map(_escape, card.header)) + "</div>"]
+        if card.table:
+            heads, *rows = card.table
+            cells = ["<tr>" + "".join(f"<th>{h}</th>" for h in heads)]
+            for i, row in enumerate(rows):
+                first = _escape(row[0])
+                if i < len(card.colours):
+                    swatch = f'<span style="color:{card.colours[i]}">■</span>'
+                    first = f"{swatch} {first}"
+                rest = "".join(f"<td>{_escape(v)}</td>" for v in row[1:])
+                cells.append(f"<tr><td>{first}</td>{rest}</tr>")
+            parts.append("<table>" + "".join(cells) + "</table>")
+        parts += [f"<div>{_escape(line)}</div>" for line in card.lines]
+        views = "".join(
+            f"<tr><td><code>{_escape(call)}</code></td>"
+            f"<td>{_escape(what)}</td></tr>"
+            for call, what in card.views
         )
+        parts.append(f"<p><b>Views</b></p><table>{views}</table>")
+        calls = "".join(
+            f"<tr><td><code>{_escape(call)}</code></td></tr>"
+            for call in card.calls
+        )
+        parts.append(
+            f"<p><b>Change and keep (current values)</b></p><table>{calls}"
+            "</table>"
+        )
+        return "".join(parts)
+
+    def _card(self) -> _Card:
+        state = self._state
+        held = state.prepared
+        height, width = held.raw.shape
+        first = [f"Preview · {state.name}", f"{width} x {height} px"]
+        if state.source_warnings:
+            first.append("JPEG-compressed")
+        first.append(f"region: {_region_text(self.params.region)}")
+        steps = _preprocess_text(self.params.preprocess)
+        timing = (
+            "reused from the previous preview, 0 s"
+            if state.preprocess_reused
+            else f"{held.seconds:.1f} s"
+        )
+        second = f"preprocessing: {steps} · {timing}"
+        if state.passes:
+            ran = sum(p.seconds for p in state.passes if not p.reused)
+            second += f" · HCT {ran:.1f} s"
+        changes = _differences(state.stored, self.params)
+        # the time of day the stored params were read
+        at = state.stored_at[11:19]
+        third = (
+            f"vs agglpy.yml at {at}: " + "; ".join(changes)
+            if changes
+            else f"same as agglpy.yml at {at}"
+        )
+        header = [" · ".join(first), second, third]
+        ranges = self._ranges()
+        table: list[list[str]] = []
+        if ranges:
+            table.append(list(_CARD_HEADS))
+            for k, (hct, found) in enumerate(
+                zip(ranges, state.passes, strict=True), start=1
+            ):
+                table.append(
+                    [
+                        str(k),
+                        f"{hct.d_min}-{hct.d_max}",
+                        f"{hct.canny_threshold:g}",
+                        f"{hct.accumulator_threshold:g}",
+                        f"{hct.min_dist_ratio:g}",
+                        str(len(found.circles)),
+                        "yes" if found.reused else "no",
+                    ]
+                )
+            table.append(
+                ["total", "", "", "", "", str(len(state.particles)), ""]
+            )
+        else:
+            header.append(
+                "no HCT ranges set: p.set_ranges([(d_min, d_max), …])"
+            )
+        return _Card(
+            header=header,
+            table=table,
+            colours=[to_hex(_pass_colour(i)) for i in range(len(ranges))],
+            lines=self._info_lines() + list(state.warnings),
+            views=self._view_calls(),
+            calls=self._change_calls(),
+        )
+
+    def _info_lines(self) -> list[str]:
+        """Per pass and pair of passes, what a person tuning would ask:
+        a pass with no circles, circles two passes both found."""
+        state = self._state
+        final = state.prepared.final
+        lines = [
+            f"range {k}: no circles (pixel values {final.min()}-{final.max()})"
+            for k, found in enumerate(state.passes, start=1)
+            if len(found.circles) == 0
+        ]
+        counts = [len(found.circles) for found in state.passes]
+        pass_of = dict(
+            zip(
+                state.particles["id"],
+                np.repeat(np.arange(len(counts)), counts),
+                strict=True,
+            )
+        )
+        pairs: dict[tuple[int, int], int] = {}
+        for a, b in find_duplicates(state.particles):
+            i, j = sorted((int(pass_of[a]), int(pass_of[b])))
+            if i != j:
+                pairs[i, j] = pairs.get((i, j), 0) + 1
+        for (i, j), n in sorted(pairs.items()):
+            noun = "pair" if n == 1 else "pairs"
+            lines.append(
+                f"{n} {noun} of near-identical circles between ranges "
+                f"{i + 1} and {j + 1}"
+            )
+        return lines
+
+    def _view_calls(self) -> list[tuple[str, str]]:
+        stages = self._state.prepared.stages
+        count = len(self._ranges())
+        views = [("p.image()", "the raw image, the region outlined")]
+        if stages:
+            views.append(
+                (
+                    " · ".join(f'p.stage("{s.name}")' for s in stages),
+                    "the region after a preprocessing step",
+                )
+            )
+        if count:
+            ks = range(1, count + 1)
+            views += [
+                (
+                    " · ".join(f"p.edges({k})" for k in ks),
+                    "the edges HoughCircles sees in that range",
+                ),
+                (
+                    " · ".join(
+                        [*(f"p.circles({k})" for k in ks), "p.circles()"]
+                    ),
+                    "the circles of one range / of every range",
+                ),
+                (
+                    "… compare=other, side_by_side=True",
+                    "on edges and circles: against another preview",
+                ),
+            ]
+        views.append(
+            ("p.particles · p.warnings", "the circle table (px) · warnings")
+        )
+        return views
+
+    def _change_calls(self) -> list[str]:
+        ranges = self._ranges()
+        if not ranges:
+            return ["p.export()"]
+        calls = [
+            f"p.change_hct(range={k}, "
+            f"canny_threshold={hct.canny_threshold:g}, "
+            f"accumulator_threshold={hct.accumulator_threshold:g})"
+            for k, hct in enumerate(ranges, start=1)
+        ]
+        pairs = ", ".join(f"({r.d_min}, {r.d_max})" for r in ranges)
+        calls += [f"p.set_ranges([{pairs}])", "p.keep()  ·  p.export()"]
+        return calls
 
     def _ranges(self) -> tuple[HCTRange, ...]:
         hct = self.params.hct
@@ -975,6 +1183,39 @@ def _label(ax: Axes, text: str) -> None:
         fontsize=_LABEL_SIZE * width * 72 / fig.dpi,
         bbox={"facecolor": "black", "alpha": 0.5, "edgecolor": "none"},
     )
+
+
+def _escape(text: str) -> str:
+    return html.escape(text, quote=False)
+
+
+def _text_table(rows: Sequence[Sequence[str]]) -> str:
+    """Rows as aligned text: the first column left, the rest right."""
+    widths = [max(len(row[i]) for row in rows) for i in range(len(rows[0]))]
+    lines = []
+    for row in rows:
+        cells = [row[0].ljust(widths[0])]
+        cells += [v.rjust(w) for v, w in zip(row[1:], widths[1:], strict=True)]
+        lines.append("  ".join(cells).rstrip())
+    return "\n".join(lines)
+
+
+def _region_text(region: RegionParams) -> str:
+    if region.bottom_fraction == 0:
+        return "the whole image"
+    return f"bottom {region.bottom_fraction * 100:g} % cut"
+
+
+def _preprocess_text(preprocess: PreprocessParams) -> str:
+    """The steps switched on, in run order: ``median 3 → CLAHE``."""
+    steps = []
+    if preprocess.median_blur is not None:
+        steps.append(f"median {preprocess.median_blur}")
+    if preprocess.rolling_ball is not None:
+        steps.append(f"rolling ball r {preprocess.rolling_ball.radius:g}")
+    if preprocess.clahe is not None:
+        steps.append("CLAHE")
+    return " → ".join(steps) or "none"
 
 
 def _differences(old: ImageParams, new: ImageParams) -> list[str]:

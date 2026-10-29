@@ -407,3 +407,91 @@ def test_param_differences(tuning_col: Collection) -> None:
     ]
     empty = p.remove_range(1).remove_range(1)
     assert differences(empty.params, p.params) == ["ranges: 0 → 2"]
+
+
+def test_card_lines(tuning_col: Collection) -> None:
+    p = tuning_col["T1"].preview(progress=False)
+    text = repr(p)
+    for part in (
+        "Preview · T1 · 200 x 160 px · region: bottom 10 % cut",
+        "preprocessing: median 3 → rolling ball r 20 → CLAHE",
+        "same as agglpy.yml at ",
+        "range",
+        "d (px)",
+        "canny",
+        "accumulator",
+        "min dist",
+        "8-18",
+        "total",
+        "1 pair of near-identical circles between ranges 1 and 2",
+        "DuplicateParticlesWarning: ",
+        "p.image()",
+        'p.stage("median") · p.stage("rolling ball") · p.stage("clahe")',
+        "p.edges(1) · p.edges(2)",
+        "p.circles(1) · p.circles(2) · p.circles()",
+        "compare=",
+        "p.change_hct(range=1, canny_threshold=200, accumulator_threshold=15)",
+        "p.set_ranges([(8, 18), (16, 44)])",
+        "p.keep()",
+        "p.export()",
+    ):
+        assert part in text, part
+    assert "reused from the previous preview" not in text
+    assert "JPEG" not in text
+    # a change: what is reused, what differs, a pass with no circles
+    q = p.change_hct(range=1, canny_threshold=150).add_range(60, 80)
+    text = repr(q)
+    final = q._state.prepared.final
+    for part in (
+        "reused from the previous preview",
+        f"range 3: no circles (pixel values {final.min()}-{final.max()})",
+        "vs agglpy.yml at ",
+        "ranges: 2 → 3",
+    ):
+        assert part in text, part
+    # reused from the preview each was made from
+    assert _reused(q) == ["yes", "yes", "no"]
+    assert _reused(p.change_hct(range=1, canny_threshold=150)) == [
+        "no",
+        "yes",
+    ]
+    assert "ranges[1].canny_threshold 200 → 150" in repr(
+        p.change_hct(range=1, canny_threshold=150)
+    )
+    # html: the same content, escaped, as tables
+    page = q._repr_html_()
+    assert "<table" in page and "Preview · T1" in page
+    assert "ranges: 2 → 3" in page
+    assert "&lt;" not in repr(q)
+    # no ranges: one line instead of the table, no keep()
+    none = p.remove_range(1).remove_range(1)
+    text = repr(none)
+    assert "no HCT ranges set: p.set_ranges([(d_min, d_max), …])" in text
+    assert "p.edges(" not in text and "p.keep()" not in text
+    assert "p.export()" in text
+    # a JPEG: noted in the header, its warning listed
+    jpeg = repr(tuning_col["T3"].preview(progress=False))
+    assert "200 x 160 px · JPEG-compressed" in jpeg
+    assert "LossyImageWarning: " in jpeg
+
+
+def test_card_is_a_snapshot(tuning_col: Collection) -> None:
+    p = tuning_col["T1"].preview(progress=False)
+    text, page = repr(p), p._repr_html_()
+    tuning_col.set_params("T1", region={"bottom_fraction": 0.2})
+    # the card compares with agglpy.yml as it was when p was made
+    assert repr(p) == text and p._repr_html_() == page
+    changed = repr(p.change_hct(range=2, d_max=40))
+    assert "vs agglpy.yml at " in changed
+    assert (
+        "ranges[2].d_max 44 → 40" in changed
+        and "bottom_fraction" not in changed
+    )
+    # a broken agglpy.yml does not break the card
+    (tuning_col.folder / "agglpy.yml").write_text("{", encoding="utf-8")
+    assert repr(p) == text
+
+
+def _reused(p: Preview) -> list[str]:
+    rows = [line.split() for line in repr(p).splitlines()]
+    return [row[-1] for row in rows if row and row[-1] in ("yes", "no")]
