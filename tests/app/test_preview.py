@@ -11,11 +11,18 @@ import cv2
 import numpy as np
 import pandas as pd
 import pytest
+from PIL import Image
 
 import agglpy.core.preprocess as core_preprocess
+from agglpy import _yaml
 from agglpy.app import Collection, Preview
 from agglpy.app import _preview as preview_module
-from agglpy.errors import DuplicateParticlesWarning, ParamsError
+from agglpy.app._config import to_params
+from agglpy.errors import (
+    DuplicateParticlesWarning,
+    OutputExistsError,
+    ParamsError,
+)
 from agglpy.io import read_image, read_particles
 from agglpy.params import (
     ClaheParams,
@@ -26,6 +33,7 @@ from agglpy.params import (
 from agglpy.pipeline import detect_particles
 
 from support.collection import work
+from support.render import render
 
 
 def _file(col: Collection, name: str) -> Path:
@@ -495,3 +503,136 @@ def test_card_is_a_snapshot(tuning_col: Collection) -> None:
 def _reused(p: Preview) -> list[str]:
     rows = [line.split() for line in repr(p).splitlines()]
     return [row[-1] for row in rows if row and row[-1] in ("yes", "no")]
+
+
+def test_keep_writes_only_this_image(
+    tuning_col: Collection, caplog: pytest.LogCaptureFixture
+) -> None:
+    yml = tuning_col.folder / "agglpy.yml"
+    with pytest.warns(DuplicateParticlesWarning):
+        tuning_col.detect("T1", progress=False)
+    before = _yaml.load(yml)
+    t2 = tuning_col.params("T2")
+    p = tuning_col["T1"].preview(progress=False)
+    # agglpy.yml changed by hand after the preview was made
+    tuning_col.set_params("T1", region={"bottom_fraction": 0.2})
+    q = p.change_hct(range=1, canny_threshold=150)
+    with caplog.at_level(logging.INFO, logger="agglpy"):
+        q.keep()
+    # the preview's params, whatever the file said meanwhile
+    assert tuning_col.params("T1") == q.params
+    assert tuning_col.params("T2") == t2
+    after = _yaml.load(yml)
+    assert after["defaults"] == before["defaults"]
+    assert after["images"]["T2"] == before["images"]["T2"]
+    assert "T3" not in after["images"]
+    assert (
+        "T1: params kept in agglpy.yml (region.bottom_fraction 0.2 → 0.1; "
+        "ranges[1].canny_threshold 200 → 150)"
+    ) in caplog.messages
+    status = tuning_col.status().set_index("image")
+    assert status.loc["T1", "detection"] == "params changed"
+    # no ranges: refused, the file untouched
+    text = yml.read_text(encoding="utf-8")
+    with pytest.raises(
+        ParamsError,
+        match=r"this preview has no HCT ranges; keep\(\) would turn detection "
+        r"off for T1\. Add ranges \(p\.set_ranges\(\.\.\.\)\), or turn it "
+        r'off on purpose: col\.set_params\("T1", hct=\{"ranges": \[\]\}\)',
+    ):
+        q.remove_range(1).remove_range(1).keep()
+    assert yml.read_text(encoding="utf-8") == text
+    # the same params again: written, logged as unchanged
+    with caplog.at_level(logging.INFO, logger="agglpy"):
+        q.keep()
+    assert "T1: params kept in agglpy.yml (unchanged)" in caplog.messages
+
+
+@pytest.mark.parametrize("name", ["T1", "D99 łódź"])
+def test_export_files_and_names(
+    tuning_col: Collection, tmp_path: Path, name: str
+) -> None:
+    col = tuning_col
+    if name != "T1":
+        # the same image under a name with a space and Polish letters
+        folder = tmp_path / "named"
+        folder.mkdir()
+        source = tuning_col["T1"]._path()
+        (folder / f"{name}.tif").write_bytes(source.read_bytes())
+        col = Collection.create(tmp_path / "named col", images=folder)
+        params = tuning_col.params("T1")
+        col.set_params(
+            None,
+            region=params.region,
+            preprocess=params.preprocess,
+            hct=params.hct,
+        )
+    p = col[name].preview(progress=False)
+    paths = p.export()
+    assert [x.name for x in paths] == [
+        f"{name} {view}"
+        for view in (
+            "image.png",
+            "stage median.png",
+            "stage rolling ball.png",
+            "stage clahe.png",
+            "edges 1.png",
+            "edges 2.png",
+            "circles 1.png",
+            "circles 2.png",
+            "circles.png",
+            "preview.yml",
+        )
+    ]
+    tuning = (col.folder / "exports" / "tuning").resolve()
+    assert all(x.is_absolute() and x.parent == tuning for x in paths)
+    assert render(p.circles()).shape == read_png(paths[-2]).shape
+    data = _yaml.load(paths[-1])
+    assert data["image"] == name
+    assert list(data) == [
+        "image",
+        "created",
+        "agglpy",
+        "dependencies",
+        "params",
+        "ranges",
+        "circles",
+        "info",
+        "warnings",
+    ]
+    # the params in the agglpy.yml layout: they read back as they are
+    assert to_params(data["params"]) == (p.params, [])
+    assert [r["circles"] for r in data["ranges"]] == [4, 3]
+    assert data["ranges"][0]["canny_threshold"] == 200
+    assert data["circles"] == len(p.particles)
+    assert data["info"] == p._info_lines()
+    assert data["warnings"] == list(p.warnings)
+    # again: refused, nothing changed; replaced with overwrite=True
+    stamp = paths[0].stat().st_mtime_ns
+    with pytest.raises(OutputExistsError, match="overwrite=True") as error:
+        p.export()
+    assert f"{name} image.png" in str(error.value)
+    assert paths[0].stat().st_mtime_ns == stamp
+    assert p.export(overwrite=True) == paths
+    with pytest.raises(ParamsError, match="work folder"):
+        p.export(col.folder / "agglpy")
+
+
+def test_export_without_ranges(tuning_col: Collection, tmp_path: Path) -> None:
+    p = tuning_col["T1"].preview(progress=False)
+    none = p.remove_range(1).remove_range(1)
+    paths = none.export(tmp_path / "out")
+    assert [x.name for x in paths] == [
+        "T1 image.png",
+        "T1 stage median.png",
+        "T1 stage rolling ball.png",
+        "T1 stage clahe.png",
+        "T1 preview.yml",
+    ]
+    data = _yaml.load(paths[-1])
+    assert data["params"]["hct"] == {"ranges": []}
+    assert data["ranges"] == [] and data["circles"] == 0
+
+
+def read_png(path: Path) -> np.ndarray:
+    return np.asarray(Image.open(path).convert("RGBA"))

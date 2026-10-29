@@ -6,6 +6,7 @@ import numbers
 import warnings
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from time import perf_counter
 from types import TracebackType
@@ -22,14 +23,18 @@ from matplotlib.typing import ColorType
 from numpy.typing import NDArray
 from tqdm.auto import tqdm
 
-from agglpy import draw
+from agglpy import _yaml, draw
 from agglpy.app._config import ImageParams, plain
 from agglpy.app._detect import warn_if_lossy
-from agglpy.app._records import now
+from agglpy.app._files import replace_file
+from agglpy.app._records import now, versions
 from agglpy.app._report import warning_text
+from agglpy.app._sources import PathLike
+from agglpy.app._work import export_folder
 from agglpy.core.detect import hct_edges
 from agglpy.core.region import Bounds
-from agglpy.errors import ParamsError
+from agglpy.errors import OutputExistsError, ParamsError
+from agglpy.export import _check_replaceable
 from agglpy.io import read_image
 from agglpy.logger import logger
 from agglpy.params import (
@@ -336,6 +341,155 @@ class Preview:
         ranges = list(self._ranges())
         del ranges[self._index(k)]
         return self._changed(hct=HCTParams(tuple(ranges)) if ranges else None)
+
+    def keep(self) -> None:
+        """Write this preview's params into ``agglpy.yml``, for its image.
+
+        The region, preprocessing and HCT ranges replace the image's
+        entry (only what differs from the defaults is stored), whatever
+        the file holds now. ``col.detect()`` then runs with them;
+        ``col.status()`` shows ``params changed`` until it does.
+
+        Raises:
+            ParamsError: If the preview has no HCT ranges (keeping it
+                would switch detection off), the image is no longer in
+                the sheet, or the file has problems; nothing is written.
+        """
+        state = self._state
+        name = state.name
+        params = self.params
+        if params.hct is None:
+            raise ParamsError(
+                "this preview has no HCT ranges; keep() would turn "
+                f"detection off for {name}. Add ranges "
+                "(p.set_ranges(...)), or turn it off on purpose: "
+                f'col.set_params("{name}", hct={{"ranges": []}})'
+            )
+        collection = state.collection
+        changes = _differences(collection.params(name), params)
+        collection.set_params(
+            name,
+            region=params.region,
+            preprocess=params.preprocess,
+            hct=params.hct,
+        )
+        logger.info(
+            "%s: params kept in agglpy.yml (%s)",
+            name,
+            "; ".join(changes) or "unchanged",
+        )
+
+    def export(
+        self, folder: PathLike | None = None, *, overwrite: bool = False
+    ) -> list[Path]:
+        """Write every view as a PNG, and ``<image> preview.yml``.
+
+        The views in their default form: ``<image> image.png``,
+        ``<image> stage <step>.png`` per step, ``<image> edges <k>.png``
+        and ``<image> circles <k>.png`` per range, ``<image>
+        circles.png``. ``preview.yml`` holds the params in the
+        ``agglpy.yml`` layout, the numbers per range, the warnings, the
+        date and the versions.
+
+        Args:
+            folder: The folder to write into; created with its parents.
+                None gives ``exports/tuning`` in the collection, where a
+                repeated export needs ``overwrite=True``. A relative
+                path is taken from the current working directory.
+            overwrite: Replace files of this image already there.
+
+        Returns:
+            The files written, absolute, in the order above.
+
+        Raises:
+            ParamsError: If ``folder`` lies in the collection's work
+                folder ``agglpy/``.
+            OutputExistsError: If one of the files is there and
+                ``overwrite`` is False; nothing is written.
+            OutputLockedError: If a file to replace is open in another
+                program; nothing is changed.
+        """
+        state = self._state
+        folder = export_folder(state.collection.folder, folder, "tuning")
+        views = self._export_views()
+        names = [*views, "preview.yml"]
+        paths = [folder / f"{state.name} {name}" for name in names]
+        existing = [p for p in paths if p.exists()]
+        if existing and not overwrite:
+            listed = ", ".join(p.name for p in existing)
+            raise OutputExistsError(
+                f"{folder} already holds {listed}; pass overwrite=True to "
+                "replace them"
+            )
+        _check_replaceable(existing)
+        folder.mkdir(parents=True, exist_ok=True)
+        text = _yaml.dumps(self._export_record())
+        made: list[Path] = []
+        try:
+            for view, path in zip(views.values(), paths, strict=False):
+                new = not path.exists()
+                # one figure at a time: a large image's figures are big
+                fig = view()
+                replace_file(
+                    path, partial(fig.savefig, format="png", dpi="figure")
+                )
+                if new:
+                    made.append(path)
+            new = not paths[-1].exists()
+            replace_file(
+                paths[-1], lambda tmp: tmp.write_bytes(text.encode("utf-8"))
+            )
+            if new:
+                made.append(paths[-1])
+        except BaseException:
+            # the new files only: a replaced one can't be put back
+            for path in made:
+                path.unlink(missing_ok=True)
+            raise
+        logger.info("%s: preview exported to %s", state.name, folder)
+        return paths
+
+    def _export_views(self) -> dict[str, Callable[[], Figure]]:
+        """File name ending -> the view that draws it, in export order."""
+        views: dict[str, Callable[[], Figure]] = {"image.png": self.image}
+        for stage in self._state.prepared.stages:
+            views[f"stage {stage.name}.png"] = partial(self.stage, stage.name)
+        ks = range(1, len(self._ranges()) + 1)
+        for k in ks:
+            views[f"edges {k}.png"] = partial(self.edges, k)
+        for k in ks:
+            views[f"circles {k}.png"] = partial(self.circles, k)
+        if ks:
+            views["circles.png"] = self.circles
+        return views
+
+    def _export_record(self) -> dict[str, Any]:
+        """The content of ``preview.yml``."""
+        state = self._state
+        agglpy_version, dependencies = versions()
+        params = plain(self.params, "params")
+        # as agglpy.yml writes no ranges
+        params["hct"] = params["hct"] or {"ranges": []}
+        ranges = [
+            {
+                "range": k,
+                **plain(found.hct, f"ranges[{k}]"),
+                "circles": len(found.circles),
+                "seconds": round(found.seconds, 3),
+            }
+            for k, found in enumerate(state.passes, start=1)
+        ]
+        return {
+            "image": state.name,
+            "created": now(),
+            "agglpy": agglpy_version,
+            "dependencies": dependencies,
+            "params": params,
+            "ranges": ranges,
+            "circles": len(state.particles),
+            "info": self._info_lines(),
+            "warnings": list(state.warnings),
+        }
 
     # -----------------------------------------------------------------
     # Views: one new full-size figure per call
