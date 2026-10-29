@@ -2,23 +2,36 @@
 
 import dataclasses
 import warnings
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import (
+    Callable,
+    Hashable,
+    Iterable,
+    Iterator,
+    Mapping,
+    Sequence,
+)
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Literal
 
 import pandas as pd
+from matplotlib.colors import Colormap, Normalize
+from matplotlib.figure import Figure
+from matplotlib.typing import ColorType
 from numpy.typing import ArrayLike
 
+from agglpy import draw as _draw
 from agglpy.app._report import reemit
 from agglpy.app._sources import PathLike
 from agglpy.core import distributions
 from agglpy.core import metrics as _metrics
 from agglpy.core.agglomerates import select_agglomerates
 from agglpy.core.properties import DIMENSIONS
-from agglpy.errors import ParamsError, TableError
+from agglpy.errors import ImageError, ParamsError, TableError
 from agglpy.export import write_results
+from agglpy.io import read_image
 
-__all__ = ["Origin", "Results"]
+__all__ = ["Drawings", "Origin", "Results"]
 
 
 @dataclass(frozen=True)
@@ -390,6 +403,151 @@ class Results:
             overwrite=overwrite,
         )
 
+    def draw(
+        self,
+        images: str | Sequence[str] | None = None,
+        what: Literal["particles", "agglomerates"] = "agglomerates",
+        *,
+        color_by: Hashable,
+        select: pd.Series | None = None,
+        background: ColorType | None = "image",
+        others: ColorType | None = "grey",
+        cmap: str | Colormap | None = None,
+        norm: Normalize | None = None,
+        vmin: float | None = None,
+        vmax: float | None = None,
+        colors: Mapping[Any, ColorType] | None = None,
+        alpha: float = 0.5,
+        linewidth: float = 1.0,
+        legend: bool | str = True,
+    ) -> "Drawings":
+        """Draw the particles or agglomerates of each image, in px.
+
+        One colour scale for all drawn images: numbers share one
+        ``vmin`` / ``vmax`` over the selected values of every image
+        (unless given), labels one label → colour mapping, so a series
+        compares at a glance (draw one with ``res.subset(images=...)``
+        first). The figures are made when looked at (``d[name]``) or
+        exported, not held: a figure changed by hand is saved with
+        ``fig.savefig``.
+
+        Args:
+            images: A name or list of names; None draws every image.
+            what: ``"particles"`` (each particle coloured by a column
+                of ``particles``) or ``"agglomerates"`` (each
+                agglomerate by a column of ``agglomerates``).
+            color_by: The column of that table that gives the colours.
+                A column of ``images`` has to be merged onto the table
+                first.
+            select: A True / False Series on that table's index; the
+                others are drawn as thin ``others`` outlines.
+            background: ``"image"`` draws the image file underneath;
+                else any matplotlib colour (``"white"``,
+                ``"#FF000033"``, ``(0, 1, 0, 0.47)`` with values in
+                0-1) or None for a transparent figure.
+            others, cmap, norm, vmin, vmax, colors, alpha, linewidth:
+                As for ``agglpy.draw.particles``.
+            legend: A colorbar or legend in a strip right of the image;
+                a string titles it; False draws the figure without the
+                strip, the image's size exactly.
+
+        Returns:
+            The ``Drawings``: image name → figure.
+
+        Raises:
+            ParamsError: If a name is not in these results, ``what`` is
+                another name, ``color_by`` is a column of ``images``
+                only, or an option does not fit the column.
+            TableError: If ``color_by`` is not a column of the table or
+                ``select`` not a True / False Series on its index.
+        """
+        names = (
+            list(self.images.image)
+            if images is None
+            else list(self.images.image[self._image_mask(images)])
+        )
+        if what not in _TABLES:
+            raise ParamsError(
+                f"what must be 'particles' or 'agglomerates', got {what!r}"
+            )
+        table = self._table(what)
+        if color_by not in table.columns:
+            if color_by in self.images.columns:
+                raise ParamsError(
+                    f"{color_by!r} is a column of res.images: merge it onto "
+                    f"res.{what} first (res.{what}.merge(res.images"
+                    f'[["image", {color_by!r}]])), or draw a series with '
+                    "res.subset(images=...)"
+                )
+            raise TableError(f"no column {color_by!r} in res.{what}")
+        if select is None:
+            chosen = pd.Series(True, index=table.index)
+        elif (
+            isinstance(select, pd.Series)
+            and pd.api.types.is_bool_dtype(select)
+            and select.index.equals(table.index)
+        ):
+            chosen = select
+        else:
+            raise TableError(
+                f"select must be a True / False Series on res.{what}' "
+                f"index, e.g. res.{what}.D > 1e-7"
+            )
+        drawn = table.image.isin(names)
+        scale = _draw.color_scale(
+            table[color_by][drawn & chosen],
+            cmap=cmap,
+            norm=norm,
+            vmin=vmin,
+            vmax=vmax,
+            colors=colors,
+        )
+        return Drawings(
+            {
+                name: self._sheet(name, what, color_by, chosen)
+                for name in names
+            },
+            background=background,
+            options={
+                **scale,
+                "others": others,
+                "alpha": alpha,
+                "linewidth": linewidth,
+                "legend": str(color_by) if legend is True else legend,
+            },
+        )
+
+    def _sheet(
+        self,
+        name: str,
+        what: str,
+        color_by: Hashable,
+        chosen: pd.Series,
+    ) -> "_Sheet":
+        """What ``Drawings`` needs of one image, copied, back in px."""
+        row = self.images[self.images.image == name].iloc[0]
+        size = float(row.pixel_size)
+        mine = self.particles.image == name
+        particles = self.particles.loc[mine, ["x", "y", "r"]] / size
+        particles["agglomerate_id"] = self.particles.agglomerate_id[mine]
+        agglomerates = None
+        # under its own name: color_by="r" must not replace r in px
+        if what == "particles":
+            particles[_VALUES] = self.particles[color_by][mine]
+        else:
+            mine = self.agglomerates.image == name
+            agglomerates = self.agglomerates.loc[mine, ["agglomerate_id"]]
+            agglomerates[_VALUES] = self.agglomerates[color_by][mine]
+        select = chosen[mine]
+        return _Sheet(
+            particles,
+            agglomerates,
+            select.copy(),
+            int(row.width),
+            int(row.height),
+            self._origin.files[name],
+        )
+
     def _image_mask(
         self, images: pd.Series | str | Sequence[str]
     ) -> pd.Series:
@@ -437,6 +595,107 @@ class Results:
         # 4: past reemit, this helper and the public method
         reemit(caught, stacklevel=4)
         return out
+
+
+# The colour column of the tables ``Drawings`` holds.
+_VALUES = "agglpy color_by"
+
+
+@dataclass(frozen=True)
+class _Sheet:
+    """One image of ``Drawings``: its rows in px and its file."""
+
+    particles: pd.DataFrame
+    agglomerates: pd.DataFrame | None
+    select: pd.Series
+    width: int
+    height: int
+    path: Path
+
+
+class Drawings(Mapping[str, Figure]):
+    """Figures of results, one per image, made when looked at.
+
+    A read-only mapping image name → matplotlib ``Figure``, in the
+    order of the results: ``d["D7-017"]``, ``list(d)``, ``len(d)``.
+    Each access makes a new figure from the rows copied at
+    ``res.draw``; with ``background="image"`` the image file is read
+    then.
+    """
+
+    def __init__(
+        self,
+        sheets: Mapping[str, _Sheet],
+        *,
+        background: ColorType | None,
+        options: Mapping[str, Any],
+    ) -> None:
+        """Made by ``Results.draw``; not called directly."""
+        self._sheets = dict(sheets)
+        self._background = background
+        self._options = dict(options)
+
+    def __getitem__(self, name: str) -> Figure:
+        """A new figure of image ``name``.
+
+        Raises:
+            KeyError: If ``name`` was not drawn.
+            FileNotFoundError: If the image file is gone
+                (``background="image"``).
+            ImageError: If the image file no longer has the analysed
+                size.
+        """
+        sheet = self._sheets[name]
+        image = None
+        background = self._background
+        if isinstance(background, str) and background == "image":
+            image = _image(sheet)
+            background = "white"
+        fig, ax = _draw.figure(
+            (sheet.height, sheet.width),
+            legend=self._options["legend"] is not False,
+            background=background,
+        )
+        if sheet.agglomerates is None:
+            _draw.particles(
+                ax,
+                sheet.particles,
+                color_by=_VALUES,
+                select=sheet.select,
+                image=image,
+                **self._options,
+            )
+        else:
+            _draw.agglomerates(
+                ax,
+                sheet.particles,
+                sheet.agglomerates,
+                color_by=_VALUES,
+                select=sheet.select,
+                image=image,
+                **self._options,
+            )
+        return fig
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._sheets)
+
+    def __len__(self) -> int:
+        return len(self._sheets)
+
+
+def _image(sheet: _Sheet) -> Any:
+    """The image file of ``sheet``, checked against the analysed size."""
+    if not sheet.path.is_file():
+        raise FileNotFoundError(f"image file not found: {sheet.path}")
+    image = read_image(sheet.path)
+    height, width = image.shape
+    if (width, height) != (sheet.width, sheet.height):
+        raise ImageError(
+            f"{sheet.path.name} is now {width} x {height} px, analysed at "
+            f"{sheet.width} x {sheet.height} px: run analyze() again"
+        )
+    return image
 
 
 def _kept(table: pd.DataFrame, of: pd.DataFrame) -> dict[str, int]:
