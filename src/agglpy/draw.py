@@ -199,10 +199,11 @@ def image(
     height, width = array.shape[:2]
     x, y = origin
     options: dict[str, Any] = {}
-    if array.ndim == 2:
+    if array.ndim == 2 and array.dtype == np.uint8:
+        # as RGB, since the gray colormap draws some values 1 too dark
+        array = np.repeat(array[..., np.newaxis], 3, axis=2)
+    elif array.ndim == 2:
         options["cmap"] = "gray"
-        if array.dtype == np.uint8:
-            options.update(vmin=0, vmax=255)
     # limits set by figure stay; free axes are fitted to the image
     return ax.imshow(
         array,
