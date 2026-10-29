@@ -80,21 +80,28 @@ def test_methods_equal_their_core_call(res: Results, method: str) -> None:
     pd.testing.assert_frame_equal(got, expected)
 
 
-@pytest.mark.parametrize(
-    "method", ["distribution", "distribution_across_images"]
-)
-def test_bad_table_name(res: Results, method: str) -> None:
-    with pytest.raises(
-        ParamsError,
-        match="table must be 'particles' or 'agglomerates', got 'images'",
-    ):
-        getattr(res, method)("images", "D", EDGES)
+def test_bad_table_name(res: Results) -> None:
+    for method in (res.distribution, res.distribution_across_images):
+        with pytest.raises(
+            ParamsError,
+            match="table must be 'particles' or 'agglomerates', got 'images'",
+        ):
+            method("images", "D", EDGES)
 
 
-def test_a_user_column_is_seen(res: Results) -> None:
+def test_a_user_column_travels(res: Results, tmp_path: Path) -> None:
+    # the methods see it, subset keeps it, export writes it without unit
     res.particles["d_um"] = res.particles.D * 1e6
     got = res.distribution("particles", "d_um", [0.01, 0.1, 1.0])
     assert got["amount"].sum() == len(res.particles)
+    res.agglomerates["dense"] = res.agglomerates.member_count > 1
+    s = res.subset(images=["D7-018"])
+    assert "dense" in s.agglomerates.columns
+    out = s.export(tmp_path / "out")
+    header = (out / "csv" / "agglomerates.csv").read_text("utf-8")
+    assert "dense" in header.splitlines()[0].split(",")
+    units = pd.read_csv(out / "csv" / "units.csv")
+    assert "dense" not in set(units.column)
 
 
 def test_method_warning_points_at_the_caller(res: Results) -> None:
@@ -190,19 +197,11 @@ def test_subset_refuses(
 ) -> None:
     with pytest.raises(error, match=match):
         res.subset(**kwargs)  # type: ignore[arg-type]
-
-
-def test_subset_images_mask_must_be_true_false(res: Results) -> None:
+    # masks made from res: not True / False, or keeping no image
     with pytest.raises(TableError, match="True / False Series"):
         res.subset(images=res.images.width)
     with pytest.raises(ParamsError, match="no image left"):
         res.subset(images=res.images.series == "c")
-
-
-def test_added_column_travels(res: Results) -> None:
-    res.agglomerates["dense"] = res.agglomerates.member_count > 1
-    s = res.subset(images=["D7-018"])
-    assert "dense" in s.agglomerates.columns
 
 
 # ---------------------------------------------------------------------
@@ -263,21 +262,10 @@ def test_export_writes_tables_units_and_record(
     assert _yaml.load(out / "record.yml")["subset"] == []
 
 
-@pytest.mark.parametrize("name", ["images", "agglomerates", "particles"])
 def test_export_extra_table_named_like_a_result(
-    res: Results, tmp_path: Path, name: str
-) -> None:
-    with pytest.raises(ParamsError, match=f"{name!r}"):
-        res.export(tmp_path / "out", tables={name: res.summary()})
-    assert not (tmp_path / "out").exists()
-
-
-def test_added_column_is_exported_without_unit(
     res: Results, tmp_path: Path
 ) -> None:
-    res.agglomerates["dense"] = res.agglomerates.member_count > 1
-    out = res.subset(images=["D7-018"]).export(tmp_path / "out")
-    header = (out / "csv" / "agglomerates.csv").read_text("utf-8")
-    assert "dense" in header.splitlines()[0].split(",")
-    units = pd.read_csv(out / "csv" / "units.csv")
-    assert "dense" not in set(units.column)
+    for name in ("images", "agglomerates", "particles"):
+        with pytest.raises(ParamsError, match=f"{name!r}"):
+            res.export(tmp_path / "out", tables={name: res.summary()})
+    assert not (tmp_path / "out").exists()

@@ -38,8 +38,19 @@ def used_csv(col: Collection, name: str) -> Path:
     return corrected if corrected.is_file() else folder / "particles_hct.csv"
 
 
-def test_tables_hold_each_image_in_metres(analysis_col: Collection) -> None:
+def test_tables_hold_each_image_in_metres(
+    analysis_col: Collection, tmp_path: Path
+) -> None:
+    def files() -> dict[Path, tuple[bytes, int]]:
+        return {
+            p: (p.read_bytes(), p.stat().st_mtime_ns)
+            for p in sorted(tmp_path.rglob("*"))
+            if p.is_file()
+        }
+
+    before = files()
     res = analysis_col.analyze(progress=False)
+    assert files() == before  # analyze writes nothing
     assert res.images.columns.tolist() == [
         *IMAGES_TABLE_COLUMNS,
         "series",
@@ -148,21 +159,9 @@ def test_no_included_image(analysis_col: Collection) -> None:
         "false",
     ):
         analysis_col.analyze(progress=False)
-
-
-def test_analyze_writes_nothing(
-    analysis_col: Collection, tmp_path: Path
-) -> None:
-    def files() -> dict[Path, tuple[bytes, int]]:
-        return {
-            p: (p.read_bytes(), p.stat().st_mtime_ns)
-            for p in sorted(tmp_path.rglob("*"))
-            if p.is_file()
-        }
-
-    before = files()
-    analysis_col.analyze(progress=False)
-    assert files() == before
+    analysis_col.write_sheet(sheet.iloc[0:0])
+    with pytest.raises(NotReadyError, match=r"images\.xlsx has no images"):
+        analysis_col.analyze(progress=False)
 
 
 def test_exception_names_the_image(
@@ -219,7 +218,7 @@ def test_outside_region_warned_once_at_the_callers_line(
     assert len(outside) == 1
     assert os.path.normcase(outside[0].filename) == os.path.normcase(__file__)
     text = str(outside[0].message)
-    assert text.startswith("2 images: ParticlesOutsideRegionWarning")
+    assert text.startswith("2 images (each message")
     assert "\n  D7-017: " in text and "\n  D7-018: " in text
     # the region change made the detections outdated: that comes first
     assert ws[0].category is OutdatedParticlesWarning
@@ -282,7 +281,7 @@ def test_pixel_size_warning_only_when_the_metadata_decides(
     with pytest.warns(PixelSizeWarning) as ws:
         res = analysis_col.analyze(progress=False)
     (w,) = [w for w in ws if w.category is PixelSizeWarning]
-    assert str(w.message).startswith("1 image: PixelSizeWarning")
+    assert str(w.message).startswith("1 image (each message")
     assert "\n  D7-018: " in str(w.message)
     assert res._origin.images["D7-018"]["warnings"][0].startswith(
         "PixelSizeWarning: "
@@ -351,13 +350,11 @@ def test_progress_and_log_lines(
 
 
 def test_summary_text_lists_ten_then_more() -> None:
-    text = summary_text(
-        ParticlesOutsideRegionWarning, [(f"I{i}", "m") for i in range(12)]
-    )
+    text = summary_text([(f"I{i}", "m") for i in range(12)])
     lines = text.splitlines()
-    assert lines[0] == (
-        "12 images: ParticlesOutsideRegionWarning (each message is in "
-        "res.export's record.yml)"
+    # the class name is already in front of the warning's text
+    assert (
+        lines[0] == "12 images (each message is in res.export's record.yml):"
     )
     assert lines[1:3] == ["  I0: m", "  I1: m"]
     assert lines[-1] == "  and 2 more"

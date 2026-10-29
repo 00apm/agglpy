@@ -67,6 +67,7 @@ def test_one_scale_over_the_drawn_images(res: Results) -> None:
     assert _legend(d["D7-017"]) == _legend(d["D7-018"]) == ["pair", "single"]
     assert list(d) == ["D7-017", "D7-018", "D7-019"]
     assert "D7-020" not in d and len(d) == 3
+    assert repr(d) == "Drawings(3 images: D7-017, D7-018, D7-019)"
     with pytest.raises(KeyError):
         d["D7-020"]
     # a new figure on each access, none held
@@ -101,6 +102,8 @@ def test_draw_refuses_before_rendering(res: Results) -> None:
         res.draw(color_by="Q")
     with pytest.raises(ParamsError, match="no image 'X'"):
         res.draw("X", color_by="D")
+    with pytest.raises(ParamsError, match="no image to draw"):
+        res.draw([], color_by="D")
     with pytest.raises(TableError, match="select"):
         res.draw(color_by="D", select=res.particles.D > 0)
     # the shared scale's checks: labels take no vmin
@@ -128,6 +131,7 @@ def test_image_underneath_read_on_access(
     )
     images = analysis_col.folder.parent / "images"
     (images / "D7-017.tif").unlink()
+    assert "D7-017" in d  # without making a figure
     # image=False never reads the file
     for background in ("white", "#FF000033", (0, 1, 0, 0.47), None):
         fig = res.draw(
@@ -141,13 +145,6 @@ def test_image_underneath_read_on_access(
         ImageError, match=r"now 100 x 80 px, analysed at 200 x 160.*analyze"
     ):
         d["D7-017"]
-
-
-def test_legend_false_has_no_strip(res: Results) -> None:
-    fig = res.draw("D7-017", color_by="D", legend=False)["D7-017"]
-    width, height = fig.get_size_inches() * fig.dpi
-    assert (round(width), round(height)) == (200, 160)
-    assert len(fig.axes) == 1
 
 
 def test_added_column_and_select_can_be_drawn(res: Results) -> None:
@@ -177,11 +174,13 @@ def test_drawings_export_one_png_per_image(
     ]
     with Image.open(paths[0]) as png:
         assert png.size == (200, 160)  # pixel for pixel, no strip
+    assert len(d["D7-017"].axes) == 1
     with pytest.raises(OutputExistsError, match=r"D7-017\.png"):
         d.export(folder)
     before = paths[1].read_bytes()
+    paths[1].write_bytes(b"old")
     assert d.export(folder, overwrite=True) == paths
-    assert paths[1].read_bytes() == before  # the same drawing again
+    assert paths[1].read_bytes() == before  # replaced by the drawing
     # no temporary files left
     assert sorted(p.name for p in folder.iterdir()) == [p.name for p in paths]
 
@@ -255,7 +254,11 @@ def test_drawings_export_non_ascii_name(five: Results, tmp_path: Path) -> None:
 
 
 def test_repr_html_shows_four_then_more(five: Results, res: Results) -> None:
-    html = five.draw(color_by="D")._repr_html_()
+    d = five.draw(color_by="D")
+    assert repr(d) == (
+        "Drawings(5 images: D7-017, D7-018, D7-019 ł, D7-021, ...)"
+    )
+    html = d._repr_html_()
     assert html.count("<img ") == 4
     assert "D7-019 ł" in html and "and 1 more" in html
     assert 'd["D7-022"]' in html

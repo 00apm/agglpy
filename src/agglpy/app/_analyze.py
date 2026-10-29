@@ -150,9 +150,7 @@ def run(
         pd.concat(agglomerates, ignore_index=True),
         origin,
     )
-    summaries = [
-        (cls, summary_text(cls, found)) for cls, found in seen.items()
-    ]
+    summaries = [(cls, summary_text(found)) for cls, found in seen.items()]
     if outdated:
         summaries.insert(
             0, (OutdatedParticlesWarning, _outdated_text(outdated))
@@ -160,7 +158,7 @@ def run(
     return results, summaries
 
 
-def summary_text(cls: type[Warning], messages: list[tuple[str, str]]) -> str:
+def summary_text(messages: list[tuple[str, str]]) -> str:
     """One warning for a class: the images and their messages.
 
     ``messages`` are ``(image, message)`` in order; the first
@@ -170,8 +168,7 @@ def summary_text(cls: type[Warning], messages: list[tuple[str, str]]) -> str:
     listed = set(images[:_LISTED])
     noun = "image" if len(images) == 1 else "images"
     lines = [
-        f"{len(images)} {noun}: {cls.__name__} (each message is in "
-        "res.export's record.yml)",
+        f"{len(images)} {noun} (each message is in res.export's record.yml):",
         *(f"  {name}: {text}" for name, text in messages if name in listed),
     ]
     if len(images) > _LISTED:

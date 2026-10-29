@@ -473,7 +473,8 @@ class Results:
             The ``Drawings``: image name → figure.
 
         Raises:
-            ParamsError: If a name is not in these results, ``what`` is
+            ParamsError: If no image or a name not in these results is
+                given, ``what`` is
                 another name, ``color_by`` is a column of ``images``
                 only, ``image`` is not True / False, ``alpha`` /
                 ``image_alpha`` is not within 0-1, ``linewidth`` is
@@ -486,6 +487,8 @@ class Results:
             if images is None
             else list(self.images.image[self._image_mask(images)])
         )
+        if not names:
+            raise ParamsError("no image to draw")
         if what not in _TABLES:
             raise ParamsError(
                 f"what must be 'particles' or 'agglomerates', got {what!r}"
@@ -710,6 +713,17 @@ class Drawings(Mapping[str, Figure]):
 
     def __len__(self) -> int:
         return len(self._sheets)
+
+    def __contains__(self, name: object) -> bool:
+        # Mapping's own answers through d[name]: a figure and a file read
+        return name in self._sheets
+
+    def __repr__(self) -> str:
+        names = list(self)
+        shown = ", ".join(names[:_THUMBNAILS])
+        more = ", ..." if len(names) > _THUMBNAILS else ""
+        noun = "image" if len(names) == 1 else "images"
+        return f"Drawings({len(names)} {noun}: {shown}{more})"
 
     def export(
         self, folder: PathLike, *, overwrite: bool = False
