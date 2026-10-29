@@ -8,17 +8,24 @@ from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
 from types import TracebackType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
+import matplotlib as mpl
 import numpy as np
 import pandas as pd
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
+from matplotlib.patches import Rectangle
+from matplotlib.typing import ColorType
 from numpy.typing import NDArray
 from tqdm.auto import tqdm
 
+from agglpy import draw
 from agglpy.app._config import ImageParams
 from agglpy.app._detect import warn_if_lossy
 from agglpy.app._records import now
 from agglpy.app._report import warning_text
+from agglpy.core.detect import hct_edges
 from agglpy.core.region import Bounds
 from agglpy.errors import ParamsError
 from agglpy.io import read_image
@@ -44,6 +51,11 @@ if TYPE_CHECKING:
     from agglpy.app._collection import Collection
 
 __all__ = ["Preview", "make"]
+
+# Which image a view draws underneath
+Underlay = Literal["raw", "preprocessed"] | None
+# Colours of the passes, in pass order
+_PASS_COLOURS = "tab10"
 
 # The preprocessing steps that take a params object, by field
 _NESTED: dict[str, type] = {
@@ -286,6 +298,171 @@ class Preview:
         ranges = list(self._ranges())
         del ranges[self._index(k)]
         return self._changed(hct=HCTParams(tuple(ranges)) if ranges else None)
+
+    # -----------------------------------------------------------------
+    # Views: one new full-size figure per call
+    # -----------------------------------------------------------------
+
+    def image(self) -> Figure:
+        """The raw image, the analysed region outlined in yellow.
+
+        One figure pixel per image pixel; the outline lies on the
+        region's outermost pixels and is drawn only when the region is
+        smaller than the image.
+        """
+        held = self._state.prepared
+        fig, ax = draw.figure(held.raw.shape, legend=False)
+        draw.image(ax, held.raw)
+        height, width = held.raw.shape
+        b = held.bounds
+        if (b.x_min, b.y_min, b.x_max, b.y_max) != (
+            -0.5,
+            -0.5,
+            width - 0.5,
+            height - 0.5,
+        ):
+            ax.add_patch(
+                Rectangle(
+                    (b.x_min + 0.5, b.y_min + 0.5),
+                    b.x_max - b.x_min - 1,
+                    b.y_max - b.y_min - 1,
+                    fill=False,
+                    edgecolor="yellow",
+                    linewidth=1,
+                    # on the pixels themselves, not snapped 1 px inward
+                    snap=False,
+                )
+            )
+        return fig
+
+    def stage(self, name: str) -> Figure:
+        """The region after a preprocessing step, at its place.
+
+        ``name`` is a step that ran: ``"median"``, ``"rolling ball"``,
+        ``"clahe"``. The rest of the image is black.
+
+        Raises:
+            ParamsError: If no step of that name ran.
+        """
+        stages = self._state.prepared.stages
+        for stage in stages:
+            if stage.name == name:
+                fig, ax = self._figure(legend=False, background="black")
+                draw.image(ax, stage.image, origin=self._origin())
+                return fig
+        ran = ", ".join(s.name for s in stages) or "no preprocessing"
+        raise ParamsError(f"no stage {name!r}: {self.image_name} ran {ran}")
+
+    def edges(
+        self,
+        k: int,
+        *,
+        image: Underlay = None,
+        image_alpha: float = 1.0,
+    ) -> Figure:
+        """The edges HoughCircles sees in range ``k``.
+
+        ``core.detect.hct_edges`` on the preprocessed region: white on
+        black, or yellow over ``image``.
+
+        Args:
+            k: The range, numbered from 1.
+            image: The image underneath: ``"raw"``, ``"preprocessed"``
+                (the region) or None.
+            image_alpha: Its opacity, 0-1.
+
+        Raises:
+            ParamsError: If range ``k`` does not exist or an option is
+                invalid.
+        """
+        hct = self._ranges()[self._index(k)]
+        edges = hct_edges(self._state.prepared.final, hct) > 0
+        fig, ax = self._figure(legend=False, background="black")
+        self._underlay(ax, image, image_alpha)
+        colour = (1.0, 1.0, 1.0) if image is None else (1.0, 1.0, 0.0)
+        draw.image(ax, _mask(edges, colour), origin=self._origin())
+        return fig
+
+    def circles(
+        self,
+        k: int | None = None,
+        *,
+        image: Underlay = "raw",
+        image_alpha: float = 1.0,
+        background: ColorType | None = "black",
+        alpha: float = 0.0,
+        linewidth: float = 1.0,
+    ) -> Figure:
+        """The circles of range ``k``, or of every range by range.
+
+        Outlines over the raw image by default, so each circle is
+        judged against what the eye sees; one colour per range, the
+        legend with the counts.
+
+        Args:
+            k: The range, numbered from 1; None for every range.
+            image: The image underneath: ``"raw"``, ``"preprocessed"``
+                (the region) or None (the background).
+            image_alpha: Its opacity, 0-1.
+            background: The figure's colour; None for transparent.
+            alpha: Opacity of the fill, 0 (outlines only) to 1.
+            linewidth: Width of the outlines in px.
+
+        Raises:
+            ParamsError: If range ``k`` does not exist or an option is
+                invalid.
+        """
+        passes = self._state.passes
+        if k is None:
+            self._index(1)  # the message of no ranges
+            chosen = list(range(len(passes)))
+        else:
+            chosen = [self._index(k)]
+        labels = {
+            i: f"range {i + 1} ({len(passes[i].circles)})" for i in chosen
+        }
+        colours = {labels[i]: _pass_colour(i) for i in chosen}
+        counts = [len(found.circles) for found in passes]
+        table = self._state.particles.assign(
+            range=np.repeat(np.arange(len(passes)), counts)
+        )
+        table = table[table["range"].isin(chosen)]
+        fig, ax = self._figure(legend=True, background=background)
+        self._underlay(ax, image, image_alpha)
+        draw.particles(
+            ax,
+            table.assign(range=table["range"].map(labels)),
+            color_by="range",
+            colors=colours,
+            others=None,
+            alpha=alpha,
+            linewidth=linewidth,
+            legend=False,
+        )
+        draw.legend(ax, colours)
+        return fig
+
+    def _figure(
+        self, *, legend: bool, background: ColorType | None
+    ) -> tuple[Figure, Axes]:
+        shape = self._state.prepared.raw.shape
+        return draw.figure(shape, legend=legend, background=background)
+
+    def _origin(self) -> tuple[float, float]:
+        """Where the region's top-left pixel centre lies in the image."""
+        b = self._state.prepared.bounds
+        return b.x_min + 0.5, b.y_min + 0.5
+
+    def _underlay(self, ax: Axes, image: object, alpha: float) -> None:
+        held = self._state.prepared
+        if image == "raw":
+            draw.image(ax, held.raw, alpha=alpha)
+        elif image == "preprocessed":
+            draw.image(ax, held.final, alpha=alpha, origin=self._origin())
+        elif image is not None:
+            raise ParamsError(
+                f"image must be 'raw', 'preprocessed' or None, got {image!r}"
+            )
 
     def __repr__(self) -> str:
         state = self._state
@@ -560,6 +737,23 @@ def _no_particles() -> pd.DataFrame:
             }
         )
     )
+
+
+def _pass_colour(i: int) -> tuple[float, float, float, float]:
+    """The colour of pass ``i`` (0-based) in the views."""
+    colour: tuple[float, float, float, float] = mpl.colormaps[_PASS_COLOURS](
+        i % 10
+    )
+    return colour
+
+
+def _mask(
+    mask: NDArray[np.bool_], colour: tuple[float, float, float]
+) -> NDArray[np.uint8]:
+    """An RGBA image: ``colour`` where ``mask``, transparent elsewhere."""
+    rgba = np.zeros((*mask.shape, 4), np.uint8)
+    rgba[mask] = [round(255 * c) for c in colour] + [255]
+    return rgba
 
 
 def _ranges_of(params: ImageParams) -> tuple[HCTRange, ...]:
