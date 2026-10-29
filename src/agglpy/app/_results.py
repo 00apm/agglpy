@@ -1,7 +1,8 @@
 """``Results``: what ``Collection.analyze`` found, as plain tables."""
 
+import dataclasses
 import warnings
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -11,7 +12,8 @@ from numpy.typing import ArrayLike
 from agglpy.app._report import reemit
 from agglpy.core import distributions
 from agglpy.core import metrics as _metrics
-from agglpy.errors import ParamsError
+from agglpy.core.agglomerates import select_agglomerates
+from agglpy.errors import ParamsError, TableError
 
 __all__ = ["Origin", "Results"]
 
@@ -230,6 +232,105 @@ class Results:
             confidence=confidence,
         )
 
+    def subset(
+        self,
+        *,
+        images: pd.Series | str | Sequence[str] | None = None,
+        agglomerates: pd.Series | None = None,
+        label: str | None = None,
+    ) -> "Results":
+        """A part of the results, with this step kept for the export.
+
+        ``images`` keeps those images with their particles and
+        agglomerates; ``agglomerates`` keeps those agglomerates with
+        their member particles, and every image (an image with nothing
+        left counts as zeros). Both: one step, images first. The tables
+        of the new results are renumbered from 0; ``self`` stays as it
+        is.
+
+        Args:
+            images: A True / False Series on ``images``' index, e.g.
+                ``res.images.series == "a"``, or a name or list of
+                names (kept in the order of the results).
+            agglomerates: A True / False Series on ``agglomerates``'
+                index, e.g. ``~res.agglomerates.touches_edge``.
+            label: Names the step in the export record.
+
+        Raises:
+            ParamsError: If neither is given, a name is not in these
+                results, or no image is left.
+            TableError: If a mask is not a True / False Series on its
+                table's index.
+        """
+        if images is None and agglomerates is None:
+            raise ParamsError("subset needs images= or agglomerates=")
+        table, particles, aggls = (
+            self.images,
+            self.particles,
+            self.agglomerates,
+        )
+        keep = None if images is None else self._image_mask(images)
+        if agglomerates is not None:
+            # the same rows as images first: both keep an intersection
+            particles, aggls = select_agglomerates(
+                particles, aggls, agglomerates
+            )
+        if keep is not None:
+            if not keep.any():
+                raise ParamsError("no image left")
+            table = table[keep]
+            particles = particles[particles.image.isin(table.image)]
+            aggls = aggls[aggls.image.isin(table.image)]
+        step = {
+            "label": label,
+            "images": _kept(table, self.images),
+            "agglomerates": _kept(aggls, self.agglomerates),
+            "particles": _kept(particles, self.particles),
+        }
+        names = set(table.image)
+        origin = dataclasses.replace(
+            self._origin,
+            images={
+                k: v for k, v in self._origin.images.items() if k in names
+            },
+            files={k: v for k, v in self._origin.files.items() if k in names},
+            steps=(*self._origin.steps, step),
+        )
+        return Results(
+            table.reset_index(drop=True),
+            particles.reset_index(drop=True),
+            aggls.reset_index(drop=True),
+            origin,
+        )
+
+    def _image_mask(
+        self, images: pd.Series | str | Sequence[str]
+    ) -> pd.Series:
+        """``images=`` of ``subset`` as a mask on ``self.images``."""
+        if isinstance(images, pd.Series):
+            if (
+                not images.index.equals(self.images.index)
+                or images.isna().any()
+                or not pd.api.types.is_bool_dtype(images)
+            ):
+                raise TableError(
+                    "images must be a True / False Series on res.images' "
+                    "index, e.g. res.images.series == 'a'"
+                )
+            return images
+        names = [images] if isinstance(images, str) else list(images)
+        present = set(self.images.image)
+        for name in names:
+            if name in present:
+                continue
+            if name in self._origin.names:
+                raise ParamsError(
+                    f"{name!r} is not in these results (include false, or "
+                    "left out by an earlier subset)"
+                )
+            raise ParamsError(f"no image {name!r} in the collection")
+        return self.images.image.isin(names)
+
     def _table(self, name: str) -> pd.DataFrame:
         if name not in _TABLES:
             raise ParamsError(
@@ -249,3 +350,7 @@ class Results:
         # 4: past reemit, this helper and the public method
         reemit(caught, stacklevel=4)
         return out
+
+
+def _kept(table: pd.DataFrame, of: pd.DataFrame) -> dict[str, int]:
+    return {"kept": len(table), "of": len(of)}
