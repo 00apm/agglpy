@@ -410,7 +410,9 @@ class Results:
         *,
         color_by: Hashable,
         select: pd.Series | None = None,
-        background: ColorType | None = "image",
+        image: bool = True,
+        image_alpha: float = 1.0,
+        background: ColorType | None = "white",
         others: ColorType | None = "grey",
         cmap: str | Colormap | None = None,
         norm: Normalize | None = None,
@@ -441,10 +443,16 @@ class Results:
                 first.
             select: A True / False Series on that table's index; the
                 others are drawn as thin ``others`` outlines.
-            background: ``"image"`` draws the image file underneath;
-                else any matplotlib colour (``"white"``,
-                ``"#FF000033"``, ``(0, 1, 0, 0.47)`` with values in
-                0-1) or None for a transparent figure.
+            image: Draw the image file underneath, read when a figure
+                is made.
+            image_alpha: Opacity of the image, 0 to 1: below 1 the
+                background shows through, e.g. ``background="black",
+                image_alpha=0.4`` darkens the image so the circles
+                stand out.
+            background: The figure's colour, under the image: any
+                matplotlib colour (``"white"``, ``"#FF000033"``, ``(0,
+                1, 0, 0.47)`` with values in 0-1) or None for a
+                transparent figure.
             others, cmap, norm, vmin, vmax, colors, alpha, linewidth:
                 As for ``agglpy.draw.particles``.
             legend: A colorbar or legend in a strip right of the image;
@@ -457,7 +465,9 @@ class Results:
         Raises:
             ParamsError: If a name is not in these results, ``what`` is
                 another name, ``color_by`` is a column of ``images``
-                only, or an option does not fit the column.
+                only, ``image`` is not True / False, ``alpha`` /
+                ``image_alpha`` is not within 0-1, ``linewidth`` is
+                negative, or an option does not fit the column.
             TableError: If ``color_by`` is not a column of the table or
                 ``select`` not a True / False Series on its index.
         """
@@ -493,6 +503,13 @@ class Results:
                 f"select must be a True / False Series on res.{what}' "
                 f"index, e.g. res.{what}.D > 1e-7"
             )
+        if not isinstance(image, bool):
+            raise ParamsError(
+                "image must be True or False: res.draw reads the image "
+                "file itself"
+            )
+        # the edge's own check, here so no figure is made first
+        _draw._Style(alpha, linewidth, image_alpha)
         drawn = table.image.isin(names)
         scale = _draw.color_scale(
             table[color_by][drawn & chosen],
@@ -507,9 +524,11 @@ class Results:
                 name: self._sheet(name, what, color_by, chosen)
                 for name in names
             },
+            image=image,
             background=background,
             options={
                 **scale,
+                "image_alpha": image_alpha,
                 "others": others,
                 "alpha": alpha,
                 "linewidth": linewidth,
@@ -619,19 +638,20 @@ class Drawings(Mapping[str, Figure]):
     A read-only mapping image name → matplotlib ``Figure``, in the
     order of the results: ``d["D7-017"]``, ``list(d)``, ``len(d)``.
     Each access makes a new figure from the rows copied at
-    ``res.draw``; with ``background="image"`` the image file is read
-    then.
+    ``res.draw``; with ``image=True`` the image file is read then.
     """
 
     def __init__(
         self,
         sheets: Mapping[str, _Sheet],
         *,
+        image: bool,
         background: ColorType | None,
         options: Mapping[str, Any],
     ) -> None:
         """Made by ``Results.draw``; not called directly."""
         self._sheets = dict(sheets)
+        self._image = image
         self._background = background
         self._options = dict(options)
 
@@ -641,20 +661,16 @@ class Drawings(Mapping[str, Figure]):
         Raises:
             KeyError: If ``name`` was not drawn.
             FileNotFoundError: If the image file is gone
-                (``background="image"``).
+                (``image=True``).
             ImageError: If the image file no longer has the analysed
                 size.
         """
         sheet = self._sheets[name]
-        image = None
-        background = self._background
-        if isinstance(background, str) and background == "image":
-            image = _image(sheet)
-            background = "white"
+        image = _image(sheet) if self._image else None
         fig, ax = _draw.figure(
             (sheet.height, sheet.width),
             legend=self._options["legend"] is not False,
-            background=background,
+            background=self._background,
         )
         if sheet.agglomerates is None:
             _draw.particles(

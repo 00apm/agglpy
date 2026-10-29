@@ -12,6 +12,7 @@ from agglpy.errors import ImageError, ParamsError, TableError
 from agglpy.io import read_particles
 
 from support.collection import work
+from support.render import render
 
 
 @pytest.fixture
@@ -59,7 +60,7 @@ def test_one_scale_over_the_drawn_images(res: Results) -> None:
 
 def test_px_round_trip(res: Results, analysis_col: Collection) -> None:
     # color_by="r": the colours come from m, the circles stay in px
-    d = res.draw("D7-018", what="particles", color_by="r", background=None)
+    d = res.draw("D7-018", what="particles", color_by="r", image=False)
     assert list(d) == ["D7-018"]
     (ax, _) = d["D7-018"].axes
     (fills,) = (c for c in ax.collections if len(c.get_offsets()) == 3)
@@ -91,19 +92,33 @@ def test_draw_refuses_before_rendering(res: Results) -> None:
     res.agglomerates["kind"] = "single"
     with pytest.raises(ParamsError, match="vmin"):
         res.draw(color_by="kind", vmin=0)
+    with pytest.raises(ParamsError, match="image_alpha"):
+        res.draw(color_by="D", image_alpha=2)
+    with pytest.raises(ParamsError, match="reads the image file"):
+        res.draw(color_by="D", image=np.zeros((160, 200), np.uint8))
 
 
-def test_background_image_read_on_access(
+def test_image_underneath_read_on_access(
     res: Results, analysis_col: Collection
 ) -> None:
-    images = analysis_col.folder.parent / "images"
-    for background in ("white", (0, 1, 0, 0.47), None):
-        fig = res.draw("D7-017", color_by="D", background=background)
-        assert isinstance(fig["D7-017"], Figure)
     d = res.draw("D7-017", color_by="D")
     (ax, _) = d["D7-017"].axes
     assert len(ax.images) == 1  # the image underneath
+    plain = render(d["D7-017"])[5, 5, :3].astype(float)
+    dimmed = res.draw(
+        "D7-017", color_by="D", background="black", image_alpha=0.4
+    )
+    np.testing.assert_allclose(
+        render(dimmed["D7-017"])[5, 5, :3], 0.4 * plain, atol=1
+    )
+    images = analysis_col.folder.parent / "images"
     (images / "D7-017.tif").unlink()
+    # image=False never reads the file
+    for background in ("white", "#FF000033", (0, 1, 0, 0.47), None):
+        fig = res.draw(
+            "D7-017", color_by="D", image=False, background=background
+        )["D7-017"]
+        assert not fig.axes[0].images
     with pytest.raises(FileNotFoundError, match=r"D7-017\.tif"):
         d["D7-017"]
     tifffile.imwrite(images / "D7-017.tif", np.zeros((80, 100), np.uint8))
