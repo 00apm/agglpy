@@ -606,17 +606,12 @@ def _draw_image(ax: Axes, image: NDArray[Any] | None, alpha: float) -> None:
     if image is None:
         return
     array = np.asarray(image)
+    if array.ndim == 2 and array.dtype == np.uint8:
+        # uint8 as it is (0 black, 255 white), no contrast stretch; as
+        # RGB, since the gray colormap draws some values 1 too dark
+        array = np.repeat(array[..., np.newaxis], 3, axis=2)
     if array.ndim == 2:
-        # uint8 as it is (0 black, 255 white), no contrast stretch
-        limits = (0, 255) if array.dtype == np.uint8 else (None, None)
-        ax.imshow(
-            array,
-            cmap="gray",
-            vmin=limits[0],
-            vmax=limits[1],
-            interpolation="nearest",
-            alpha=alpha,
-        )
+        ax.imshow(array, cmap="gray", interpolation="nearest", alpha=alpha)
     else:
         ax.imshow(array, interpolation="nearest", alpha=alpha)
 

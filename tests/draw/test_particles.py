@@ -134,6 +134,25 @@ def test_the_image_is_drawn_underneath_as_it_is():
     np.testing.assert_array_equal(rendered[0, 0], [101, 101, 101, 255])
 
 
+def test_every_grey_value_is_drawn_as_it_is():
+    # matplotlib's gray colormap drew 24 of the 256 values 1 too dark
+    image = np.arange(256, dtype=np.uint8).reshape(16, 16)
+    fig, ax = draw.figure((16, 16), legend=False)
+    nothing = pd.Series(False, index=table().index)
+    draw.particles(
+        ax,
+        table(),
+        color_by="D",
+        select=nothing,
+        others=None,
+        image=image,
+        legend=False,
+    )
+    rendered = render(fig)
+    for channel in range(3):
+        np.testing.assert_array_equal(rendered[..., channel], image)
+
+
 @pytest.mark.parametrize(
     ("background", "expected"),
     [("black", 80), ("white", 233)],  # 0.4 * 200 + 0.6 * (0 or 255)
