@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from agglpy.core.detect import detect_hct
+from agglpy.core.detect import detect_hct, hct_edges
 from agglpy.errors import (
     DuplicateParticlesWarning,
     ImageError,
@@ -278,3 +278,52 @@ def test_a_view_gives_the_same_table_as_a_copy(view):
 def test_not_a_grey_image_raises(image):
     with pytest.raises(ImageError, match="2-D uint8 grey image"):
         detect_hct(image, HCTParams(ranges=(HCTRange(4, 10),)))
+
+
+def _ring_image() -> tuple[np.ndarray, int]:
+    # one disc and the largest |dx| + |dy| of HoughCircles' Sobel step
+    image = np.full((80, 80), 20, np.uint8)
+    cv2.circle(image, (40, 40), 15, 60, -1, cv2.LINE_AA)
+    dx, dy = (
+        cv2.Sobel(
+            image, cv2.CV_16S, *order, ksize=3, borderType=cv2.BORDER_REPLICATE
+        ).astype(int)
+        for order in ((1, 0), (0, 1))
+    )
+    return image, int((np.abs(dx) + np.abs(dy)).max())
+
+
+@pytest.mark.parametrize(
+    "below, found", [(1, True), (0.6, True), (0.4, False), (0, False)]
+)
+def test_hct_edges_are_what_houghcircles_sees(below, found):
+    # OpenCV rounds the threshold half to even: top - 0.4 rounds to top,
+    # which no gradient exceeds, so no edge and no circle
+    image, top = _ring_image()
+    assert top == 240
+    hct = HCTRange(
+        20, 40, canny_threshold=top - below, accumulator_threshold=5
+    )
+    edges = hct_edges(image, hct)
+    assert edges.dtype == np.uint8
+    assert edges.shape == image.shape
+    assert set(np.unique(edges)) <= {0, 255}
+    assert bool(edges.any()) is found
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", NoParticlesWarning)
+        circles = detect_hct(image, HCTParams(ranges=(hct,)))
+    assert (len(circles) > 0) is found
+    if found:
+        # the outline: every edge pixel within 2 px of r = 15
+        yy, xx = np.nonzero(edges)
+        assert np.all(np.abs(np.hypot(xx - 40, yy - 40) - 15) <= 2)
+
+
+def test_hct_edges_input():
+    image, _ = _ring_image()
+    before = image.copy()
+    hct_edges(_window(image), HCTRange(20, 40))
+    assert np.array_equal(image, before)
+    for bad in (image.astype(float), np.dstack([image] * 3)):
+        with pytest.raises(ImageError, match="2-D uint8 grey image"):
+            hct_edges(bad, HCTRange(20, 40))
