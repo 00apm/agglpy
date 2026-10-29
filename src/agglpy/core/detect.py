@@ -7,6 +7,7 @@ analysed region or of preprocessing: the caller cuts the region, runs
 """
 
 import warnings
+from collections.abc import Sequence
 
 import cv2
 import numpy as np
@@ -53,7 +54,17 @@ def detect_hct(image: NDArray[np.uint8], params: HCTParams) -> pd.DataFrame:
             least 1 x 1 px.
     """
     image = check_grey_image(image)
-    circles = np.concatenate([_hough(image, r) for r in params.ranges])
+    return _table(image, [_hough(image, r) for r in params.ranges])
+
+
+def _table(
+    image: NDArray[np.uint8], passes: Sequence[NDArray[np.float32]]
+) -> pd.DataFrame:
+    """The particle table of ``detect_hct`` from its passes, in order.
+
+    Also warns as ``detect_hct`` does, pointing at its caller.
+    """
+    circles = np.concatenate(passes)
     if len(circles) == 0:
         height, width = image.shape
         warnings.warn(
@@ -61,7 +72,7 @@ def detect_hct(image: NDArray[np.uint8], params: HCTParams) -> pd.DataFrame:
             f"intensities {image.min()}-{image.max()}, of possible "
             "0-255); check preprocessing and HCT params",
             NoParticlesWarning,
-            stacklevel=2,
+            stacklevel=3,
         )
     # float32 -> its shortest decimal -> float64: 29.4, not the float64
     # neighbour of the float32 value (29.399999618530273)
@@ -82,7 +93,7 @@ def detect_hct(image: NDArray[np.uint8], params: HCTParams) -> pd.DataFrame:
     pairs = find_duplicates(table)
     if pairs:
         warnings.warn(
-            _duplicates_message(pairs), DuplicateParticlesWarning, stacklevel=2
+            _duplicates_message(pairs), DuplicateParticlesWarning, stacklevel=3
         )
     return table
 
