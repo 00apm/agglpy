@@ -34,6 +34,7 @@ from agglpy.pipeline import detect_particles
 
 from support.collection import work
 from support.render import render
+from support.tiffs import write_zeiss
 
 
 def _file(col: Collection, name: str) -> Path:
@@ -636,3 +637,23 @@ def test_export_without_ranges(tuning_col: Collection, tmp_path: Path) -> None:
 
 def read_png(path: Path) -> np.ndarray:
     return np.asarray(Image.open(path).convert("RGBA"))
+
+
+def test_preview_warnings_include_the_metadata(tmp_path: Path) -> None:
+    # a Zeiss TIFF whose two pixel sizes disagree: detect() records a
+    # PixelSizeWarning from reading the metadata
+    folder = tmp_path / "images"
+    folder.mkdir()
+    write_zeiss(
+        folder / "Z.tif", 200, 160, raw=1e-8, image_pixel_size=(50, "nm")
+    )
+    col = Collection.create(tmp_path / "col", images=folder)
+    col.set_params(None, hct={"ranges": [{"d_min": 8, "d_max": 18}]})
+    p = col["Z"].preview(progress=False)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        col.detect("Z", progress=False)
+    detection = col["Z"].detection
+    assert detection is not None
+    assert p.warnings == tuple(detection["warnings"])
+    assert p.warnings[0].startswith("PixelSizeWarning: ")

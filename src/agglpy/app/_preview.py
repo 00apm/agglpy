@@ -35,7 +35,7 @@ from agglpy.core.detect import hct_edges
 from agglpy.core.region import Bounds
 from agglpy.errors import OutputExistsError, ParamsError
 from agglpy.export import _check_replaceable
-from agglpy.io import read_image
+from agglpy.io import read_image, read_image_metadata
 from agglpy.logger import logger
 from agglpy.params import (
     ClaheParams,
@@ -1157,6 +1157,8 @@ def _prepare(
         warnings.simplefilter("always")
         on_step("reading")
         raw = read_image(path)
+        # its warnings (pixel sizes that disagree) as detect() records
+        read_image_metadata(path)
         raw.setflags(write=False)
         bounds, cut = cut_region(raw, region)
     with warnings.catch_warnings(record=True) as preprocessed:
