@@ -384,3 +384,26 @@ def test_change_errors(tuning_col: Collection) -> None:
     # an object of another section is not taken
     with pytest.raises(ParamsError, match="RollingBallParams or None"):
         p.change_preprocess(rolling_ball=ClaheParams(2.0, (4, 4)))
+
+
+def test_param_differences(tuning_col: Collection) -> None:
+    p = tuning_col["T1"].preview(progress=False)
+    differences = preview_module._differences
+    assert differences(p.params, p.params) == []
+    q = p.change_hct(range=2, canny_threshold=180).change_preprocess(
+        rolling_ball={"radius": 40}, clahe=None
+    )
+    assert differences(p.params, q.params) == [
+        "preprocess.rolling_ball.radius 20 → 40",
+        "preprocess.clahe {…} → null",
+        "ranges[2].canny_threshold 200 → 180",
+    ]
+    assert differences(p.params, p.add_range(60, 80).params) == [
+        "ranges: 2 → 3"
+    ]
+    region = p.change_region(bottom_fraction=0.05).params
+    assert differences(p.params, region) == [
+        "region.bottom_fraction 0.1 → 0.05"
+    ]
+    empty = p.remove_range(1).remove_range(1)
+    assert differences(empty.params, p.params) == ["ranges: 0 → 2"]

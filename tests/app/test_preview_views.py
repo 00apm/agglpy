@@ -3,11 +3,14 @@
 import matplotlib
 import numpy as np
 import pytest
+from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
 from agglpy.app import Collection, Preview
+from agglpy.app import _preview as preview_module
 from agglpy.core.detect import hct_edges
 from agglpy.errors import ParamsError
+from agglpy.params import HCTRange
 
 from support.render import render
 
@@ -118,3 +121,173 @@ def test_views_without_ranges(p: Preview) -> None:
     for view in (none.circles, lambda: none.edges(1)):
         with pytest.raises(ParamsError, match="T1 has no HCT ranges"):
             view()
+
+
+# -----------------------------------------------------------------
+# Comparison: two previews of T1 whose range 1 differs in canny
+# -----------------------------------------------------------------
+
+# Range 1's circles (region frame) by canny threshold: one found by
+# both, one only at 200 (gone), one only at 150 (new)
+SAME, GONE, NEW = (30.0, 30.0, 6.0), (100.0, 40.0, 8.0), (150.0, 100.0, 9.0)
+FAKE_CIRCLES = {200.0: [SAME, GONE], 150.0: [SAME, NEW]}
+# Range 1's edge pixels (row, column) by canny threshold
+BOTH_PX, GONE_PX, NEW_PX = (10, 10), (20, 20), (30, 30)
+FAKE_EDGES = {200.0: [BOTH_PX, GONE_PX], 150.0: [BOTH_PX, NEW_PX]}
+LIME, RED = [0, 255, 0], [255, 0, 0]
+
+
+@pytest.fixture
+def pair(
+    tuning_col: Collection, monkeypatch: pytest.MonkeyPatch
+) -> tuple[Preview, Preview]:
+    """``(p, q)``: ``q`` with canny 200 in range 1, ``p`` with 150.
+
+    HCT passes and edge images are fixed by the threshold; range 2
+    finds one circle far from the others.
+    """
+
+    def fake_pass(image: np.ndarray, hct: HCTRange) -> np.ndarray:
+        if hct.d_min != 8:
+            return np.array([[60.0, 120.0, 12.0]], np.float32)
+        return np.array(FAKE_CIRCLES[hct.canny_threshold], np.float32)
+
+    def fake_edges(image: np.ndarray, hct: HCTRange) -> np.ndarray:
+        edges = np.zeros(image.shape, np.uint8)
+        for row, column in FAKE_EDGES[hct.canny_threshold]:
+            edges[row, column] = 255
+        return edges
+
+    monkeypatch.setattr(preview_module, "hct_pass", fake_pass)
+    monkeypatch.setattr(preview_module, "hct_edges", fake_edges)
+    q = tuning_col["T1"].preview(progress=False)
+    return q.change_hct(range=1, canny_threshold=150), q
+
+
+def _near(
+    shown: np.ndarray, circle: tuple[float, float, float], colour: list[int]
+) -> bool:
+    """Whether the outline right of ``circle``'s centre has ``colour``."""
+    x, y, r = (round(v) for v in circle)
+    ring = shown[y, x + r - 2 : x + r + 3, :3].astype(float)
+    return bool(np.abs(ring - colour).sum(axis=1).min() < 100)
+
+
+def _panel_texts(ax: Axes) -> list[str]:
+    return [t.get_text() for t in ax.texts]
+
+
+def _image_axes(fig: Figure) -> list[Axes]:
+    return [ax for ax in fig.axes if ax.get_label() != "agglpy legend"]
+
+
+def test_circles_compare_overlay(pair: tuple[Preview, Preview]) -> None:
+    p, q = pair
+    fig = p.circles(1, compare=q)
+    assert _legend_texts(fig) == ["new (1)", "gone (1)", "same (1)"]
+    shown = render(fig)
+    assert shown.shape[:2] == (160, 224)
+    assert _near(shown, NEW, LIME)
+    assert _near(shown, GONE, RED)
+    assert _near(shown, SAME, [128, 128, 128])
+    assert not _near(shown, SAME, LIME) and not _near(shown, SAME, RED)
+    # over the raw image by default, as the plain view
+    raw = p._state.prepared.raw
+    np.testing.assert_array_equal(shown[30, 30, :3], [raw[30, 30]] * 3)
+    # every range: range 2's circle is the same in both
+    assert _legend_texts(p.circles(compare=q)) == [
+        "new (1)",
+        "gone (1)",
+        "same (2)",
+    ]
+    # the other way round: new and gone swap
+    assert _legend_texts(q.circles(1, compare=p)) == [
+        "new (1)",
+        "gone (1)",
+        "same (1)",
+    ]
+    assert _near(render(q.circles(1, compare=p)), NEW, RED)
+
+
+def test_edges_compare_overlay(pair: tuple[Preview, Preview]) -> None:
+    p, q = pair
+    fig = p.edges(1, compare=q)
+    assert _legend_texts(fig) == [
+        "new (1 px)",
+        "gone (1 px)",
+        "same (1 px)",
+    ]
+    shown = render(fig)
+    assert shown.shape[:2] == (160, 224)
+    assert list(shown[BOTH_PX][:3]) == [255, 255, 255]
+    assert list(shown[NEW_PX][:3]) == LIME
+    assert list(shown[GONE_PX][:3]) == [255, 0, 255]
+    assert (shown[40:, :200, :3] == 0).all()  # on black
+    # over the raw image: the image between the edges
+    over = render(p.edges(1, compare=q, image="raw"))
+    raw = p._state.prepared.raw
+    assert list(over[NEW_PX][:3]) == LIME
+    np.testing.assert_array_equal(over[50, 50, :3], [raw[50, 50]] * 3)
+
+
+def test_side_by_side(pair: tuple[Preview, Preview]) -> None:
+    p, q = pair
+    fig = p.circles(1, compare=q, side_by_side=True)
+    left, right = _image_axes(fig)
+    assert left.get_shared_x_axes().joined(left, right)
+    assert left.get_shared_y_axes().joined(left, right)
+    shown = render(fig)
+    assert shown.shape[:2] == (160, 424)  # two panels + strip
+    assert _legend_texts(fig) == ["new (1)", "gone (1)", "same (1)"]
+    # left: q's view (gone + same), right: p's view (new + same)
+    left_px, right_px = shown[:, :200], shown[:, 200:400]
+    assert _near(left_px, GONE, RED) and not _near(left_px, NEW, LIME)
+    assert _near(right_px, NEW, LIME) and not _near(right_px, GONE, RED)
+    assert _near(left_px, SAME, [128, 128, 128])
+    assert _near(right_px, SAME, [128, 128, 128])
+    assert _panel_texts(left) == ["before"]
+    assert _panel_texts(right) == ["ranges[1].canny_threshold 200 → 150"]
+    assert _panel_texts(
+        _image_axes(q.circles(1, compare=q, side_by_side=True))[1]
+    ) == ["same params"]
+    # edges side by side: each panel its edges, both white
+    edges = render(p.edges(1, compare=q, side_by_side=True))
+    assert list(edges[GONE_PX][:3]) == [255, 0, 255]
+    assert list(edges[NEW_PX[0], 200 + NEW_PX[1]][:3]) == LIME
+    assert list(edges[BOTH_PX[0], 200 + BOTH_PX[1]][:3]) == [255] * 3
+    assert list(edges[NEW_PX][:3]) == [0, 0, 0]
+    # without compare: the image | the view on the background
+    plain = p.circles(1, side_by_side=True)
+    left, right = _image_axes(plain)
+    assert (_panel_texts(left), _panel_texts(right)) == (["raw"], ["circles"])
+    shown = render(plain)
+    raw = p._state.prepared.raw
+    np.testing.assert_array_equal(shown[30, 30, :3], [raw[30, 30]] * 3)
+    assert (shown[30, 230, :3] == 0).all()  # circle's centre on black
+    assert _near(shown[:, 200:400], NEW, TAB10[0])
+    assert _legend_texts(plain) == ["range 1 (2)"]
+    edges = p.edges(1, side_by_side=True, image="preprocessed")
+    left, right = _image_axes(edges)
+    assert (_panel_texts(left), _panel_texts(right)) == (
+        ["preprocessed"],
+        ["edges"],
+    )
+    assert render(edges).shape[:2] == (160, 400)  # no strip
+
+
+def test_compare_mismatches(tuning_col: Collection) -> None:
+    p = tuning_col["T1"].preview(progress=False)
+    other = tuning_col["T2"].preview(progress=False)
+    for view in (p.circles, lambda **kw: p.edges(1, **kw)):
+        with pytest.raises(ParamsError, match="preview of T1, got one of T2"):
+            view(compare=other)
+        with pytest.raises(ParamsError, match="must be another Preview"):
+            view(compare="T2")
+    one = p.remove_range(2)
+    message = (
+        "range 2 does not exist in compare: T1 has 2 ranges, 1 in compare"
+    )
+    with pytest.raises(ParamsError, match=message):
+        p.edges(2, compare=one)
+    with pytest.raises(ParamsError, match=message):
+        p.circles(2, compare=one)

@@ -21,7 +21,7 @@ from numpy.typing import NDArray
 from tqdm.auto import tqdm
 
 from agglpy import draw
-from agglpy.app._config import ImageParams
+from agglpy.app._config import ImageParams, plain
 from agglpy.app._detect import warn_if_lossy
 from agglpy.app._records import now
 from agglpy.app._report import warning_text
@@ -45,7 +45,7 @@ from agglpy.pipeline._detection import (
     particles_from_passes,
     preprocess_stages,
 )
-from agglpy.tables import validate_particles
+from agglpy.tables import find_duplicates, validate_particles
 
 if TYPE_CHECKING:
     from agglpy.app._collection import Collection
@@ -56,6 +56,16 @@ __all__ = ["Preview", "make"]
 Underlay = Literal["raw", "preprocessed"] | None
 # Colours of the passes, in pass order
 _PASS_COLOURS = "tab10"
+# Comparison colours: only in this preview, only in the other, in both
+_NEW, _GONE, _SAME = "new", "gone", "same"
+_CIRCLE_COLOURS = {_NEW: "lime", _GONE: "red", _SAME: "grey"}
+_EDGE_COLOURS = {
+    _NEW: (0.0, 1.0, 0.0),
+    _GONE: (1.0, 0.0, 1.0),
+    _SAME: (1.0, 1.0, 1.0),
+}
+# Panel labels as large as a legend's text: this share of the width
+_LABEL_SIZE = 0.012
 
 # The preprocessing steps that take a params object, by field
 _NESTED: dict[str, type] = {
@@ -357,36 +367,84 @@ class Preview:
         self,
         k: int,
         *,
+        compare: "Preview | None" = None,
+        side_by_side: bool = False,
         image: Underlay = None,
         image_alpha: float = 1.0,
     ) -> Figure:
         """The edges HoughCircles sees in range ``k``.
 
         ``core.detect.hct_edges`` on the preprocessed region: white on
-        black, or yellow over ``image``.
+        black, or yellow over ``image``. With ``compare``, the edges of
+        both previews' range ``k``: green only in this one (new),
+        magenta only in ``compare`` (gone), white in both.
 
         Args:
             k: The range, numbered from 1.
+            compare: Another preview of this image.
+            side_by_side: Two panels zoomed together: ``compare``'s
+                edges left, these right; without ``compare`` the image
+                left (raw when ``image`` is None), the edges on black
+                right.
             image: The image underneath: ``"raw"``, ``"preprocessed"``
                 (the region) or None.
             image_alpha: Its opacity, 0-1.
 
         Raises:
-            ParamsError: If range ``k`` does not exist or an option is
-                invalid.
+            ParamsError: If range ``k`` does not exist (in either
+                preview), ``compare`` is not a preview of this image or
+                an option is invalid.
         """
-        hct = self._ranges()[self._index(k)]
-        edges = hct_edges(self._state.prepared.final, hct) > 0
-        fig, ax = self._figure(legend=False, background="black")
+        i = self._index(k)
+        mine = self._edge_mask(i)
+        if compare is None:
+            if side_by_side:
+                fig, left, right = self._pair(False, "black")
+                self._underlay(left, image or "raw", image_alpha)
+                _paint(right, {"": (mine, _EDGE_COLOURS[_SAME])})
+                _label(left, image or "raw")
+                _label(right, "edges")
+                return fig
+            fig, ax = self._figure(legend=False, background="black")
+            self._underlay(ax, image, image_alpha)
+            colour = (1.0, 1.0, 1.0) if image is None else (1.0, 1.0, 0.0)
+            _paint(ax, {"": (mine, colour)})
+            return fig
+        other = self._compared(compare, k)
+        theirs = other._edge_mask(i)
+        masks = {
+            _NEW: mine & ~theirs,
+            _GONE: theirs & ~mine,
+            _SAME: mine & theirs,
+        }
+        labels = {
+            key: f"{key} ({int(mask.sum())} px)" for key, mask in masks.items()
+        }
+        legend = {labels[key]: _EDGE_COLOURS[key] for key in masks}
+        layers = {
+            key: (mask, _EDGE_COLOURS[key]) for key, mask in masks.items()
+        }
+        if side_by_side:
+            fig, left, right = self._pair(True, "black")
+            other._underlay(left, image, image_alpha)
+            _paint(left, {key: layers[key] for key in (_GONE, _SAME)})
+            self._underlay(right, image, image_alpha)
+            _paint(right, {key: layers[key] for key in (_NEW, _SAME)})
+            self._pair_labels(left, right, other)
+            draw.legend(right, legend)
+            return fig
+        fig, ax = self._figure(legend=True, background="black")
         self._underlay(ax, image, image_alpha)
-        colour = (1.0, 1.0, 1.0) if image is None else (1.0, 1.0, 0.0)
-        draw.image(ax, _mask(edges, colour), origin=self._origin())
+        _paint(ax, layers)
+        draw.legend(ax, legend)
         return fig
 
     def circles(
         self,
         k: int | None = None,
         *,
+        compare: "Preview | None" = None,
+        side_by_side: bool = False,
         image: Underlay = "raw",
         image_alpha: float = 1.0,
         background: ColorType | None = "black",
@@ -397,10 +455,18 @@ class Preview:
 
         Outlines over the raw image by default, so each circle is
         judged against what the eye sees; one colour per range, the
-        legend with the counts.
+        legend with the counts. With ``compare``: green the circles
+        only in this preview (new), red those only in ``compare``
+        (gone), grey those in both, matched with the tolerances of
+        ``tables.find_duplicates`` (a circle that moved is gone + new).
 
         Args:
             k: The range, numbered from 1; None for every range.
+            compare: Another preview of this image.
+            side_by_side: Two panels zoomed together: ``compare``'s
+                circles left, these right; without ``compare`` the
+                image left (raw when ``image`` is None), the circles on
+                ``background`` right.
             image: The image underneath: ``"raw"``, ``"preprocessed"``
                 (the region) or None (the background).
             image_alpha: Its opacity, 0-1.
@@ -409,38 +475,129 @@ class Preview:
             linewidth: Width of the outlines in px.
 
         Raises:
-            ParamsError: If range ``k`` does not exist or an option is
-                invalid.
+            ParamsError: If range ``k`` does not exist (in either
+                preview), ``compare`` is not a preview of this image or
+                an option is invalid.
         """
-        passes = self._state.passes
         if k is None:
             self._index(1)  # the message of no ranges
-            chosen = list(range(len(passes)))
+            chosen = list(range(len(self._state.passes)))
         else:
             chosen = [self._index(k)]
+        style = {"alpha": alpha, "linewidth": linewidth}
+        if compare is None:
+            table, colours = self._by_range(chosen)
+            if side_by_side:
+                fig, left, right = self._pair(True, background)
+                self._underlay(left, image or "raw", image_alpha)
+                _circles(right, table, colours, style)
+                _label(left, image or "raw")
+                _label(right, "circles")
+                draw.legend(right, colours)
+                return fig
+            fig, ax = self._figure(legend=True, background=background)
+            self._underlay(ax, image, image_alpha)
+            _circles(ax, table, colours, style)
+            draw.legend(ax, colours)
+            return fig
+        other = self._compared(compare, k)
+        there = list(range(len(other._state.passes))) if k is None else chosen
+        mine = self._by_range(chosen)[0]
+        theirs = other._by_range(there)[0]
+        same_here, same_there = _matched(mine, theirs)
+        labels = {
+            _NEW: f"{_NEW} ({int((~same_here).sum())})",
+            _GONE: f"{_GONE} ({int((~same_there).sum())})",
+            _SAME: f"{_SAME} ({int(same_here.sum())})",
+        }
+        colours = {labels[key]: _CIRCLE_COLOURS[key] for key in labels}
+        mine = mine.assign(
+            range=np.where(same_here, labels[_SAME], labels[_NEW])
+        )
+        theirs = theirs.assign(
+            range=np.where(same_there, labels[_SAME], labels[_GONE])
+        )
+        if side_by_side:
+            fig, left, right = self._pair(True, background)
+            other._underlay(left, image, image_alpha)
+            _circles(left, theirs, colours, style)
+            self._underlay(right, image, image_alpha)
+            _circles(right, mine, colours, style)
+            self._pair_labels(left, right, other)
+            draw.legend(right, colours)
+            return fig
+        fig, ax = self._figure(legend=True, background=background)
+        self._underlay(ax, image, image_alpha)
+        # a circle in both is drawn once, from this preview
+        overlay = pd.concat([mine, theirs[~same_there]], ignore_index=True)
+        _circles(ax, overlay, colours, style)
+        draw.legend(ax, colours)
+        return fig
+
+    def _by_range(
+        self, chosen: Sequence[int]
+    ) -> tuple[pd.DataFrame, dict[str, ColorType]]:
+        """The circles of passes ``chosen`` (0-based), labelled in
+        column ``range``, and the colour of each label."""
+        passes = self._state.passes
         labels = {
             i: f"range {i + 1} ({len(passes[i].circles)})" for i in chosen
         }
-        colours = {labels[i]: _pass_colour(i) for i in chosen}
+        colours: dict[str, ColorType] = {
+            labels[i]: _pass_colour(i) for i in chosen
+        }
         counts = [len(found.circles) for found in passes]
         table = self._state.particles.assign(
             range=np.repeat(np.arange(len(passes)), counts)
         )
         table = table[table["range"].isin(chosen)]
-        fig, ax = self._figure(legend=True, background=background)
-        self._underlay(ax, image, image_alpha)
-        draw.particles(
-            ax,
-            table.assign(range=table["range"].map(labels)),
-            color_by="range",
-            colors=colours,
-            others=None,
-            alpha=alpha,
-            linewidth=linewidth,
-            legend=False,
-        )
-        draw.legend(ax, colours)
-        return fig
+        return table.assign(range=table["range"].map(labels)), colours
+
+    def _edge_mask(self, i: int) -> NDArray[np.bool_]:
+        """Pass ``i``'s (0-based) edge pixels in the raw image's frame."""
+        held = self._state.prepared
+        x, y = (round(v) for v in self._origin())
+        edges = hct_edges(held.final, self._ranges()[i]) > 0
+        mask = np.zeros(held.raw.shape, bool)
+        mask[y : y + edges.shape[0], x : x + edges.shape[1]] = edges
+        return mask
+
+    def _compared(self, compare: object, k: int | None) -> "Preview":
+        """``compare`` checked: a preview of this image with range ``k``."""
+        if not isinstance(compare, Preview):
+            raise ParamsError(
+                "compare must be another Preview, got "
+                f"{type(compare).__name__}"
+            )
+        name = self._state.name
+        other = compare._state
+        if (
+            other.name != name
+            or other.prepared.raw.shape != self._state.prepared.raw.shape
+        ):
+            raise ParamsError(
+                f"compare must be a preview of {name}, got one of "
+                f"{other.name}: the pictures would not line up"
+            )
+        here, there = len(self._ranges()), len(compare._ranges())
+        if k is not None and k > there:
+            noun = "range" if here == 1 else "ranges"
+            raise ParamsError(
+                f"range {k} does not exist in compare: {name} has "
+                f"{here} {noun}, {there} in compare"
+            )
+        return compare
+
+    def _pair(
+        self, legend: bool, background: ColorType | None
+    ) -> tuple[Figure, Axes, Axes]:
+        shape = self._state.prepared.raw.shape
+        return draw.figure_pair(shape, legend=legend, background=background)
+
+    def _pair_labels(self, left: Axes, right: Axes, other: "Preview") -> None:
+        _label(left, "before")
+        changes = _differences(other.params, self.params)
+        _label(right, "; ".join(changes) or "same params")
 
     def _figure(
         self, *, legend: bool, background: ColorType | None
@@ -747,13 +904,120 @@ def _pass_colour(i: int) -> tuple[float, float, float, float]:
     return colour
 
 
-def _mask(
-    mask: NDArray[np.bool_], colour: tuple[float, float, float]
-) -> NDArray[np.uint8]:
-    """An RGBA image: ``colour`` where ``mask``, transparent elsewhere."""
-    rgba = np.zeros((*mask.shape, 4), np.uint8)
-    rgba[mask] = [round(255 * c) for c in colour] + [255]
-    return rgba
+def _paint(
+    ax: Axes,
+    layers: Mapping[str, tuple[NDArray[np.bool_], tuple[float, ...]]],
+) -> None:
+    """Pixel masks (raw image frame) in their colours, as one image;
+    transparent elsewhere."""
+    first = next(iter(layers.values()))[0]
+    rgba = np.zeros((*first.shape, 4), np.uint8)
+    for mask, colour in layers.values():
+        rgba[mask] = [round(255 * c) for c in colour] + [255]
+    draw.image(ax, rgba)
+
+
+def _circles(
+    ax: Axes,
+    table: pd.DataFrame,
+    colours: Mapping[str, ColorType],
+    style: Mapping[str, float],
+) -> None:
+    """Outlines coloured by the label in column ``range``, no legend."""
+    draw.particles(
+        ax,
+        table,
+        color_by="range",
+        colors=colours,
+        others=None,
+        alpha=style["alpha"],
+        linewidth=style["linewidth"],
+        legend=False,
+    )
+
+
+def _matched(
+    mine: pd.DataFrame, theirs: pd.DataFrame
+) -> tuple[NDArray[np.bool_], NDArray[np.bool_]]:
+    """Which circles of each table have a near-identical one in the
+    other, by ``find_duplicates``' tolerances."""
+    # one table for find_duplicates: the second's ids after the first's
+    offset = len(mine)
+    both = pd.concat(
+        [
+            mine[["x", "y", "r"]].assign(id=np.arange(offset)),
+            theirs[["x", "y", "r"]].assign(id=offset + np.arange(len(theirs))),
+        ],
+        ignore_index=True,
+    )
+    here = np.zeros(len(mine), bool)
+    there = np.zeros(len(theirs), bool)
+    for a, b in find_duplicates(both):
+        if a < offset <= b:
+            here[a] = True
+            there[b - offset] = True
+    return here, there
+
+
+def _label(ax: Axes, text: str) -> None:
+    """A panel's label in its top-left corner, white on dark grey."""
+    fig = ax.get_figure()
+    assert isinstance(fig, Figure)
+    width = ax.get_position().width * fig.get_figwidth() * fig.dpi
+    ax.text(
+        0.01,
+        0.99,
+        text,
+        transform=ax.transAxes,
+        ha="left",
+        va="top",
+        color="white",
+        fontsize=_LABEL_SIZE * width * 72 / fig.dpi,
+        bbox={"facecolor": "black", "alpha": 0.5, "edgecolor": "none"},
+    )
+
+
+def _differences(old: ImageParams, new: ImageParams) -> list[str]:
+    """What changed from ``old`` to ``new``, one text per value.
+
+    ``preprocess.rolling_ball.radius 50 → 40``; ranges numbered from 1
+    (``ranges[2].canny_threshold 220 → 180``), a different number of
+    ranges as one item ``ranges: 2 → 3``.
+    """
+    before, after = plain(old, "params"), plain(new, "params")
+    ranges = [
+        (before.pop("hct") or {}).get("ranges", []),
+        (after.pop("hct") or {}).get("ranges", []),
+    ]
+    changes = _changes(before, after, "")
+    if len(ranges[0]) != len(ranges[1]):
+        changes.append(f"ranges: {len(ranges[0])} → {len(ranges[1])}")
+        return changes
+    for k, (a, b) in enumerate(zip(*ranges, strict=True), start=1):
+        changes += _changes(a, b, f"ranges[{k}].")
+    return changes
+
+
+def _changes(old: Any, new: Any, path: str) -> list[str]:
+    """The leaves that differ between two plain values, as texts."""
+    if isinstance(old, dict) and isinstance(new, dict):
+        changes = []
+        for key in old:
+            changes += _changes(old[key], new[key], f"{path}{key}.")
+        return changes
+    if old == new:
+        return []
+    return [f"{path.rstrip('.')} {_shown(old)} → {_shown(new)}"]
+
+
+def _shown(value: Any) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, dict):
+        return "{…}"
+    if isinstance(value, float):
+        return f"{value:g}"
+    return str(value)
 
 
 def _ranges_of(params: ImageParams) -> tuple[HCTRange, ...]:
