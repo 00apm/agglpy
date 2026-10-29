@@ -4,6 +4,8 @@ import os
 import shutil
 from pathlib import Path
 
+import cv2
+import numpy as np
 import openpyxl
 import pytest
 
@@ -13,7 +15,7 @@ import agglpy.core.distributions
 from agglpy.app import Collection
 from agglpy.app import _collection as collection_module
 from agglpy.app._config import NEUTRAL, template
-from agglpy.app._sources import resolve_stored
+from agglpy.app._sources import find_images, resolve_stored
 from agglpy.errors import (
     OutputExistsError,
     OutputLockedError,
@@ -393,7 +395,7 @@ def test_repr(col: Collection) -> None:
 def test_top_level_names() -> None:
     # a notebook needs one import
     assert agglpy.Collection is Collection
-    for name in ("Drawings", "Image", "Results"):
+    for name in ("Drawings", "Image", "Preview", "Results"):
         assert getattr(agglpy, name) is getattr(agglpy.app, name)
     assert agglpy.size_classes is agglpy.core.distributions.size_classes
     assert agglpy.__all__ == sorted(agglpy.__all__)
@@ -484,3 +486,26 @@ def test_add_images_names_with_image_not_first_column(
         [["note", "image", "file"], [None, "D7-017", "../raw/D7-017.tif"]],
     )
     assert col.add_images(raw) == ["D7-019", "D7-021"]
+
+
+def test_add_images_skips_work_and_exports(particles_col: Collection) -> None:
+    folder = particles_col.folder
+    tuning = folder / "exports" / "tuning"
+    tuning.mkdir(parents=True)
+    exported = tuning / "D7-017 circles 1.png"
+    assert cv2.imwrite(str(exported), np.zeros((8, 8), np.uint8))
+    stray = folder / "agglpy" / "D7-017" / "copy.tif"
+    stray.parent.mkdir(parents=True)
+    stray.write_bytes(particles_col["D7-017"]._path().read_bytes())
+    tifs = ["**/*.png", "**/*.tif"]
+    # searching the collection or a folder holding it skips both
+    assert particles_col.add_images(folder, pattern=tifs) == []
+    assert particles_col.add_images(folder.parent, pattern=tifs) == []
+    # searching inside them, or naming a file, takes what is there
+    found = find_images(
+        folder / "exports",
+        pattern="**/*",
+        skip=(folder / "agglpy", folder / "exports"),
+    )
+    assert [f.path for f in found] == [exported.resolve()]
+    assert particles_col.add_images(exported) == ["D7-017 circles 1"]

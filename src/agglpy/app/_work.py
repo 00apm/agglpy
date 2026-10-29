@@ -13,22 +13,27 @@ from agglpy.app._records import (
     csv_sha256,
     read_record,
 )
-from agglpy.errors import FileFormatError
+from agglpy.app._sources import PathLike
+from agglpy.errors import FileFormatError, ParamsError
 from agglpy.io import read_particles
 
 __all__ = [
     "CORRECTED_CSV",
     "CORRECTED_RECORD",
+    "EXPORTS_FOLDER",
     "HCT_CSV",
     "HCT_RECORD",
     "WORK_FOLDER",
     "ParticleFile",
+    "export_folder",
     "image_folder",
     "inspect",
     "particle_set",
 ]
 
 WORK_FOLDER = "agglpy"
+# Exports without a folder named go to exports/<kind>
+EXPORTS_FOLDER = "exports"
 HCT_CSV = "particles_hct.csv"
 HCT_RECORD = "particles_hct_record.yml"
 CORRECTED_CSV = "particles_corrected.csv"
@@ -55,6 +60,29 @@ class ParticleFile:
     record: DetectionRecord | CorrectionRecord | None
     particles: pd.DataFrame | None
     sha256: str
+
+
+def export_folder(
+    collection: Path, folder: PathLike | None, kind: str
+) -> Path:
+    """The folder an export writes into, resolved.
+
+    None gives ``exports/<kind>`` in the collection; a relative
+    ``folder`` is taken from the current working directory.
+
+    Raises:
+        ParamsError: If the folder lies in the work folder
+            ``agglpy/``, which agglpy owns.
+    """
+    if folder is None:
+        return (collection / EXPORTS_FOLDER / kind).resolve()
+    chosen = Path(folder).resolve()
+    if chosen.is_relative_to((collection / WORK_FOLDER).resolve()):
+        raise ParamsError(
+            f"{folder} is inside the collection's work folder; export "
+            f"elsewhere, e.g. {(collection / EXPORTS_FOLDER).as_posix()}"
+        )
+    return chosen
 
 
 def image_folder(collection: Path, name: str) -> Path:

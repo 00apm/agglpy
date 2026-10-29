@@ -7,6 +7,7 @@ analysed region or of preprocessing: the caller cuts the region, runs
 """
 
 import warnings
+from collections.abc import Sequence
 
 import cv2
 import numpy as np
@@ -53,7 +54,52 @@ def detect_hct(image: NDArray[np.uint8], params: HCTParams) -> pd.DataFrame:
             least 1 x 1 px.
     """
     image = check_grey_image(image)
-    circles = np.concatenate([_hough(image, r) for r in params.ranges])
+    return _table(image, [_hough(image, r) for r in params.ranges])
+
+
+def hct_edges(
+    image: NDArray[np.uint8], hct_range: HCTRange
+) -> NDArray[np.uint8]:
+    """The edge image ``cv2.HoughCircles`` builds for one HCT pass.
+
+    The same arithmetic as OpenCV's ``HOUGH_GRADIENT`` (``dp=1``): 3 x 3
+    Sobel derivatives (``CV_16S``, ``BORDER_REPLICATE``), then Canny on
+    them with ``high = round(canny_threshold)`` (OpenCV's ``cvRound``,
+    half to even), ``low = max(1, high // 2)`` and the L1 gradient. A
+    circle can only be found on these edges.
+
+    Args:
+        image: A 2-D ``uint8`` grey image, usually preprocessed.
+        hct_range: The pass; only ``canny_threshold`` is used.
+
+    Returns:
+        A ``uint8`` image of the shape of ``image``: 255 on an edge,
+        0 elsewhere.
+
+    Raises:
+        ImageError: If ``image`` is not a 2-D ``uint8`` array of at
+            least 1 x 1 px.
+    """
+    image = check_grey_image(image)
+    dx, dy = (
+        cv2.Sobel(
+            image, cv2.CV_16S, *order, ksize=3, borderType=cv2.BORDER_REPLICATE
+        )
+        for order in ((1, 0), (0, 1))
+    )
+    high = round(hct_range.canny_threshold)
+    edges = cv2.Canny(dx, dy, max(1, high // 2), high, L2gradient=False)
+    return np.asarray(edges, dtype=np.uint8)
+
+
+def _table(
+    image: NDArray[np.uint8], passes: Sequence[NDArray[np.float32]]
+) -> pd.DataFrame:
+    """The particle table of ``detect_hct`` from its passes, in order.
+
+    Also warns as ``detect_hct`` does, pointing at its caller.
+    """
+    circles = np.concatenate(passes)
     if len(circles) == 0:
         height, width = image.shape
         warnings.warn(
@@ -61,7 +107,7 @@ def detect_hct(image: NDArray[np.uint8], params: HCTParams) -> pd.DataFrame:
             f"intensities {image.min()}-{image.max()}, of possible "
             "0-255); check preprocessing and HCT params",
             NoParticlesWarning,
-            stacklevel=2,
+            stacklevel=3,
         )
     # float32 -> its shortest decimal -> float64: 29.4, not the float64
     # neighbour of the float32 value (29.399999618530273)
@@ -82,7 +128,7 @@ def detect_hct(image: NDArray[np.uint8], params: HCTParams) -> pd.DataFrame:
     pairs = find_duplicates(table)
     if pairs:
         warnings.warn(
-            _duplicates_message(pairs), DuplicateParticlesWarning, stacklevel=2
+            _duplicates_message(pairs), DuplicateParticlesWarning, stacklevel=3
         )
     return table
 

@@ -269,3 +269,42 @@ def test_export_extra_table_named_like_a_result(
         with pytest.raises(ParamsError, match=f"{name!r}"):
             res.export(tmp_path / "out", tables={name: res.summary()})
     assert not (tmp_path / "out").exists()
+
+
+def test_export_folders_default_relative_and_guard(
+    analysis_col: Collection,
+    res: Results,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    exports = (analysis_col.folder / "exports").resolve()
+    # no folder: exports/<kind> in the collection
+    assert res.export() == exports / "results"
+    assert (exports / "results" / "results.xlsx").is_file()
+    d = res.draw("D7-017", color_by="D")
+    assert d.export() == [exports / "drawings" / "D7-017.png"]
+    # a second export to the same default needs overwrite=True
+    with pytest.raises(OutputExistsError, match="overwrite=True"):
+        d.export()
+    with pytest.raises(OutputExistsError, match="overwrite=True"):
+        res.export()
+    assert res.export(overwrite=True) == exports / "results"
+    # a relative folder is taken from the current working directory
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    assert res.export("rel") == (elsewhere / "rel").resolve()
+    assert d.export("rel") == [(elsewhere / "rel" / "D7-017.png").resolve()]
+    assert (elsewhere / "rel" / "results.xlsx").is_file()
+    # nothing goes into the work folder, written or not
+    work = analysis_col.folder / "agglpy"
+    for bad in (work, work / "x", work / "x" / ".." / "y"):
+        with pytest.raises(
+            ParamsError, match="inside the collection's work folder"
+        ):
+            res.export(bad)
+        with pytest.raises(ParamsError, match="work folder; export elsewhere"):
+            d.export(bad)
+        assert not bad.joinpath("results.xlsx").exists()
+        assert not bad.joinpath("D7-017.png").exists()
+    assert not (work / "x").exists() and not (work / "y").exists()

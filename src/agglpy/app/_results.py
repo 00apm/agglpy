@@ -28,6 +28,7 @@ from agglpy import draw as _draw
 from agglpy.app._files import replace_file
 from agglpy.app._report import reemit
 from agglpy.app._sources import PathLike
+from agglpy.app._work import export_folder
 from agglpy.core import distributions
 from agglpy.core import metrics as _metrics
 from agglpy.core.agglomerates import select_agglomerates
@@ -340,7 +341,7 @@ class Results:
 
     def export(
         self,
-        folder: PathLike,
+        folder: PathLike | None = None,
         *,
         tables: Mapping[str, pd.DataFrame] | None = None,
         overwrite: bool = False,
@@ -357,23 +358,29 @@ class Results:
         (``Drawings.export``).
 
         Args:
-            folder: The folder to write into; created if missing.
+            folder: The folder to write into; created if missing. A
+                folder named for each export is the recommended way;
+                None gives ``exports/results`` in the collection, where
+                a repeated export needs ``overwrite=True``. A relative
+                path is taken from the current working directory.
             tables: Extra tables made from these results, e.g.
                 ``{"summary": res.summary(by="series")}``; written
                 after the three, without units.
             overwrite: Replace an earlier export in ``folder``.
 
         Returns:
-            The folder.
+            The folder, absolute.
 
         Raises:
             ParamsError: If an extra table is called ``images``,
-                ``agglomerates`` or ``particles``.
+                ``agglomerates`` or ``particles``, or ``folder`` lies in
+                the collection's work folder ``agglpy/``.
             OutputExistsError: If ``folder`` has an export and
                 ``overwrite`` is False.
             OutputLockedError: If a file to replace is open in another
                 program.
         """
+        folder = export_folder(self._origin.collection, folder, "results")
         extra = dict(tables or {})
         for name in ("images", "agglomerates", "particles"):
             if name in extra:
@@ -539,6 +546,7 @@ class Results:
             },
             image=image,
             background=background,
+            collection=self._origin.collection,
             options={
                 **scale,
                 "image_alpha": image_alpha,
@@ -662,12 +670,15 @@ class Drawings(Mapping[str, Figure]):
         *,
         image: bool,
         background: ColorType | None,
+        collection: Path,
         options: Mapping[str, Any],
     ) -> None:
         """Made by ``Results.draw``; not called directly."""
         self._sheets = dict(sheets)
         self._image = image
         self._background = background
+        # where exports go by default, and where they must not go
+        self._collection = collection
         self._options = dict(options)
 
     def __getitem__(self, name: str) -> Figure:
@@ -726,7 +737,7 @@ class Drawings(Mapping[str, Figure]):
         return f"Drawings({len(names)} {noun}: {shown}{more})"
 
     def export(
-        self, folder: PathLike, *, overwrite: bool = False
+        self, folder: PathLike | None = None, *, overwrite: bool = False
     ) -> list[Path]:
         """Write one ``<image>.png`` per image into ``folder``.
 
@@ -737,12 +748,17 @@ class Drawings(Mapping[str, Figure]):
 
         Args:
             folder: The folder to write into; created with its parents.
+                None gives ``exports/drawings`` in the collection, where
+                a repeated export needs ``overwrite=True``. A relative
+                path is taken from the current working directory.
             overwrite: Replace PNGs of these images already there.
 
         Returns:
-            The PNG files, in the order of the results.
+            The PNG files, absolute, in the order of the results.
 
         Raises:
+            ParamsError: If ``folder`` lies in the collection's work
+                folder ``agglpy/``.
             OutputExistsError: If a PNG of a drawn image is there and
                 ``overwrite`` is False; nothing is written.
             OutputLockedError: If a PNG to replace is open in another
@@ -752,7 +768,7 @@ class Drawings(Mapping[str, Figure]):
             ImageError: If an image file no longer has the analysed
                 size; nothing is written.
         """
-        folder = Path(folder)
+        folder = export_folder(self._collection, folder, "drawings")
         paths = [folder / f"{name}.png" for name in self]
         existing = [p for p in paths if p.exists()]
         if existing and not overwrite:

@@ -94,10 +94,12 @@ class HCTRange:
             (r 30-120 and 0.4: two r 30 particles 40 px apart, 40 < 48);
             narrow the range then.
         canny_threshold: Upper threshold of the Canny edge detector
-            inside OpenCV's HoughCircles (``param1``; the lower one is
-            half of it).
-        accumulator_threshold: Votes a centre needs (``param2``); lower
-            values find more circles, and more false ones.
+            inside OpenCV's HoughCircles (``param1``). OpenCV rounds it
+            to an integer; the lower threshold is half of that, rounded
+            down (``core.detect.hct_edges`` shows the edges).
+        accumulator_threshold: Votes a centre needs (``param2``),
+            rounded to an integer by OpenCV; lower values find more
+            circles, and more false ones.
     """
 
     d_min: int

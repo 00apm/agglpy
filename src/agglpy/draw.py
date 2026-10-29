@@ -7,6 +7,8 @@ the image's size in file pixels; ``particles`` colours each particle by
 a column of the particle table, ``agglomerates`` each agglomerate by a
 column of the agglomerate table. Both take the whole tables and a
 ``select=`` mask; unselected particles are drawn as thin outlines.
+``figure_pair`` gives two areas zoomed together, ``image`` draws an
+array (also a region at its place), ``legend`` labels given colours.
 
 Figures are made without pyplot: nothing is kept in a global registry,
 so a loop over many images holds no figures in memory. In Jupyter, a
@@ -23,6 +25,7 @@ from typing import Any
 import matplotlib as mpl
 import numpy as np
 import pandas as pd
+from matplotlib.artist import Artist
 from matplotlib.axes import Axes
 from matplotlib.collections import (
     Collection,
@@ -32,7 +35,9 @@ from matplotlib.collections import (
 from matplotlib.colorbar import Colorbar
 from matplotlib.colors import Colormap, Normalize, to_rgba
 from matplotlib.figure import Figure
+from matplotlib.image import AxesImage
 from matplotlib.legend import Legend
+from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 from matplotlib.path import Path
 from matplotlib.typing import ColorType
@@ -127,27 +132,86 @@ def figure(
         ParamsError: If ``shape`` does not start with two integers
             >= 1.
     """
-    height, width = _shape(shape)
-    strip = round(_STRIP * width) if legend else 0
-    face = "none" if background is None else background
-    fig = Figure(
-        figsize=((width + strip) / _DPI, height / _DPI),
-        dpi=_DPI,
-        facecolor=face,
-    )
-    total = width + strip
-    ax = fig.add_axes((0.0, 0.0, width / total, 1.0))
-    ax.set_facecolor(face)
-    ax.set_xlim(-0.5, width - 0.5)
-    ax.set_ylim(height - 0.5, -0.5)
-    ax.set_aspect("equal")
-    ax.set_axis_off()
-    if legend:
-        side = fig.add_axes(
-            (width / total, 0.0, strip / total, 1.0), label=_STRIP_LABEL
-        )
-        side.set_axis_off()
+    fig, (ax,) = _panels(shape, 1, legend, background)
     return fig, ax
+
+
+def figure_pair(
+    shape: Sequence[int],
+    *,
+    legend: bool = True,
+    background: ColorType | None = "white",
+) -> tuple[Figure, Axes, Axes]:
+    """Make a figure of two image areas side by side, zoomed together.
+
+    Each area is laid out as the one of ``figure``: ``width x height``
+    file pixels, pixel centres at integer coordinates, y down. The two
+    axes share x and y, so zooming or panning one moves the other.
+
+    Args:
+        shape: The image's ``(height, width)``; a third entry is
+            ignored.
+        legend: Leave a strip right of the second area for a legend,
+            as wide as the strip of ``figure`` for one area.
+        background: Any matplotlib colour; None for transparent.
+
+    Returns:
+        The figure, the left axes and the right axes; not managed by
+        pyplot.
+
+    Raises:
+        ParamsError: If ``shape`` does not start with two integers
+            >= 1.
+    """
+    fig, (left, right) = _panels(shape, 2, legend, background)
+    return fig, left, right
+
+
+def image(
+    ax: Axes,
+    image: NDArray[Any],
+    *,
+    alpha: float = 1.0,
+    origin: tuple[float, float] = (0, 0),
+) -> AxesImage:
+    """Draw an image array on pixel axes, without contrast stretch.
+
+    A 2-D ``uint8`` image is grey as it is (0 black, 255 white); RGB or
+    RGBA arrays are drawn as they are. The axes' limits are kept.
+
+    Args:
+        ax: The axes, usually from ``figure``.
+        image: The array.
+        alpha: Its opacity, 0-1.
+        origin: Where its top-left pixel's centre lies, ``(x, y)`` in
+            px: a region cut from a larger image is drawn at the
+            region's place.
+
+    Returns:
+        The drawn image.
+
+    Raises:
+        ParamsError: If ``alpha`` is not within 0-1.
+    """
+    if isinstance(alpha, bool) or not 0 <= alpha <= 1:
+        raise ParamsError(f"alpha must be within 0-1, got {alpha!r}")
+    array = np.asarray(image)
+    height, width = array.shape[:2]
+    x, y = origin
+    options: dict[str, Any] = {}
+    if array.ndim == 2 and array.dtype == np.uint8:
+        # as RGB, since the gray colormap draws some values 1 too dark
+        array = np.repeat(array[..., np.newaxis], 3, axis=2)
+    elif array.ndim == 2:
+        options["cmap"] = "gray"
+    # limits set by figure stay; free axes are fitted to the image
+    return ax.imshow(
+        array,
+        extent=(x - 0.5, x + width - 0.5, y + height - 0.5, y - 0.5),
+        interpolation="nearest",
+        alpha=alpha,
+        **options,
+    )
 
 
 def particles(
@@ -602,18 +666,9 @@ def _outline_paths(
     ]
 
 
-def _draw_image(ax: Axes, image: NDArray[Any] | None, alpha: float) -> None:
-    if image is None:
-        return
-    array = np.asarray(image)
-    if array.ndim == 2 and array.dtype == np.uint8:
-        # uint8 as it is (0 black, 255 white), no contrast stretch; as
-        # RGB, since the gray colormap draws some values 1 too dark
-        array = np.repeat(array[..., np.newaxis], 3, axis=2)
-    if array.ndim == 2:
-        ax.imshow(array, cmap="gray", interpolation="nearest", alpha=alpha)
-    else:
-        ax.imshow(array, interpolation="nearest", alpha=alpha)
+def _draw_image(ax: Axes, picture: NDArray[Any] | None, alpha: float) -> None:
+    if picture is not None:
+        image(ax, picture, alpha=alpha)
 
 
 def _fit(
@@ -698,9 +753,43 @@ def _legend(
         )
         for label, c in palette.labels.items()
     ]
+    return None, _place_legend(ax, handles, title)
+
+
+def legend(
+    ax: Axes, colors: Mapping[str, ColorType], *, title: str | None = None
+) -> Legend:
+    """A legend of labels with given colours, one line per label.
+
+    For drawings not coloured by a column (comparisons, passes). Placed
+    in the strip of ``ax``'s figure when there is one, sized like the
+    legends of ``particles``; else inside ``ax``.
+
+    Args:
+        ax: The image axes.
+        colors: Label -> any matplotlib colour, in legend order.
+        title: The legend's title; None for none.
+
+    Returns:
+        The legend.
+    """
+    handles = [
+        Line2D([], [], color=colour, linewidth=2, label=str(label))
+        for label, colour in colors.items()
+    ]
+    return _place_legend(ax, handles, title)
+
+
+def _place_legend(
+    ax: Axes, handles: Sequence[Artist], title: str | None
+) -> Legend:
+    fig = ax.get_figure()
+    assert isinstance(fig, Figure)
+    strip = _strip(fig)
     if strip is None:
-        return None, ax.legend(handles=handles, title=title)
+        return ax.legend(handles=handles, title=title)
     size = _font_size(fig, strip)
+    text = _text_colour(fig)
     key = strip.legend(
         handles=handles,
         title=title,
@@ -711,7 +800,7 @@ def _legend(
         labelcolor=text,
     )
     key.get_title().set_color(text)
-    return None, key
+    return key
 
 
 def _strip(fig: Figure) -> Axes | None:
@@ -739,6 +828,43 @@ def _text_colour(fig: Figure) -> str:
 # ---------------------------------------------------------------------
 # Input checks
 # ---------------------------------------------------------------------
+
+
+def _panels(
+    shape: Sequence[int],
+    count: int,
+    legend: bool,
+    background: ColorType | None,
+) -> tuple[Figure, list[Axes]]:
+    """``count`` image areas side by side, then the strip if asked."""
+    height, width = _shape(shape)
+    strip = round(_STRIP * width) if legend else 0
+    total = count * width + strip
+    face = "none" if background is None else background
+    fig = Figure(
+        figsize=(total / _DPI, height / _DPI), dpi=_DPI, facecolor=face
+    )
+    axes: list[Axes] = []
+    for i in range(count):
+        first = axes[0] if axes else None
+        ax = fig.add_axes(
+            (i * width / total, 0.0, width / total, 1.0),
+            sharex=first,
+            sharey=first,
+        )
+        ax.set_facecolor(face)
+        ax.set_xlim(-0.5, width - 0.5)
+        ax.set_ylim(height - 0.5, -0.5)
+        ax.set_aspect("equal")
+        ax.set_axis_off()
+        axes.append(ax)
+    if legend:
+        side = fig.add_axes(
+            (count * width / total, 0.0, strip / total, 1.0),
+            label=_STRIP_LABEL,
+        )
+        side.set_axis_off()
+    return fig, axes
 
 
 def _shape(shape: Sequence[int]) -> tuple[int, int]:
