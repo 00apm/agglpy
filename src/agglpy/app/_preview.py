@@ -29,7 +29,7 @@ from agglpy.app._detect import warn_if_lossy
 from agglpy.app._files import replace_file
 from agglpy.app._records import now, versions
 from agglpy.app._report import warning_text
-from agglpy.app._sources import PathLike
+from agglpy.app._sources import PathLike, resolve_stored
 from agglpy.app._work import export_folder
 from agglpy.core.detect import hct_edges
 from agglpy.core.region import Bounds
@@ -47,8 +47,10 @@ from agglpy.params import (
 )
 from agglpy.pipeline._detection import (
     Stage,
+    configured_steps,
     cut_region,
     hct_pass,
+    matching_stages,
     particles_from_passes,
     preprocess_stages,
 )
@@ -261,7 +263,7 @@ class Preview:
             ParamsError: If range ``range`` does not exist, for an
                 unknown field or an invalid value.
         """
-        ranges = list(self._ranges())
+        ranges = list(_ranges_of(self.params))
         i = self._index(range)
         ranges[i] = _with_fields(HCTRange, ranges[i], fields, f"range {range}")
         return self._changed(hct=HCTParams(tuple(ranges)))
@@ -286,7 +288,7 @@ class Preview:
                     f"set_ranges: {key} comes from the (d_min, d_max) "
                     "pairs, not from the shared fields"
                 )
-        _check_names(HCTRange, shared, "set_ranges")
+        _check_names(HCTRange, shared, "set_ranges", ("d_min", "d_max"))
         pairs = list(bounds)
         if not pairs:
             raise ParamsError(
@@ -320,7 +322,7 @@ class Preview:
         Raises:
             ParamsError: For an unknown field or an invalid value.
         """
-        ranges = self._ranges()
+        ranges = _ranges_of(self.params)
         new = _with_fields(
             HCTRange,
             None,
@@ -338,7 +340,7 @@ class Preview:
         Raises:
             ParamsError: If range ``k`` does not exist.
         """
-        ranges = list(self._ranges())
+        ranges = list(_ranges_of(self.params))
         del ranges[self._index(k)]
         return self._changed(hct=HCTParams(tuple(ranges)) if ranges else None)
 
@@ -454,7 +456,7 @@ class Preview:
         views: dict[str, Callable[[], Figure]] = {"image.png": self.image}
         for stage in self._state.prepared.stages:
             views[f"stage {stage.name}.png"] = partial(self.stage, stage.name)
-        ks = range(1, len(self._ranges()) + 1)
+        ks = range(1, len(_ranges_of(self.params)) + 1)
         for k in ks:
             views[f"edges {k}.png"] = partial(self.edges, k)
         for k in ks:
@@ -739,7 +741,7 @@ class Preview:
         """Pass ``i``'s (0-based) edge pixels in the raw image's frame."""
         held = self._state.prepared
         x, y = (round(v) for v in self._origin())
-        edges = hct_edges(held.final, self._ranges()[i]) > 0
+        edges = hct_edges(held.final, _ranges_of(self.params)[i]) > 0
         mask = np.zeros(held.raw.shape, bool)
         mask[y : y + edges.shape[0], x : x + edges.shape[1]] = edges
         return mask
@@ -761,7 +763,10 @@ class Preview:
                 f"compare must be a preview of {name}, got one of "
                 f"{other.name}: the pictures would not line up"
             )
-        here, there = len(self._ranges()), len(compare._ranges())
+        here, there = (
+            len(_ranges_of(self.params)),
+            len(_ranges_of(compare.params)),
+        )
         if k is not None and k > there:
             noun = "range" if here == 1 else "ranges"
             raise ParamsError(
@@ -877,7 +882,7 @@ class Preview:
             else f"same as agglpy.yml at {at}"
         )
         header = [" · ".join(first), second, third]
-        ranges = self._ranges()
+        ranges = _ranges_of(self.params)
         table: list[list[str]] = []
         if ranges:
             table.append(list(_CARD_HEADS))
@@ -944,7 +949,7 @@ class Preview:
 
     def _view_calls(self) -> list[tuple[str, str]]:
         stages = self._state.prepared.stages
-        count = len(self._ranges())
+        count = len(_ranges_of(self.params))
         views = [("p.image()", "the raw image, the region outlined")]
         if stages:
             views.append(
@@ -977,7 +982,7 @@ class Preview:
         return views
 
     def _change_calls(self) -> list[str]:
-        ranges = self._ranges()
+        ranges = _ranges_of(self.params)
         if not ranges:
             return ["p.export()"]
         calls = [
@@ -990,17 +995,13 @@ class Preview:
         calls += [f"p.set_ranges([{pairs}])", "p.keep()  ·  p.export()"]
         return calls
 
-    def _ranges(self) -> tuple[HCTRange, ...]:
-        hct = self.params.hct
-        return hct.ranges if hct is not None else ()
-
     def _index(self, k: object) -> int:
         """The list index of range ``k`` (numbered from 1)."""
         if isinstance(k, bool) or not isinstance(k, numbers.Integral):
             raise ParamsError(
                 f"range must be an int (numbered from 1), got {k!r}"
             )
-        count = len(self._ranges())
+        count = len(_ranges_of(self.params))
         name = self._state.name
         if count == 0:
             raise ParamsError(
@@ -1033,12 +1034,12 @@ def make(
             "params must be ImageParams (p.params or col[name].params), "
             f"got {type(params).__name__}"
         )
-    image = collection[name]
-    entry = image._entry()
-    path = image._path()
+    # one read of the sheet; params() above checked the name
+    entry = collection[name]._entry()
+    path = resolve_stored(entry.file, collection.folder)
     stored_at = now()
     ranges = _ranges_of(params)
-    steps = 1 + len(_configured(params.preprocess)) + (1 if ranges else 0)
+    steps = 1 + len(configured_steps(params.preprocess)) + bool(ranges)
     start = perf_counter()
     with _Steps(name, steps, progress) as report:
         with warnings.catch_warnings(record=True) as caught:
@@ -1070,9 +1071,11 @@ def _derive(parent: _State, params: ImageParams) -> Preview:
     it runs on is the parent's and the parent has an equal range.
     """
     held = parent.prepared
-    configured = _configured(params.preprocess)
+    configured = configured_steps(params.preprocess)
     same_region = params.region == parent.params.region
-    kept = _kept_stages(held.stages, configured) if same_region else 0
+    kept = (
+        matching_stages(held.stages, params.preprocess) if same_region else 0
+    )
     every_stage = same_region and kept == len(configured) == len(held.stages)
     reuse = parent.passes if every_stage else ()
     ranges = _ranges_of(params)
@@ -1421,31 +1424,13 @@ def _ranges_of(params: ImageParams) -> tuple[HCTRange, ...]:
     return params.hct.ranges if params.hct is not None else ()
 
 
-def _configured(preprocess: PreprocessParams) -> list[tuple[str, object]]:
-    """The steps switched on, in run order: ``(field, value)``."""
-    return [
-        (field.name, value)
-        for field in dataclasses.fields(preprocess)
-        if (value := getattr(preprocess, field.name)) is not None
-    ]
-
-
-def _kept_stages(
-    stages: Sequence[Stage], configured: Sequence[tuple[str, object]]
-) -> int:
-    """How many leading stages match the configured steps."""
-    kept = 0
-    for stage, (field, value) in zip(stages, configured, strict=False):
-        if stage.field != field or stage.value != value:
-            break
-        kept += 1
-    return kept
-
-
-def _check_names(cls: type, fields: Mapping[str, object], where: str) -> None:
-    valid = [f.name for f in dataclasses.fields(cls)]
-    if where == "set_ranges":
-        valid = [name for name in valid if name not in ("d_min", "d_max")]
+def _check_names(
+    cls: type,
+    fields: Mapping[str, object],
+    where: str,
+    exclude: Sequence[str] = (),
+) -> None:
+    valid = [f.name for f in dataclasses.fields(cls) if f.name not in exclude]
     unknown = [name for name in fields if name not in valid]
     if unknown:
         noun = "field" if len(unknown) == 1 else "fields"

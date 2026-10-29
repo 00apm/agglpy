@@ -23,8 +23,10 @@ from agglpy.params import (
 )
 from agglpy.pipeline import detect_particles
 from agglpy.pipeline._detection import (
+    configured_steps,
     cut_region,
     hct_pass,
+    matching_stages,
     particles_from_passes,
     preprocess_stages,
 )
@@ -222,6 +224,14 @@ def test_stages_reuse_the_leading_equal_steps(monkeypatch):
     )
     assert alone[0] is not again[1]
     assert counts == {"median": 1, "clahe": 3}
+    # the rule itself, as a preview asks it before running anything
+    assert matching_stages(first, stronger) == 1
+    assert matching_stages(again, stronger) == 2
+    assert matching_stages(again, replace(stronger, median_blur=None)) == 0
+    assert configured_steps(stronger) == [
+        ("median_blur", stronger.median_blur),
+        ("clahe", stronger.clahe),
+    ]
 
 
 def test_no_preprocessing_detects_on_the_cut():

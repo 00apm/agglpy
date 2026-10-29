@@ -7,6 +7,7 @@ the same circles.
 
 import dataclasses
 from collections.abc import Callable, Sequence
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -24,9 +25,11 @@ from agglpy.tables import validate_particles
 
 __all__ = [
     "Stage",
+    "configured_steps",
     "cut_region",
     "detect_particles",
     "hct_pass",
+    "matching_stages",
     "particles_from_passes",
     "preprocess_stages",
 ]
@@ -116,6 +119,33 @@ def cut_region(
     return bounds, image[rows, cols]
 
 
+def configured_steps(preprocess: PreprocessParams) -> list[tuple[str, Any]]:
+    """The steps switched on, in run order: ``(field, value)``."""
+    return [
+        (field.name, value)
+        for field in dataclasses.fields(preprocess)
+        if (value := getattr(preprocess, field.name)) is not None
+    ]
+
+
+def matching_stages(
+    stages: Sequence[Stage], preprocess: PreprocessParams
+) -> int:
+    """How many leading ``stages`` ran with the steps of ``preprocess``.
+
+    Those can be reused on the same cut: equal field and value from the
+    first step on; the first difference ends the match.
+    """
+    kept = 0
+    for stage, (field, value) in zip(
+        stages, configured_steps(preprocess), strict=False
+    ):
+        if stage.field != field or stage.value != value:
+            break
+        kept += 1
+    return kept
+
+
 def preprocess_stages(
     cut: NDArray[np.uint8],
     preprocess: PreprocessParams,
@@ -140,32 +170,14 @@ def preprocess_stages(
         One ``Stage`` per configured step; empty when none is.
     """
     report = on_step or (lambda step: None)
-    stages: list[Stage] = []
-    image = cut
-    # reuse only while every earlier stage was reused too
-    matching = True
-    for field in dataclasses.fields(preprocess):
-        value = getattr(preprocess, field.name)
-        if value is None:
-            continue
-        i = len(stages)
-        matching = (
-            matching
-            and i < len(reuse)
-            and reuse[i].field == field.name
-            and reuse[i].value == value
-        )
-        if matching:
-            stage = reuse[i]
-        else:
-            report(_STEP_NAMES[field.name])
-            out = core_preprocess(
-                image, PreprocessParams(**{field.name: value})
-            )
-            out.setflags(write=False)
-            stage = Stage(field.name, _STEP_NAMES[field.name], value, out)
-        stages.append(stage)
-        image = stage.image
+    stages = list(reuse[: matching_stages(reuse, preprocess)])
+    image = stages[-1].image if stages else cut
+    for field, value in configured_steps(preprocess)[len(stages) :]:
+        report(_STEP_NAMES[field])
+        out = core_preprocess(image, PreprocessParams(**{field: value}))
+        out.setflags(write=False)
+        stages.append(Stage(field, _STEP_NAMES[field], value, out))
+        image = out
     return tuple(stages)
 
 
