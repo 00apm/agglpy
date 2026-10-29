@@ -48,10 +48,12 @@ FIXED_COLUMNS = ("image", "file", "include", "pixel_size_nm", "note")
 IMAGES_TABLE_COLUMNS = (
     "image",
     "pixel_size",
+    "pixel_size_source",
     "fov_area",
     "width",
     "height",
     "particle_set",
+    "outside_region",
 )
 RESERVED_COLUMNS = frozenset(FIXED_COLUMNS + IMAGES_TABLE_COLUMNS)
 

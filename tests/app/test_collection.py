@@ -8,6 +8,8 @@ import openpyxl
 import pytest
 
 import agglpy
+import agglpy.app
+import agglpy.core.distributions
 from agglpy.app import Collection
 from agglpy.app import _collection as collection_module
 from agglpy.app._config import NEUTRAL, template
@@ -388,8 +390,13 @@ def test_repr(col: Collection) -> None:
     assert repr(col) == f"Collection('{col.folder.as_posix()}', 3 images)"
 
 
-def test_top_level_name() -> None:
+def test_top_level_names() -> None:
+    # a notebook needs one import
     assert agglpy.Collection is Collection
+    for name in ("Drawings", "Image", "Results"):
+        assert getattr(agglpy, name) is getattr(agglpy.app, name)
+    assert agglpy.size_classes is agglpy.core.distributions.size_classes
+    assert agglpy.__all__ == sorted(agglpy.__all__)
 
 
 # Review focus

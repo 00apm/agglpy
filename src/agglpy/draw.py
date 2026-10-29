@@ -157,6 +157,7 @@ def particles(
     color_by: Hashable,
     select: pd.Series | None = None,
     image: NDArray[Any] | None = None,
+    image_alpha: float = 1.0,
     others: ColorType | None = "grey",
     cmap: str | Colormap | None = None,
     norm: Normalize | None = None,
@@ -184,6 +185,9 @@ def particles(
         image: The image to draw underneath (a 2-D grey ``uint8``
             image is shown 0 = black to 255 = white, without contrast
             stretching; RGB / RGBA arrays as they are).
+        image_alpha: Opacity of ``image``, 0 to 1. Below 1 the figure's
+            background shows through: on black the image is darkened,
+            on white lightened, so the circles stand out.
         others: Colour of the thin outlines of unselected particles,
             and of particles without a value; None hides them.
         cmap: Colormap of a numeric column (a name or a ``Colormap``);
@@ -218,16 +222,17 @@ def particles(
         ParamsError: If an option does not fit the column (``colors``
             for numbers, ``cmap`` / ``norm`` / ``vmin`` / ``vmax`` for
             labels), ``norm`` comes with ``vmin`` / ``vmax``, ``alpha``
-            is not within 0-1 or ``linewidth`` is negative.
+            or ``image_alpha`` is not within 0-1 or ``linewidth`` is
+            negative.
     """
     x, y, r = _geometry(particles)
     values = _column(particles, color_by)
     chosen = _selection(particles, select)
-    style = _Style(alpha, linewidth)
+    style = _Style(alpha, linewidth, image_alpha)
     palette = _palette(values[chosen], cmap, norm, vmin, vmax, colors)
     # NaN has no colour: drawn as others
     colored = chosen & palette.has_colour(values)
-    _draw_image(ax, image)
+    _draw_image(ax, image, style.image_alpha)
     others_artist = _others(ax, x, y, r, ~colored, others, style)
     # largest first: a smaller circle lands on top of a larger one
     order = np.argsort(-r[colored], kind="stable")
@@ -263,6 +268,7 @@ def agglomerates(
     color_by: Hashable,
     select: pd.Series | None = None,
     image: NDArray[Any] | None = None,
+    image_alpha: float = 1.0,
     others: ColorType | None = "grey",
     cmap: str | Colormap | None = None,
     norm: Normalize | None = None,
@@ -293,8 +299,8 @@ def agglomerates(
             selects all. Members of unselected agglomerates, and
             particles whose agglomerate is not in the table, are drawn
             as ``others``.
-        image, others, cmap, norm, vmin, vmax, colors, alpha,
-            linewidth, legend: As for ``particles``.
+        image, image_alpha, others, cmap, norm, vmin, vmax, colors,
+            alpha, linewidth, legend: As for ``particles``.
 
     Returns:
         The ``Drawing`` with the added artists.
@@ -312,7 +318,7 @@ def agglomerates(
         raise TableError("agglomerate_id repeats in the agglomerate table")
     values = _column(agglomerates, color_by)
     chosen = _selection(agglomerates, select)
-    style = _Style(alpha, linewidth)
+    style = _Style(alpha, linewidth, image_alpha)
     palette = _palette(values[chosen], cmap, norm, vmin, vmax, colors)
     colored = chosen & palette.has_colour(values)
 
@@ -322,7 +328,7 @@ def agglomerates(
         np.arange(int(colored.sum())), index=ids[colored], dtype=np.int64
     )
     row = shown.reindex(members).fillna(-1).to_numpy(dtype=np.int64)
-    _draw_image(ax, image)
+    _draw_image(ax, image, style.image_alpha)
     others_artist = _others(ax, x, y, r, row < 0, others, style)
 
     fills = outlines = None
@@ -350,6 +356,44 @@ def agglomerates(
         else (None, None)
     )
     return Drawing(fills, outlines, others_artist, bar, key)
+
+
+def color_scale(
+    values: pd.Series,
+    *,
+    cmap: str | Colormap | None = None,
+    norm: Normalize | None = None,
+    vmin: float | None = None,
+    vmax: float | None = None,
+    colors: Mapping[Any, ColorType] | None = None,
+) -> dict[str, Any]:
+    """The colour options that give ``values`` one scale.
+
+    Pass them to ``particles`` / ``agglomerates`` for each of several
+    images, so a value or label has the same colour on all, e.g.
+    ``scale = color_scale(all_images.D)`` and then ``particles(ax, p,
+    color_by="D", **scale)`` per image.
+
+    Args:
+        values: The ``color_by`` values of every image to be drawn.
+        cmap, norm, vmin, vmax, colors: As for ``particles``; an unset
+            range is taken from ``values``. ``norm`` is not modified.
+
+    Returns:
+        ``{"cmap": cmap, "norm": norm}`` with the range filled for
+        numbers, ``{"colors": {label: colour}}`` for labels.
+
+    Raises:
+        TableError: If a label has no colour (more than 10 labels need
+            ``colors=``).
+        ParamsError: If an option does not fit the values, as for
+            ``particles``.
+    """
+    palette = _palette(values, cmap, norm, vmin, vmax, colors)
+    if palette.labels is not None:
+        return {"colors": palette.labels}
+    assert palette.scale is not None
+    return {"cmap": cmap, "norm": palette.scale.norm}
 
 
 # ---------------------------------------------------------------------
@@ -558,7 +602,7 @@ def _outline_paths(
     ]
 
 
-def _draw_image(ax: Axes, image: NDArray[Any] | None) -> None:
+def _draw_image(ax: Axes, image: NDArray[Any] | None, alpha: float) -> None:
     if image is None:
         return
     array = np.asarray(image)
@@ -571,9 +615,10 @@ def _draw_image(ax: Axes, image: NDArray[Any] | None) -> None:
             vmin=limits[0],
             vmax=limits[1],
             interpolation="nearest",
+            alpha=alpha,
         )
     else:
-        ax.imshow(array, interpolation="nearest")
+        ax.imshow(array, interpolation="nearest", alpha=alpha)
 
 
 def _fit(
@@ -611,10 +656,13 @@ def _fit(
 class _Style:
     alpha: float
     linewidth: float
+    image_alpha: float = 1.0
 
     def __post_init__(self) -> None:
-        if isinstance(self.alpha, bool) or not 0 <= self.alpha <= 1:
-            raise ParamsError(f"alpha must be within 0-1, got {self.alpha!r}")
+        for name in ("alpha", "image_alpha"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not 0 <= value <= 1:
+                raise ParamsError(f"{name} must be within 0-1, got {value!r}")
         if isinstance(self.linewidth, bool) or not self.linewidth >= 0:
             raise ParamsError(
                 f"linewidth must be >= 0, got {self.linewidth!r}"

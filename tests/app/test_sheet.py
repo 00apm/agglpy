@@ -53,9 +53,15 @@ def test_constants() -> None:
         "pixel_size_nm",
         "note",
     )
-    assert {"pixel_size", "fov_area", "width", "height", "particle_set"} < (
-        RESERVED_COLUMNS
-    )
+    assert {
+        "pixel_size",
+        "pixel_size_source",
+        "fov_area",
+        "width",
+        "height",
+        "particle_set",
+        "outside_region",
+    } < RESERVED_COLUMNS
     assert set(FIXED_COLUMNS) < RESERVED_COLUMNS
 
 

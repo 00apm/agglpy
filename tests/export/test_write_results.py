@@ -140,15 +140,24 @@ def test_a_table_must_be_a_dataframe(tmp_path):
 # ---------------------------------------------------------------------
 
 
-def test_units_sheet_and_csv_list_every_column_with_a_unit(tmp_path):
-    out = write(tmp_path, units={"x": "px", "D": "px", "N": "1", "other": "m"})
+def test_units_per_table_in_table_then_column_order(tmp_path):
+    tables = {
+        "classes": pd.DataFrame({"width": [1e-7], "D": [2e-7]}),
+        "images": pd.DataFrame({"width": [200], "pixel_size": [2.5e-9]}),
+        "summary": SUMMARY,
+    }
+    units = {
+        "images": {"pixel_size": "m", "width": "px"},
+        "classes": {"D": "m"},
+    }
+    out = write(tmp_path, tables=tables, units=units)
     expected = [
         ("table", "column", "unit"),
-        ("particles", "x", "px"),
-        ("particles", "D", "px"),
-        ("summary", "N", "1"),
+        ("classes", "D", "m"),  # the class width stays unlabelled
+        ("images", "width", "px"),
+        ("images", "pixel_size", "m"),
     ]
-    assert sheets(out) == ["particles", "summary", "units", "info"]
+    assert sheets(out) == ["classes", "images", "summary", "units", "info"]
     assert sheet_rows(out, "units") == expected
     lines = (out / "csv" / "units.csv").read_text().splitlines()
     assert lines == [",".join(row) for row in expected]
@@ -160,9 +169,22 @@ def test_without_units_no_units_sheet(tmp_path):
     assert not (out / "csv" / "units.csv").exists()
 
 
+@pytest.mark.parametrize(
+    "units, match",
+    [
+        ({"psd": {"D": "m"}}, "units for 'psd': no such table"),
+        ({"particles": {"q": "m"}}, "units for 'particles': no column 'q'"),
+    ],
+)
+def test_units_for_a_missing_table_or_column(tmp_path, units, match):
+    with pytest.raises(TableError, match=match):
+        write(tmp_path / "out", units=units)
+    assert not (tmp_path / "out").exists()
+
+
 def test_a_unit_must_be_text(tmp_path):
     with pytest.raises(TypeError, match="'D'"):
-        write(tmp_path, units={"D": 1e-6})
+        write(tmp_path, units={"particles": {"D": 1e-6}})
 
 
 # ---------------------------------------------------------------------
