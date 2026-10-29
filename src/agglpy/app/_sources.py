@@ -51,6 +51,8 @@ class Found:
 def find_images(
     images: PathLike | Sequence[PathLike],
     pattern: str | Sequence[str] | None = None,
+    *,
+    skip: Sequence[Path] = (),
 ) -> list[Found]:
     """List the image files of folders and files, in the order given.
 
@@ -58,7 +60,9 @@ def find_images(
     inside it, or with ``pattern`` every file matching the glob(s)
     (``"**/*.tif"`` reaches subfolders); its files are sorted by key,
     so the order is the same on every OS. A file is taken as is. A
-    file found twice is listed once.
+    file found twice is listed once. A searched folder leaves out the
+    files below any ``skip`` folder inside it; searching a ``skip``
+    folder itself lists its files.
 
     Raises:
         FileNotFoundError: If a path does not exist.
@@ -71,9 +75,16 @@ def find_images(
         if not given.exists():
             raise FileNotFoundError(f"{given} does not exist")
         if given.is_dir():
+            root = given.resolve()
+            inside = [
+                s
+                for s in (Path(s).resolve() for s in skip)
+                if s != root and s.is_relative_to(root)
+            ]
             found = [
                 Found(p.resolve(), _key(p.relative_to(given)))
                 for p in _files(given, globs)
+                if not any(p.resolve().is_relative_to(s) for s in inside)
             ]
             found.sort(key=lambda f: f.key)
         else:

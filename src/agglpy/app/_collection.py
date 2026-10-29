@@ -39,7 +39,7 @@ from agglpy.app._sources import (
     stored_path,
 )
 from agglpy.app._status import table as status_table
-from agglpy.app._work import WORK_FOLDER
+from agglpy.app._work import EXPORTS_FOLDER, WORK_FOLDER
 from agglpy.errors import OutputExistsError, ParamsError, SheetError
 from agglpy.params import HCTParams, PreprocessParams, RegionParams
 
@@ -300,7 +300,11 @@ class Collection:
         known = {
             _same_file(resolve_stored(e.file, self._folder)) for e in entries
         }
-        found = [] if images is None else find_images(images, pattern)
+        # the collection's own folders hold no new images
+        skip = (self._folder / WORK_FOLDER, self._folder / EXPORTS_FOLDER)
+        found = (
+            [] if images is None else find_images(images, pattern, skip=skip)
+        )
         found = [f for f in found if _same_file(f.path) not in known]
         names, columns, values = apply_rule(found, rule)
         files = [stored_path(f.path, self._folder) for f in found]
