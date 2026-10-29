@@ -39,7 +39,7 @@ from agglpy.io import read_image, write_particles
 from agglpy.logger import logger
 from agglpy.pipeline import detect_particles
 
-__all__ = ["run"]
+__all__ = ["run", "warn_if_lossy"]
 
 # How a person's particles_hct.csv is named in the report: now / after
 _KEPT = {
@@ -204,14 +204,7 @@ def _detect(
     """Detect one image and write its CSV, then its record."""
     assert params.hct is not None
     start = len(caught)  # the record keeps what this detection warned
-    with path.open("rb") as fh:
-        if fh.read(3) == _JPEG_START:
-            warnings.warn(
-                f"{entry.file} is JPEG-compressed; edges may shift by the "
-                "compression artefacts",
-                LossyImageWarning,
-                stacklevel=2,
-            )
+    warn_if_lossy(entry.file, path)
     on_step("reading")
     image = read_image(path)
     info = image_info(entry.file, path)
@@ -240,6 +233,18 @@ def _detect(
         ),
     )
     return len(table)
+
+
+def warn_if_lossy(file: str, path: Path) -> None:
+    """Warn if the image file is a JPEG; ``file`` names it as stored."""
+    with path.open("rb") as fh:
+        if fh.read(3) == _JPEG_START:
+            warnings.warn(
+                f"{file} is JPEG-compressed; edges may shift by the "
+                "compression artefacts",
+                LossyImageWarning,
+                stacklevel=2,
+            )
 
 
 def _row(
