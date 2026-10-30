@@ -34,15 +34,14 @@ def _legend_texts(fig: Figure) -> list[str]:
 
 
 def test_view_sizes_and_stage_names(p: Preview) -> None:
+    # the image whole, the views the region: 200 x 144 px
     assert render(p.image()).shape[:2] == (160, 200)
-    assert render(p.edges(1)).shape[:2] == (160, 200)  # no strip
-    assert render(p.circles()).shape[:2] == (160, 224)  # legend strip
-    # a stage is the region, drawn at its place; below it the background
+    assert render(p.edges(1)).shape[:2] == (144, 200)  # no strip
+    assert render(p.circles()).shape[:2] == (144, 224)  # legend strip
     stage = render(p.stage("rolling ball"))
-    assert stage.shape[:2] == (160, 200)
+    assert stage.shape[:2] == (144, 200)
     held = {s.name: s.image for s in p._state.prepared.stages}
-    np.testing.assert_array_equal(stage[:144, :, 0], held["rolling ball"])
-    assert (stage[144:, :, :3] == 0).all()
+    np.testing.assert_array_equal(stage[:, :, 0], held["rolling ball"])
     # the raw image, with the region outlined in yellow
     raw = render(p.image())
     image = p._state.prepared.raw
@@ -71,16 +70,15 @@ def test_edges_view_is_hct_edges(p: Preview) -> None:
         shown = render(p.edges(k))
         expected = hct_edges(final, hct) > 0
         assert expected.any()
-        # white on black inside the region, black below it
-        np.testing.assert_array_equal(shown[:144, :, 0] > 127, expected)
-        assert (shown[144:, :, :3] == 0).all()
+        # white on black
+        np.testing.assert_array_equal(shown[:, :, 0] > 127, expected)
     # over the raw image: yellow edges, the image elsewhere
     over = render(p.edges(1, image="raw"))
     yy, xx = np.nonzero(hct_edges(final, p.params.hct.ranges[0]))
     assert (over[yy, xx, :3] == [255, 255, 0]).all()
     raw = p._state.prepared.raw
     off = ~(hct_edges(final, p.params.hct.ranges[0]) > 0)
-    np.testing.assert_array_equal(over[:144, :, 2][off], raw[:144][off])
+    np.testing.assert_array_equal(over[:, :, 2][off], raw[:144][off])
 
 
 def test_circles_display_defaults_and_options(p: Preview) -> None:
@@ -186,7 +184,7 @@ def test_circles_compare_overlay(pair: tuple[Preview, Preview]) -> None:
     fig = p.circles(1, compare=q)
     assert _legend_texts(fig) == ["new (1)", "gone (1)", "same (1)"]
     shown = render(fig)
-    assert shown.shape[:2] == (160, 224)
+    assert shown.shape[:2] == (144, 224)
     assert _near(shown, NEW, LIME)
     assert _near(shown, GONE, RED)
     assert _near(shown, SAME, [128, 128, 128])
@@ -218,7 +216,7 @@ def test_edges_compare_overlay(pair: tuple[Preview, Preview]) -> None:
         "same (1 px)",
     ]
     shown = render(fig)
-    assert shown.shape[:2] == (160, 224)
+    assert shown.shape[:2] == (144, 224)
     assert list(shown[BOTH_PX][:3]) == [255, 255, 255]
     assert list(shown[NEW_PX][:3]) == LIME
     assert list(shown[GONE_PX][:3]) == RED
@@ -237,7 +235,7 @@ def test_side_by_side(pair: tuple[Preview, Preview]) -> None:
     assert left.get_shared_x_axes().joined(left, right)
     assert left.get_shared_y_axes().joined(left, right)
     shown = render(fig)
-    assert shown.shape[:2] == (160, 424)  # two panels + strip
+    assert shown.shape[:2] == (144, 424)  # two panels + strip
     assert _legend_texts(fig) == ["new (1)", "gone (1)", "same (1)"]
     # left: q's view (gone + same), right: p's view (new + same)
     left_px, right_px = shown[:, :200], shown[:, 200:400]
@@ -272,7 +270,7 @@ def test_side_by_side(pair: tuple[Preview, Preview]) -> None:
         ["preprocessed"],
         ["edges"],
     )
-    assert render(edges).shape[:2] == (160, 400)  # no strip
+    assert render(edges).shape[:2] == (144, 400)  # no strip
 
 
 def test_compare_mismatches(tuning_col: Collection) -> None:
@@ -291,3 +289,72 @@ def test_compare_mismatches(tuning_col: Collection) -> None:
         p.edges(2, compare=one)
     with pytest.raises(ParamsError, match=message):
         p.circles(2, compare=one)
+
+
+# -----------------------------------------------------------------
+# The region or the whole image
+# -----------------------------------------------------------------
+
+
+def _yellow(pixels: np.ndarray) -> bool:
+    """Whether any of the pixels is the outline's yellow."""
+    rgb = pixels[..., :3].reshape(-1, 3).astype(int)
+    return bool(
+        ((rgb[:, 0] > 150) & (rgb[:, 1] > 150) & (rgb[:, 2] < 100)).any()
+    )
+
+
+def test_full_image_shows_the_whole_image_with_the_region_outlined(
+    p: Preview,
+) -> None:
+    shown = render(p.circles(full_image=True))
+    assert shown.shape[:2] == (160, 224)
+    assert _yellow(shown[142:146, 100])
+    assert render(p.stage("clahe", full_image=True)).shape[:2] == (160, 200)
+    assert render(p.edges(1, full_image=True)).shape[:2] == (160, 200)
+    # the raw cut, no outline
+    cut = render(p.image(full_image=False))
+    np.testing.assert_array_equal(cut[:, :, 0], p._state.prepared.raw[:144])
+
+
+def test_a_whole_image_region_shows_no_outline(p: Preview) -> None:
+    whole = p.change_region(bottom_fraction=0)
+    for fig in (whole.circles(image=None), whole.image()):
+        shown = render(fig)
+        assert shown.shape[:2] in ((160, 224), (160, 200))
+        assert not _yellow(shown[:, :200])
+
+
+def test_comparing_different_regions_shows_both(p: Preview) -> None:
+    q = p.change_region(bottom_fraction=0.2)  # 128 rows
+    for fig in (
+        q.circles(1, compare=p, image=None),
+        p.circles(1, compare=q, image=None),
+    ):
+        shown = render(fig)
+        assert shown.shape[:2] == (144, 224)  # the larger region
+        assert _yellow(shown[126:129, 100])  # q's bottom edge
+        assert not _yellow(shown[142:144, 100])  # the figure's edge
+    pair = render(q.edges(1, compare=p, side_by_side=True))
+    assert pair.shape[:2] == (144, 424)
+    assert _yellow(pair[126:129, 100]) and _yellow(pair[126:129, 300])
+
+
+def test_comparing_equal_regions_draws_no_outline(
+    pair: tuple[Preview, Preview],
+) -> None:
+    p, q = pair
+    shown = render(p.circles(1, compare=q, image=None))
+    assert not _yellow(shown[:, :200])
+
+
+@pytest.mark.parametrize("view", ["image", "stage", "edges", "circles"])
+def test_full_image_must_be_true_or_false(p: Preview, view: str) -> None:
+    call = {
+        "image": lambda: p.image(full_image="yes"),
+        "stage": lambda: p.stage("clahe", full_image="yes"),
+        "edges": lambda: p.edges(1, full_image="yes"),
+        "circles": lambda: p.circles(full_image="yes"),
+    }[view]
+    with pytest.raises(ParamsError, match="full_image must be True or False"):
+        call()
