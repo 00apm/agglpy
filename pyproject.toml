@@ -143,6 +143,12 @@ ignore_errors = true
 module = ["scipy.*"]
 ignore_missing_imports = true
 
+# ipympl (the user's optional install for %matplotlib widget) ships no
+# type information and is not in the typing extra.
+[[tool.mypy.overrides]]
+module = ["ipympl.*"]
+ignore_missing_imports = true
+
 [tool.importlinter]
 root_package = "agglpy"
 include_external_packages = true
