@@ -110,3 +110,25 @@ def test_figure_pair_two_linked_panels():
     fig, left, right = draw.figure_pair((20, 30), background="black")
     assert render(fig).shape == (20, 64, 4)  # 60 + round(0.12 * 30)
     assert right.get_window_extent().x0 == pytest.approx(30)
+
+
+def test_origin_shows_an_area_of_the_image_in_its_px():
+    fig, ax = draw.figure((144, 200), legend=False, origin=(10, 20))
+    assert ax.get_xlim() == (9.5, 209.5)
+    assert ax.get_ylim() == (163.5, 19.5)
+    image = (np.arange(200 * 300).reshape(200, 300) % 256).astype(np.uint8)
+    draw.image(ax, image)
+    shown = render(fig)
+    assert shown.shape[:2] == (144, 200)
+    np.testing.assert_array_equal(shown[:, :, 0], image[20:164, 10:210])
+
+
+def test_origin_on_a_pair():
+    _fig, left, right = draw.figure_pair((144, 200), origin=(0, 16))
+    assert left.get_ylim() == right.get_ylim() == (159.5, 15.5)
+
+
+@pytest.mark.parametrize("origin", [(0,), (0, np.nan), "ab", (0, True)])
+def test_origin_must_be_two_finite_numbers(origin):
+    with pytest.raises(ParamsError, match="origin"):
+        draw.figure((10, 10), origin=origin)

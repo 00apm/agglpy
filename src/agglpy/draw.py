@@ -17,6 +17,7 @@ expression of a cell shows itself, with no ``%matplotlib inline``.
 """
 
 import copy
+import math
 import numbers
 from collections.abc import Hashable, Mapping, Sequence
 from dataclasses import dataclass
@@ -115,6 +116,7 @@ def figure(
     *,
     legend: bool = True,
     background: ColorType | None = "white",
+    origin: tuple[float, float] = (0, 0),
 ) -> tuple[Figure, Axes]:
     """Make a figure with one image pixel per file pixel.
 
@@ -131,6 +133,9 @@ def figure(
         background: Any matplotlib colour; None for a transparent
             figure (a PNG keeps the transparency). An image drawn with
             ``image=`` covers it.
+        origin: Where the area's top-left pixel centre lies, ``(x, y)``
+            in px: a figure of a region shows it in the coordinates of
+            the whole image.
 
     Returns:
         The figure and its image axes. The figure is not managed by
@@ -139,9 +144,9 @@ def figure(
 
     Raises:
         ParamsError: If ``shape`` does not start with two integers
-            >= 1.
+            >= 1 or ``origin`` is not two finite numbers.
     """
-    fig, (ax,) = _panels(shape, 1, legend, background)
+    fig, (ax,) = _panels(shape, 1, legend, background, origin)
     return fig, ax
 
 
@@ -150,6 +155,7 @@ def figure_pair(
     *,
     legend: bool = True,
     background: ColorType | None = "white",
+    origin: tuple[float, float] = (0, 0),
 ) -> tuple[Figure, Axes, Axes]:
     """Make a figure of two image areas side by side, zoomed together.
 
@@ -163,6 +169,8 @@ def figure_pair(
         legend: Leave a strip right of the second area for a legend,
             as wide as the strip of ``figure`` for one area.
         background: Any matplotlib colour; None for transparent.
+        origin: Where each area's top-left pixel centre lies, as for
+            ``figure``.
 
     Returns:
         The figure, the left axes and the right axes; not managed by
@@ -170,9 +178,9 @@ def figure_pair(
 
     Raises:
         ParamsError: If ``shape`` does not start with two integers
-            >= 1.
+            >= 1 or ``origin`` is not two finite numbers.
     """
-    fig, (left, right) = _panels(shape, 2, legend, background)
+    fig, (left, right) = _panels(shape, 2, legend, background, origin)
     return fig, left, right
 
 
@@ -864,9 +872,11 @@ def _panels(
     count: int,
     legend: bool,
     background: ColorType | None,
+    origin: tuple[float, float],
 ) -> tuple[Figure, list[Axes]]:
     """``count`` image areas side by side, then the strip if asked."""
     height, width = _shape(shape)
+    x, y = _origin(origin)
     strip = round(_STRIP * width) if legend else 0
     total = count * width + strip
     face = "none" if background is None else background
@@ -882,8 +892,8 @@ def _panels(
             sharey=first,
         )
         ax.set_facecolor(face)
-        ax.set_xlim(-0.5, width - 0.5)
-        ax.set_ylim(height - 0.5, -0.5)
+        ax.set_xlim(x - 0.5, x + width - 0.5)
+        ax.set_ylim(y + height - 0.5, y - 0.5)
         ax.set_aspect("equal")
         ax.set_axis_off()
         axes.append(ax)
@@ -909,6 +919,25 @@ def _shape(shape: Sequence[int]) -> tuple[int, int]:
             f"shape must start with (height, width) >= 1, got {shape!r}"
         )
     return int(height), int(width)
+
+
+def _origin(origin: object) -> tuple[float, float]:
+    values = (
+        tuple(origin)
+        if isinstance(origin, Sequence) and not isinstance(origin, str)
+        else ()
+    )
+    if len(values) != 2 or not all(
+        isinstance(v, numbers.Real)
+        and not isinstance(v, bool)
+        and math.isfinite(v)
+        for v in values
+    ):
+        raise ParamsError(
+            f"origin must be two finite numbers (x, y), got {origin!r}"
+        )
+    x, y = values
+    return float(x), float(y)
 
 
 def _geometry(
