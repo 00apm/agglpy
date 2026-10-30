@@ -592,6 +592,7 @@ def test_export_files_and_names(
     assert data["image"] == name
     assert list(data) == [
         "image",
+        "full_image",
         "created",
         "agglpy",
         "dependencies",
@@ -617,6 +618,28 @@ def test_export_files_and_names(
     assert p.export(overwrite=True) == paths
     with pytest.raises(ParamsError, match="work folder"):
         p.export(col.folder / "agglpy")
+
+
+def test_export_writes_the_region_unless_full_image(
+    tuning_col: Collection, tmp_path: Path
+) -> None:
+    p = tuning_col["T1"].preview(progress=False)
+    p.export(tmp_path / "a")
+    assert Image.open(tmp_path / "a" / "T1 image.png").size == (200, 160)
+    assert Image.open(tmp_path / "a" / "T1 edges 1.png").size == (200, 144)
+    assert _yaml.load(tmp_path / "a" / "T1 preview.yml")["full_image"] is False
+    p.export(tmp_path / "b", full_image=True)
+    assert Image.open(tmp_path / "b" / "T1 edges 1.png").size == (200, 160)
+    assert _yaml.load(tmp_path / "b" / "T1 preview.yml")["full_image"] is True
+    with pytest.raises(ParamsError, match="full_image must be True or False"):
+        p.export(tmp_path / "c", full_image=1)
+    assert not (tmp_path / "c").exists()
+
+
+def test_card_names_full_image(tuning_col: Collection) -> None:
+    p = tuning_col["T1"].preview(progress=False)
+    assert "full_image=True" in repr(p)
+    assert "full_image=True" in p._repr_html_()
 
 
 def test_export_without_ranges(tuning_col: Collection, tmp_path: Path) -> None:

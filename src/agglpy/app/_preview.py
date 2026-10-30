@@ -382,11 +382,16 @@ class Preview:
         )
 
     def export(
-        self, folder: PathLike | None = None, *, overwrite: bool = False
+        self,
+        folder: PathLike | None = None,
+        *,
+        full_image: bool = False,
+        overwrite: bool = False,
     ) -> list[Path]:
         """Write every view as a PNG, and ``<image> preview.yml``.
 
-        The views in their default form: ``<image> image.png``,
+        The views in their default form (the analysed region, the
+        whole image in ``image.png``): ``<image> image.png``,
         ``<image> stage <step>.png`` per step, ``<image> edges <k>.png``
         and ``<image> circles <k>.png`` per range, ``<image>
         circles.png``. ``preview.yml`` holds the params in the
@@ -398,6 +403,8 @@ class Preview:
                 None gives ``exports/tuning`` in the collection, where a
                 repeated export needs ``overwrite=True``. A relative
                 path is taken from the current working directory.
+            full_image: Every view of the whole image, the region
+                outlined; the file names stay the same.
             overwrite: Replace files of this image already there.
 
         Returns:
@@ -405,15 +412,17 @@ class Preview:
 
         Raises:
             ParamsError: If ``folder`` lies in the collection's work
-                folder ``agglpy/``.
+                folder ``agglpy/`` or ``full_image`` is not True /
+                False.
             OutputExistsError: If one of the files is there and
                 ``overwrite`` is False; nothing is written.
             OutputLockedError: If a file to replace is open in another
                 program; nothing is changed.
         """
+        _check_full_image(full_image)
         state = self._state
         folder = export_folder(state.collection.folder, folder, "tuning")
-        views = self._export_views()
+        views = self._export_views(full_image)
         names = [*views, "preview.yml"]
         paths = [folder / f"{state.name} {name}" for name in names]
         existing = [p for p in paths if p.exists()]
@@ -425,7 +434,7 @@ class Preview:
             )
         _check_replaceable(existing)
         folder.mkdir(parents=True, exist_ok=True)
-        text = _yaml.dumps(self._export_record())
+        text = _yaml.dumps(self._export_record(full_image))
         made: list[Path] = []
         try:
             for view, path in zip(views.values(), paths, strict=False):
@@ -451,21 +460,30 @@ class Preview:
         logger.info("%s: preview exported to %s", state.name, folder)
         return paths
 
-    def _export_views(self) -> dict[str, Callable[[], Figure]]:
+    def _export_views(
+        self, full_image: bool
+    ) -> dict[str, Callable[[], Figure]]:
         """File name ending -> the view that draws it, in export order."""
+        # the image view is whole by default: it shows where the region is
         views: dict[str, Callable[[], Figure]] = {"image.png": self.image}
         for stage in self._state.prepared.stages:
-            views[f"stage {stage.name}.png"] = partial(self.stage, stage.name)
+            views[f"stage {stage.name}.png"] = partial(
+                self.stage, stage.name, full_image=full_image
+            )
         ks = range(1, len(_ranges_of(self.params)) + 1)
         for k in ks:
-            views[f"edges {k}.png"] = partial(self.edges, k)
+            views[f"edges {k}.png"] = partial(
+                self.edges, k, full_image=full_image
+            )
         for k in ks:
-            views[f"circles {k}.png"] = partial(self.circles, k)
+            views[f"circles {k}.png"] = partial(
+                self.circles, k, full_image=full_image
+            )
         if ks:
-            views["circles.png"] = self.circles
+            views["circles.png"] = partial(self.circles, full_image=full_image)
         return views
 
-    def _export_record(self) -> dict[str, Any]:
+    def _export_record(self, full_image: bool) -> dict[str, Any]:
         """The content of ``preview.yml``."""
         state = self._state
         agglpy_version, dependencies = versions()
@@ -483,6 +501,7 @@ class Preview:
         ]
         return {
             "image": state.name,
+            "full_image": full_image,
             "created": now(),
             "agglpy": agglpy_version,
             "dependencies": dependencies,
@@ -1047,9 +1066,13 @@ class Preview:
                     "on edges and circles: against another preview",
                 ),
             ]
-        views.append(
-            ("p.particles · p.warnings", "the circle table (px) · warnings")
-        )
+        views += [
+            (
+                "… full_image=True",
+                "on every view: the whole image, the region outlined",
+            ),
+            ("p.particles · p.warnings", "the circle table (px) · warnings"),
+        ]
         return views
 
     def _change_calls(self) -> list[str]:
