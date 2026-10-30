@@ -202,6 +202,21 @@ def test_legend_text_follows_the_background(background, text):
     ) == matplotlib.colors.to_rgba(text)
 
 
+def test_the_scale_indicator_matches_the_tick_labels():
+    # values in m: the colorbar shows "1e-6" above its ticks
+    fig, ax = draw.figure((120, 100), background="black")
+    drawing = draw.particles(ax, table(D=[2e-6, 2e-6, 1e-6]), color_by="D")
+    render(fig)
+    axis = drawing.colorbar.ax.yaxis
+    offset = axis.get_offset_text()
+    tick = axis.get_major_ticks()[0].label1
+    assert offset.get_text() != ""
+    assert offset.get_fontsize() == pytest.approx(tick.get_fontsize())
+    assert matplotlib.colors.to_rgba(
+        offset.get_color()
+    ) == matplotlib.colors.to_rgba("white")
+
+
 def test_without_strip_the_colorbar_goes_next_to_the_axes():
     _fig, ax = draw.figure((120, 100), legend=False)
     drawing = draw.particles(ax, table(), color_by="D")

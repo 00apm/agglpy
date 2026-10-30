@@ -119,6 +119,7 @@ def test_widget_fits_the_cell_width_fonts_with_it():
     fig, drawing, probe = fitted((200, 2000))
     label = drawing.colorbar.ax.yaxis.label
     ticks = drawing.colorbar.ax.yaxis.get_major_ticks()[0].label1
+    offset = drawing.colorbar.ax.yaxis.get_offset_text()
     full = 2000 * 1.12
     probe.width = 560  # the browser reports the cell width
     assert css_width(fig) == pytest.approx(560)
@@ -129,6 +130,7 @@ def test_widget_fits_the_cell_width_fonts_with_it():
     full_size = 0.1 * 0.12 * 2000  # the strip's text size at full size
     assert label.get_fontsize() == pytest.approx(full_size * scale)
     assert ticks.get_fontsize() == pytest.approx(full_size * scale)
+    assert offset.get_fontsize() == pytest.approx(full_size * scale)
     # never above full size: zooming shows the detail
     probe.width = 5000
     assert css_width(fig) == pytest.approx(full)

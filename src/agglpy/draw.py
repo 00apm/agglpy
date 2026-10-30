@@ -751,6 +751,8 @@ def _legend(
         bar = fig.colorbar(palette.scale, cax=cax)
         bar.set_label(title, color=text, fontsize=size)
         bar.ax.tick_params(colors=text, labelsize=size)
+        # the scale indicator (e.g. 1e-6): tick_params colours it only
+        bar.ax.yaxis.get_offset_text().set_fontsize(size)
         bar.outline.set_edgecolor(text)
         return bar, None
     assert palette.labels is not None
