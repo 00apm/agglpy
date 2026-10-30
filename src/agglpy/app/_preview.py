@@ -70,7 +70,7 @@ _NEW, _GONE, _SAME = "new", "gone", "same"
 _CIRCLE_COLOURS = {_NEW: "lime", _GONE: "red", _SAME: "grey"}
 _EDGE_COLOURS = {
     _NEW: (0.0, 1.0, 0.0),
-    _GONE: (1.0, 0.0, 1.0),
+    _GONE: (1.0, 0.0, 0.0),
     _SAME: (1.0, 1.0, 1.0),
 }
 # Panel labels as large as a legend's text: this share of the width
@@ -561,7 +561,7 @@ class Preview:
         ``core.detect.hct_edges`` on the preprocessed region: white on
         black, or yellow over ``image``. With ``compare``, the edges of
         both previews' range ``k``: green only in this one (new),
-        magenta only in ``compare`` (gone), white in both.
+        red only in ``compare`` (gone), white in both.
 
         Args:
             k: The range, numbered from 1.

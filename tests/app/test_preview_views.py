@@ -221,7 +221,7 @@ def test_edges_compare_overlay(pair: tuple[Preview, Preview]) -> None:
     assert shown.shape[:2] == (160, 224)
     assert list(shown[BOTH_PX][:3]) == [255, 255, 255]
     assert list(shown[NEW_PX][:3]) == LIME
-    assert list(shown[GONE_PX][:3]) == [255, 0, 255]
+    assert list(shown[GONE_PX][:3]) == RED
     assert (shown[40:, :200, :3] == 0).all()  # on black
     # over the raw image: the image between the edges
     over = render(p.edges(1, compare=q, image="raw"))
@@ -252,7 +252,7 @@ def test_side_by_side(pair: tuple[Preview, Preview]) -> None:
     ) == ["same params"]
     # edges side by side: each panel its edges, both white
     edges = render(p.edges(1, compare=q, side_by_side=True))
-    assert list(edges[GONE_PX][:3]) == [255, 0, 255]
+    assert list(edges[GONE_PX][:3]) == RED
     assert list(edges[NEW_PX[0], 200 + NEW_PX[1]][:3]) == LIME
     assert list(edges[BOTH_PX[0], 200 + BOTH_PX[1]][:3]) == [255] * 3
     assert list(edges[NEW_PX][:3]) == [0, 0, 0]
