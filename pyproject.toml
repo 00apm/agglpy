@@ -48,6 +48,10 @@ notebook = [
     # + anywidget installed in whatever env actually hosts the JupyterLab
     # server, if that's not this env - see conda_env_dev.yaml.
     "anywidget >= 0.9, < 1",
+    # %matplotlib widget: agglpy's figures on a canvas that zooms. The
+    # JupyterLab server's env needs the same ipympl version (its
+    # frontend), else the canvas shows an error instead of the figure.
+    "ipympl >= 0.9.8, < 0.10",
 ]
 test = ["pytest >= 8.3.3, < 9", "pytest-regressions >= 2.5, < 3"]
 typing = [

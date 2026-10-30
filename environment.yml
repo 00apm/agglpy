@@ -48,6 +48,9 @@ dependencies:
   # frontend JS is scanned from the env hosting the server, not this kernel
   # env), otherwise fig.show() builds the figure but renders nothing.
   - anywidget<1
+  # %matplotlib widget (zoomable figures). The JupyterLab server's env needs
+  # the same ipympl version, else the canvas shows an error.
+  - ipympl>=0.9.8,<0.10
   # tests
   - pytest<9
   - pytest-regressions<3
