@@ -382,11 +382,16 @@ class Preview:
         )
 
     def export(
-        self, folder: PathLike | None = None, *, overwrite: bool = False
+        self,
+        folder: PathLike | None = None,
+        *,
+        full_image: bool = False,
+        overwrite: bool = False,
     ) -> list[Path]:
         """Write every view as a PNG, and ``<image> preview.yml``.
 
-        The views in their default form: ``<image> image.png``,
+        The views in their default form (the analysed region, the
+        whole image in ``image.png``): ``<image> image.png``,
         ``<image> stage <step>.png`` per step, ``<image> edges <k>.png``
         and ``<image> circles <k>.png`` per range, ``<image>
         circles.png``. ``preview.yml`` holds the params in the
@@ -398,6 +403,8 @@ class Preview:
                 None gives ``exports/tuning`` in the collection, where a
                 repeated export needs ``overwrite=True``. A relative
                 path is taken from the current working directory.
+            full_image: Every view of the whole image, the region
+                outlined; the file names stay the same.
             overwrite: Replace files of this image already there.
 
         Returns:
@@ -405,15 +412,17 @@ class Preview:
 
         Raises:
             ParamsError: If ``folder`` lies in the collection's work
-                folder ``agglpy/``.
+                folder ``agglpy/`` or ``full_image`` is not True /
+                False.
             OutputExistsError: If one of the files is there and
                 ``overwrite`` is False; nothing is written.
             OutputLockedError: If a file to replace is open in another
                 program; nothing is changed.
         """
+        _check_full_image(full_image)
         state = self._state
         folder = export_folder(state.collection.folder, folder, "tuning")
-        views = self._export_views()
+        views = self._export_views(full_image)
         names = [*views, "preview.yml"]
         paths = [folder / f"{state.name} {name}" for name in names]
         existing = [p for p in paths if p.exists()]
@@ -425,7 +434,7 @@ class Preview:
             )
         _check_replaceable(existing)
         folder.mkdir(parents=True, exist_ok=True)
-        text = _yaml.dumps(self._export_record())
+        text = _yaml.dumps(self._export_record(full_image))
         made: list[Path] = []
         try:
             for view, path in zip(views.values(), paths, strict=False):
@@ -451,21 +460,30 @@ class Preview:
         logger.info("%s: preview exported to %s", state.name, folder)
         return paths
 
-    def _export_views(self) -> dict[str, Callable[[], Figure]]:
+    def _export_views(
+        self, full_image: bool
+    ) -> dict[str, Callable[[], Figure]]:
         """File name ending -> the view that draws it, in export order."""
+        # the image view is whole by default: it shows where the region is
         views: dict[str, Callable[[], Figure]] = {"image.png": self.image}
         for stage in self._state.prepared.stages:
-            views[f"stage {stage.name}.png"] = partial(self.stage, stage.name)
+            views[f"stage {stage.name}.png"] = partial(
+                self.stage, stage.name, full_image=full_image
+            )
         ks = range(1, len(_ranges_of(self.params)) + 1)
         for k in ks:
-            views[f"edges {k}.png"] = partial(self.edges, k)
+            views[f"edges {k}.png"] = partial(
+                self.edges, k, full_image=full_image
+            )
         for k in ks:
-            views[f"circles {k}.png"] = partial(self.circles, k)
+            views[f"circles {k}.png"] = partial(
+                self.circles, k, full_image=full_image
+            )
         if ks:
-            views["circles.png"] = self.circles
+            views["circles.png"] = partial(self.circles, full_image=full_image)
         return views
 
-    def _export_record(self) -> dict[str, Any]:
+    def _export_record(self, full_image: bool) -> dict[str, Any]:
         """The content of ``preview.yml``."""
         state = self._state
         agglpy_version, dependencies = versions()
@@ -483,6 +501,7 @@ class Preview:
         ]
         return {
             "image": state.name,
+            "full_image": full_image,
             "created": now(),
             "agglpy": agglpy_version,
             "dependencies": dependencies,
@@ -494,54 +513,51 @@ class Preview:
         }
 
     # -----------------------------------------------------------------
-    # Views: one new full-size figure per call
+    # Views: one new figure per call, the analysed region by default
     # -----------------------------------------------------------------
 
-    def image(self) -> Figure:
+    def image(self, *, full_image: bool = True) -> Figure:
         """The raw image, the analysed region outlined in yellow.
 
         One figure pixel per image pixel; the outline lies on the
         region's outermost pixels and is drawn only when the region is
         smaller than the image.
-        """
-        held = self._state.prepared
-        fig, ax = draw.figure(held.raw.shape, legend=False)
-        draw.image(ax, held.raw)
-        height, width = held.raw.shape
-        b = held.bounds
-        if (b.x_min, b.y_min, b.x_max, b.y_max) != (
-            -0.5,
-            -0.5,
-            width - 0.5,
-            height - 0.5,
-        ):
-            ax.add_patch(
-                Rectangle(
-                    (b.x_min + 0.5, b.y_min + 0.5),
-                    b.x_max - b.x_min - 1,
-                    b.y_max - b.y_min - 1,
-                    fill=False,
-                    edgecolor="yellow",
-                    linewidth=1,
-                    # on the pixels themselves, not snapped 1 px inward
-                    snap=False,
-                )
-            )
-        return fig
 
-    def stage(self, name: str) -> Figure:
-        """The region after a preprocessing step, at its place.
-
-        ``name`` is a step that ran: ``"median"``, ``"rolling ball"``,
-        ``"clahe"``. The rest of the image is black.
+        Args:
+            full_image: The whole image; False shows the raw region
+                only, without the outline.
 
         Raises:
-            ParamsError: If no step of that name ran.
+            ParamsError: If ``full_image`` is not True / False.
         """
+        fig, ax = self._figure(
+            legend=False, background="white", full_image=full_image
+        )
+        draw.image(ax, self._state.prepared.raw)
+        return fig
+
+    def stage(self, name: str, *, full_image: bool = False) -> Figure:
+        """The region after a preprocessing step.
+
+        ``name`` is a step that ran: ``"median"``, ``"rolling ball"``,
+        ``"clahe"``.
+
+        Args:
+            name: The step.
+            full_image: The whole image's area: the region at its place
+                and outlined, the rest black.
+
+        Raises:
+            ParamsError: If no step of that name ran or ``full_image``
+                is not True / False.
+        """
+        _check_full_image(full_image)
         stages = self._state.prepared.stages
         for stage in stages:
             if stage.name == name:
-                fig, ax = self._figure(legend=False, background="black")
+                fig, ax = self._figure(
+                    legend=False, background="black", full_image=full_image
+                )
                 draw.image(ax, stage.image, origin=self._origin())
                 return fig
         ran = ", ".join(s.name for s in stages) or "no preprocessing"
@@ -555,6 +571,7 @@ class Preview:
         side_by_side: bool = False,
         image: Underlay = None,
         image_alpha: float = 1.0,
+        full_image: bool = False,
     ) -> Figure:
         """The edges HoughCircles sees in range ``k``.
 
@@ -573,23 +590,28 @@ class Preview:
             image: The image underneath: ``"raw"``, ``"preprocessed"``
                 (the region) or None.
             image_alpha: Its opacity, 0-1.
+            full_image: The whole image, the region outlined; False
+                shows the region (both regions with ``compare``).
 
         Raises:
             ParamsError: If range ``k`` does not exist (in either
                 preview), ``compare`` is not a preview of this image or
                 an option is invalid.
         """
+        _check_full_image(full_image)
         i = self._index(k)
         mine = self._edge_mask(i)
         if compare is None:
             if side_by_side:
-                fig, left, right = self._pair(False, "black")
+                fig, left, right = self._pair(False, "black", full_image)
                 self._underlay(left, image or "raw", image_alpha)
                 _paint(right, {"": (mine, _EDGE_COLOURS[_SAME])})
                 _label(left, image or "raw")
                 _label(right, "edges")
                 return fig
-            fig, ax = self._figure(legend=False, background="black")
+            fig, ax = self._figure(
+                legend=False, background="black", full_image=full_image
+            )
             self._underlay(ax, image, image_alpha)
             colour = (1.0, 1.0, 1.0) if image is None else (1.0, 1.0, 0.0)
             _paint(ax, {"": (mine, colour)})
@@ -609,7 +631,7 @@ class Preview:
             key: (mask, _EDGE_COLOURS[key]) for key, mask in masks.items()
         }
         if side_by_side:
-            fig, left, right = self._pair(True, "black")
+            fig, left, right = self._pair(True, "black", full_image, other)
             other._underlay(left, image, image_alpha)
             _paint(left, {key: layers[key] for key in (_GONE, _SAME)})
             self._underlay(right, image, image_alpha)
@@ -617,7 +639,9 @@ class Preview:
             self._pair_labels(left, right, other)
             draw.legend(right, legend)
             return fig
-        fig, ax = self._figure(legend=True, background="black")
+        fig, ax = self._figure(
+            legend=True, background="black", full_image=full_image, other=other
+        )
         self._underlay(ax, image, image_alpha)
         _paint(ax, layers)
         draw.legend(ax, legend)
@@ -634,6 +658,7 @@ class Preview:
         background: ColorType | None = "black",
         alpha: float = 0.0,
         linewidth: float = 1.0,
+        full_image: bool = False,
     ) -> Figure:
         """The circles of range ``k``, or of every range by range.
 
@@ -657,12 +682,16 @@ class Preview:
             background: The figure's colour; None for transparent.
             alpha: Opacity of the fill, 0 (outlines only) to 1.
             linewidth: Width of the outlines in px.
+            full_image: The whole image, the region outlined, circles
+                drawn whole; False shows the region (both regions with
+                ``compare``), circles cut at its edge.
 
         Raises:
             ParamsError: If range ``k`` does not exist (in either
                 preview), ``compare`` is not a preview of this image or
                 an option is invalid.
         """
+        _check_full_image(full_image)
         if k is None:
             self._index(1)  # the message of no ranges
             chosen = list(range(len(self._state.passes)))
@@ -672,14 +701,16 @@ class Preview:
         if compare is None:
             table, colours = self._by_range(chosen)
             if side_by_side:
-                fig, left, right = self._pair(True, background)
+                fig, left, right = self._pair(True, background, full_image)
                 self._underlay(left, image or "raw", image_alpha)
                 _circles(right, table, colours, style)
                 _label(left, image or "raw")
                 _label(right, "circles")
                 draw.legend(right, colours)
                 return fig
-            fig, ax = self._figure(legend=True, background=background)
+            fig, ax = self._figure(
+                legend=True, background=background, full_image=full_image
+            )
             self._underlay(ax, image, image_alpha)
             _circles(ax, table, colours, style)
             draw.legend(ax, colours)
@@ -702,7 +733,7 @@ class Preview:
             range=np.where(same_there, labels[_SAME], labels[_GONE])
         )
         if side_by_side:
-            fig, left, right = self._pair(True, background)
+            fig, left, right = self._pair(True, background, full_image, other)
             other._underlay(left, image, image_alpha)
             _circles(left, theirs, colours, style)
             self._underlay(right, image, image_alpha)
@@ -710,7 +741,12 @@ class Preview:
             self._pair_labels(left, right, other)
             draw.legend(right, colours)
             return fig
-        fig, ax = self._figure(legend=True, background=background)
+        fig, ax = self._figure(
+            legend=True,
+            background=background,
+            full_image=full_image,
+            other=other,
+        )
         self._underlay(ax, image, image_alpha)
         # a circle in both is drawn once, from this preview
         overlay = pd.concat([mine, theirs[~same_there]], ignore_index=True)
@@ -776,10 +812,22 @@ class Preview:
         return compare
 
     def _pair(
-        self, legend: bool, background: ColorType | None
+        self,
+        legend: bool,
+        background: ColorType | None,
+        full_image: bool,
+        other: "Preview | None" = None,
     ) -> tuple[Figure, Axes, Axes]:
-        shape = self._state.prepared.raw.shape
-        return draw.figure_pair(shape, legend=legend, background=background)
+        area = self._area(other, full_image)
+        fig, left, right = draw.figure_pair(
+            _area_shape(area),
+            legend=legend,
+            background=background,
+            origin=(area.x_min + 0.5, area.y_min + 0.5),
+        )
+        for ax in (left, right):
+            self._outline_regions(ax, area, other)
+        return fig, left, right
 
     def _pair_labels(self, left: Axes, right: Axes, other: "Preview") -> None:
         _label(left, "before")
@@ -787,10 +835,52 @@ class Preview:
         _label(right, "; ".join(changes) or "same params")
 
     def _figure(
-        self, *, legend: bool, background: ColorType | None
+        self,
+        *,
+        legend: bool,
+        background: ColorType | None,
+        full_image: bool,
+        other: "Preview | None" = None,
     ) -> tuple[Figure, Axes]:
-        shape = self._state.prepared.raw.shape
-        return draw.figure(shape, legend=legend, background=background)
+        _check_full_image(full_image)
+        area = self._area(other, full_image)
+        fig, ax = draw.figure(
+            _area_shape(area),
+            legend=legend,
+            background=background,
+            origin=(area.x_min + 0.5, area.y_min + 0.5),
+        )
+        self._outline_regions(ax, area, other)
+        return fig, ax
+
+    def _area(self, other: "Preview | None", full_image: bool) -> Bounds:
+        """What a view shows: the whole image, the region, or the
+        smallest rectangle holding both previews' regions."""
+        if full_image:
+            height, width = self._state.prepared.raw.shape
+            return Bounds(-0.5, -0.5, width - 0.5, height - 0.5)
+        mine = self._state.prepared.bounds
+        if other is None:
+            return mine
+        theirs = other._state.prepared.bounds
+        return Bounds(
+            min(mine.x_min, theirs.x_min),
+            min(mine.y_min, theirs.y_min),
+            max(mine.x_max, theirs.x_max),
+            max(mine.y_max, theirs.y_max),
+        )
+
+    def _outline_regions(
+        self, ax: Axes, area: Bounds, other: "Preview | None"
+    ) -> None:
+        """Outline the regions that differ from the area shown; a
+        region filling it ends at the figure's edge anyway."""
+        regions = [self._state.prepared.bounds]
+        if other is not None:
+            regions.append(other._state.prepared.bounds)
+        for bounds in dict.fromkeys(regions):
+            if bounds != area:
+                _outline(ax, bounds)
 
     def _origin(self) -> tuple[float, float]:
         """Where the region's top-left pixel centre lies in the image."""
@@ -976,9 +1066,13 @@ class Preview:
                     "on edges and circles: against another preview",
                 ),
             ]
-        views.append(
-            ("p.particles · p.warnings", "the circle table (px) · warnings")
-        )
+        views += [
+            (
+                "… full_image=True",
+                "on every view: the whole image, the region outlined",
+            ),
+            ("p.particles · p.warnings", "the circle table (px) · warnings"),
+        ]
         return views
 
     def _change_calls(self) -> list[str]:
@@ -1269,6 +1363,36 @@ def _pass_colour(i: int) -> tuple[float, float, float, float]:
         i % 10
     )
     return colour
+
+
+def _check_full_image(full_image: object) -> None:
+    if not isinstance(full_image, bool):
+        raise ParamsError(
+            f"full_image must be True or False, got {full_image!r}"
+        )
+
+
+def _area_shape(area: Bounds) -> tuple[int, int]:
+    """``(height, width)`` in px of an area of whole pixels."""
+    return round(area.y_max - area.y_min), round(area.x_max - area.x_min)
+
+
+def _outline(ax: Axes, bounds: Bounds) -> None:
+    """A region's outline in yellow, on its outermost pixels."""
+    ax.add_patch(
+        Rectangle(
+            (bounds.x_min + 0.5, bounds.y_min + 0.5),
+            bounds.x_max - bounds.x_min - 1,
+            bounds.y_max - bounds.y_min - 1,
+            fill=False,
+            edgecolor="yellow",
+            linewidth=1,
+            # on the pixels themselves, not snapped 1 px inward
+            snap=False,
+            # over the images and circles drawn after it
+            zorder=3,
+        )
+    )
 
 
 def _paint(

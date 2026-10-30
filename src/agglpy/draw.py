@@ -17,6 +17,7 @@ expression of a cell shows itself, with no ``%matplotlib inline``.
 """
 
 import copy
+import math
 import numbers
 from collections.abc import Hashable, Mapping, Sequence
 from dataclasses import dataclass
@@ -55,6 +56,8 @@ _DPI = 72
 _STRIP = 0.12
 # Legend text height as a fraction of the strip width.
 _TEXT = 0.1
+# Most rebuilds of a legend shrinking into the strip.
+_FIT_ROUNDS = 4
 # Label of the strip's axes, by which the draw functions find it.
 _STRIP_LABEL = "agglpy legend"
 # Default colours of label columns (10 colours).
@@ -115,6 +118,7 @@ def figure(
     *,
     legend: bool = True,
     background: ColorType | None = "white",
+    origin: tuple[float, float] = (0, 0),
 ) -> tuple[Figure, Axes]:
     """Make a figure with one image pixel per file pixel.
 
@@ -131,6 +135,9 @@ def figure(
         background: Any matplotlib colour; None for a transparent
             figure (a PNG keeps the transparency). An image drawn with
             ``image=`` covers it.
+        origin: Where the area's top-left pixel centre lies, ``(x, y)``
+            in px: a figure of a region shows it in the coordinates of
+            the whole image.
 
     Returns:
         The figure and its image axes. The figure is not managed by
@@ -139,9 +146,9 @@ def figure(
 
     Raises:
         ParamsError: If ``shape`` does not start with two integers
-            >= 1.
+            >= 1 or ``origin`` is not two finite numbers.
     """
-    fig, (ax,) = _panels(shape, 1, legend, background)
+    fig, (ax,) = _panels(shape, 1, legend, background, origin)
     return fig, ax
 
 
@@ -150,6 +157,7 @@ def figure_pair(
     *,
     legend: bool = True,
     background: ColorType | None = "white",
+    origin: tuple[float, float] = (0, 0),
 ) -> tuple[Figure, Axes, Axes]:
     """Make a figure of two image areas side by side, zoomed together.
 
@@ -163,6 +171,8 @@ def figure_pair(
         legend: Leave a strip right of the second area for a legend,
             as wide as the strip of ``figure`` for one area.
         background: Any matplotlib colour; None for transparent.
+        origin: Where each area's top-left pixel centre lies, as for
+            ``figure``.
 
     Returns:
         The figure, the left axes and the right axes; not managed by
@@ -170,9 +180,9 @@ def figure_pair(
 
     Raises:
         ParamsError: If ``shape`` does not start with two integers
-            >= 1.
+            >= 1 or ``origin`` is not two finite numbers.
     """
-    fig, (left, right) = _panels(shape, 2, legend, background)
+    fig, (left, right) = _panels(shape, 2, legend, background, origin)
     return fig, left, right
 
 
@@ -800,6 +810,28 @@ def _place_legend(
     if strip is None:
         return ax.legend(handles=handles, title=title)
     size = _font_size(fig, strip)
+    key = _strip_legend(strip, handles, title, size)
+    # The text size of the strip cuts long labels (counts) and tall
+    # legends on a short strip: rebuilt with the text scaled to fit.
+    # Small text shrinks less than its size (font hinting), hence a
+    # few measured rounds, not one.
+    room = strip.get_window_extent()
+    for _ in range(_FIT_ROUNDS):
+        box = key.get_window_extent()
+        scale = min(room.width / (box.x1 - room.x0), room.height / box.height)
+        if scale >= 1:
+            break
+        size *= scale * 0.95
+        key.remove()
+        key = _strip_legend(strip, handles, title, size)
+    return key
+
+
+def _strip_legend(
+    strip: Axes, handles: Sequence[Artist], title: str | None, size: float
+) -> Legend:
+    fig = strip.get_figure()
+    assert isinstance(fig, Figure)
     text = _text_colour(fig)
     key = strip.legend(
         handles=handles,
@@ -846,9 +878,11 @@ def _panels(
     count: int,
     legend: bool,
     background: ColorType | None,
+    origin: tuple[float, float],
 ) -> tuple[Figure, list[Axes]]:
     """``count`` image areas side by side, then the strip if asked."""
     height, width = _shape(shape)
+    x, y = _origin(origin)
     strip = round(_STRIP * width) if legend else 0
     total = count * width + strip
     face = "none" if background is None else background
@@ -864,8 +898,8 @@ def _panels(
             sharey=first,
         )
         ax.set_facecolor(face)
-        ax.set_xlim(-0.5, width - 0.5)
-        ax.set_ylim(height - 0.5, -0.5)
+        ax.set_xlim(x - 0.5, x + width - 0.5)
+        ax.set_ylim(y + height - 0.5, y - 0.5)
         ax.set_aspect("equal")
         ax.set_axis_off()
         axes.append(ax)
@@ -891,6 +925,25 @@ def _shape(shape: Sequence[int]) -> tuple[int, int]:
             f"shape must start with (height, width) >= 1, got {shape!r}"
         )
     return int(height), int(width)
+
+
+def _origin(origin: object) -> tuple[float, float]:
+    values = (
+        tuple(origin)
+        if isinstance(origin, Sequence) and not isinstance(origin, str)
+        else ()
+    )
+    if len(values) != 2 or not all(
+        isinstance(v, numbers.Real)
+        and not isinstance(v, bool)
+        and math.isfinite(v)
+        for v in values
+    ):
+        raise ParamsError(
+            f"origin must be two finite numbers (x, y), got {origin!r}"
+        )
+    x, y = values
+    return float(x), float(y)
 
 
 def _geometry(
