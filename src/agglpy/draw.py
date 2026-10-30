@@ -800,6 +800,24 @@ def _place_legend(
     if strip is None:
         return ax.legend(handles=handles, title=title)
     size = _font_size(fig, strip)
+    key = _strip_legend(strip, handles, title, size)
+    # The text size of the strip cuts long labels (counts) and tall
+    # legends on a short strip: rebuilt once, scaled to fit. Every
+    # length of a legend is in font sizes, so it scales linearly.
+    room = strip.get_window_extent()
+    box = key.get_window_extent()
+    scale = min(room.width / (box.x1 - room.x0), room.height / box.height)
+    if scale < 1:
+        key.remove()
+        key = _strip_legend(strip, handles, title, size * scale * 0.95)
+    return key
+
+
+def _strip_legend(
+    strip: Axes, handles: Sequence[Artist], title: str | None, size: float
+) -> Legend:
+    fig = strip.get_figure()
+    assert isinstance(fig, Figure)
     text = _text_colour(fig)
     key = strip.legend(
         handles=handles,
