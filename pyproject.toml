@@ -160,6 +160,7 @@ include_external_packages = true
 name = "New code never imports the legacy modules (D-019)"
 type = "forbidden"
 source_modules = [
+    "agglpy._notebook",
     "agglpy._yaml",
     "agglpy.app",
     "agglpy.core",
@@ -204,7 +205,12 @@ source_modules = [
     "agglpy.pipeline",
     "agglpy.tables",
 ]
-forbidden_modules = ["agglpy.draw", "agglpy.export", "agglpy.io"]
+forbidden_modules = [
+    "agglpy._notebook",
+    "agglpy.draw",
+    "agglpy.export",
+    "agglpy.io",
+]
 
 # io and export know file formats, not the analysis: they need only the
 # foundation (draw needs the core's outline arcs).
@@ -233,6 +239,7 @@ forbidden_modules = ["agglpy.pipeline"]
 name = "Nothing below the application imports it"
 type = "forbidden"
 source_modules = [
+    "agglpy._notebook",
     "agglpy._yaml",
     "agglpy.core",
     "agglpy.draw",
@@ -253,6 +260,7 @@ name = "Only agglpy._yaml imports ruamel"
 type = "forbidden"
 allow_indirect_imports = true
 source_modules = [
+    "agglpy._notebook",
     "agglpy.app",
     "agglpy.core",
     "agglpy.draw",

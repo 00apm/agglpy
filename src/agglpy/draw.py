@@ -17,7 +17,6 @@ expression of a cell shows itself, with no ``%matplotlib inline``.
 """
 
 import copy
-import io
 import numbers
 from collections.abc import Hashable, Mapping, Sequence
 from dataclasses import dataclass
@@ -44,6 +43,7 @@ from matplotlib.path import Path
 from matplotlib.typing import ColorType
 from numpy.typing import NDArray
 
+from agglpy._notebook import ShownFigure, png
 from agglpy.core.properties import _outline_arcs
 from agglpy.errors import ParamsError, TableError
 
@@ -59,8 +59,6 @@ _TEXT = 0.1
 _STRIP_LABEL = "agglpy legend"
 # Default colours of label columns (10 colours).
 _PALETTE = "tab10"
-# Names of the ipympl backend (``%matplotlib widget``), as ipympl lists them.
-_WIDGET_BACKENDS = ("widget", "ipympl", "module://ipympl.backend_nbagg")
 
 
 @dataclass(frozen=True)
@@ -99,50 +97,13 @@ class Drawing:
         figure = self._figure()
         if figure is None or figure.canvas.manager is not None:
             return None
-        return _png(figure)
+        return png(figure)
 
     def _repr_mimebundle_(self, **kwargs: Any) -> dict[str, Any] | None:
         figure = self._figure()
-        if not isinstance(figure, _ShownFigure):
+        if not isinstance(figure, ShownFigure):
             return None
         return figure._repr_mimebundle_(**kwargs)
-
-
-class _ShownFigure(Figure):
-    """A figure that shows itself as the last expression of a cell.
-
-    Jupyter's inline backend shows a figure made without pyplot only
-    after ``%matplotlib inline`` or a first pyplot plot; under
-    ``%matplotlib widget`` (ipympl) it is shown on a canvas that zooms
-    and pans, pyplot still not involved.
-    """
-
-    def _repr_png_(self) -> bytes:
-        return _png(self)
-
-    def _repr_mimebundle_(self, **kwargs: Any) -> dict[str, Any] | None:
-        # The widget backend registers display printers for Figure that
-        # only redraw pyplot figures; IPython asks for this bundle
-        # before those printers' PNG. Called by IPython only, after
-        # ipykernel has set the backend, so get_backend imports no
-        # pyplot.
-        if mpl.get_backend() not in _WIDGET_BACKENDS:
-            return None  # IPython: the PNG
-        from ipympl.backend_nbagg import Canvas, FigureManager
-
-        canvas: Any = self.canvas
-        if not isinstance(canvas, Canvas):
-            canvas = Canvas(self)  # becomes self.canvas
-            FigureManager(canvas, 0)  # the toolbar
-            canvas.header_visible = False  # "Figure 0" says nothing
-        bundle: dict[str, Any] = canvas._repr_mimebundle_(**kwargs)
-        return bundle
-
-
-def _png(figure: Figure) -> bytes:
-    buffer = io.BytesIO()
-    figure.savefig(buffer, format="png")
-    return buffer.getvalue()
 
 
 def figure(
@@ -885,7 +846,7 @@ def _panels(
     strip = round(_STRIP * width) if legend else 0
     total = count * width + strip
     face = "none" if background is None else background
-    fig = _ShownFigure(
+    fig = ShownFigure(
         figsize=(total / _DPI, height / _DPI), dpi=_DPI, facecolor=face
     )
     axes: list[Axes] = []
