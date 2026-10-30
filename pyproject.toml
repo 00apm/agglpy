@@ -143,10 +143,11 @@ ignore_errors = true
 module = ["scipy.*"]
 ignore_missing_imports = true
 
-# ipympl (the user's optional install for %matplotlib widget) ships no
-# type information and is not in the typing extra.
+# The notebook display's widget packages (ipympl: the user's optional
+# install for %matplotlib widget) are not in the typing extra; ipympl
+# and ipywidgets ship no type information.
 [[tool.mypy.overrides]]
-module = ["ipympl.*"]
+module = ["anywidget.*", "ipympl.*", "ipywidgets.*", "traitlets.*"]
 ignore_missing_imports = true
 
 [tool.importlinter]
