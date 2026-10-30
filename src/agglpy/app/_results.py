@@ -33,6 +33,7 @@ from agglpy.core import distributions
 from agglpy.core import metrics as _metrics
 from agglpy.core.agglomerates import select_agglomerates
 from agglpy.core.properties import DIMENSIONS
+from agglpy.core.region import Bounds, region_bounds
 from agglpy.errors import (
     ImageError,
     OutputExistsError,
@@ -41,6 +42,7 @@ from agglpy.errors import (
 )
 from agglpy.export import _check_replaceable, write_results
 from agglpy.io import read_image, read_image_metadata
+from agglpy.params import RegionParams
 
 __all__ = ["Drawings", "Origin", "Results"]
 
@@ -439,6 +441,7 @@ class Results:
         alpha: float = 0.5,
         linewidth: float = 1.0,
         legend: bool | str = True,
+        full_image: bool = False,
     ) -> "Drawings":
         """Draw the particles or agglomerates of each image, in px.
 
@@ -475,6 +478,9 @@ class Results:
             legend: A colorbar or legend in a strip right of the image;
                 a string titles it; False draws the figure without the
                 strip, the image's size exactly.
+            full_image: Draw the whole image; False draws the analysed
+                region (the region of the params ``analyze()`` used),
+                circles cut at its edge.
 
         Returns:
             The ``Drawings``: image name → figure.
@@ -483,7 +489,8 @@ class Results:
             ParamsError: If no image or a name not in these results is
                 given, ``what`` is
                 another name, ``color_by`` is a column of ``images``
-                only, ``image`` is not True / False, ``alpha`` /
+                only, ``image`` or ``full_image`` is not True / False,
+                ``alpha`` /
                 ``image_alpha`` is not within 0-1, ``linewidth`` is
                 negative, or an option does not fit the column.
             TableError: If ``color_by`` is not a column of the table or
@@ -528,6 +535,10 @@ class Results:
                 "image must be True or False: res.draw reads the image "
                 "file itself"
             )
+        if not isinstance(full_image, bool):
+            raise ParamsError(
+                f"full_image must be True or False, got {full_image!r}"
+            )
         # the edge's own check, here so no figure is made first
         _draw._Style(alpha, linewidth, image_alpha)
         drawn = table.image.isin(names)
@@ -545,6 +556,7 @@ class Results:
                 for name in names
             },
             image=image,
+            full_image=full_image,
             background=background,
             collection=self._origin.collection,
             options={
@@ -579,13 +591,17 @@ class Results:
             agglomerates = self.agglomerates.loc[mine, ["agglomerate_id"]]
             agglomerates[_VALUES] = self.agglomerates[color_by][mine]
         select = chosen[mine]
+        width, height = int(row.width), int(row.height)
+        region = self._origin.images[name]["region"]
+        assert isinstance(region, Mapping)
         return _Sheet(
             particles,
             agglomerates,
             select.copy(),
-            int(row.width),
-            int(row.height),
+            width,
+            height,
             self._origin.files[name],
+            region_bounds(RegionParams(**region), width, height),
         )
 
     def _image_mask(
@@ -653,6 +669,7 @@ class _Sheet:
     width: int
     height: int
     path: Path
+    bounds: Bounds
 
 
 class Drawings(Mapping[str, Figure]):
@@ -669,6 +686,7 @@ class Drawings(Mapping[str, Figure]):
         sheets: Mapping[str, _Sheet],
         *,
         image: bool,
+        full_image: bool,
         background: ColorType | None,
         collection: Path,
         options: Mapping[str, Any],
@@ -676,6 +694,7 @@ class Drawings(Mapping[str, Figure]):
         """Made by ``Results.draw``; not called directly."""
         self._sheets = dict(sheets)
         self._image = image
+        self._full_image = full_image
         self._background = background
         # where exports go by default, and where they must not go
         self._collection = collection
@@ -693,10 +712,18 @@ class Drawings(Mapping[str, Figure]):
         """
         sheet = self._sheets[name]
         image = _image(sheet) if self._image else None
+        if self._full_image:
+            shape, origin = (sheet.height, sheet.width), (0.0, 0.0)
+        else:
+            # the image is drawn whole underneath: the limits cut it
+            b = sheet.bounds
+            shape = (round(b.y_max - b.y_min), round(b.x_max - b.x_min))
+            origin = (b.x_min + 0.5, b.y_min + 0.5)
         fig, ax = _draw.figure(
-            (sheet.height, sheet.width),
+            shape,
             legend=self._options["legend"] is not False,
             background=self._background,
+            origin=origin,
         )
         if sheet.agglomerates is None:
             _draw.particles(
@@ -742,8 +769,9 @@ class Drawings(Mapping[str, Figure]):
         """Write one ``<image>.png`` per image into ``folder``.
 
         Each PNG has 72 dpi and the figure's size: with
-        ``legend=False`` it lies pixel for pixel over the image. No
-        record is written: export next to ``res.export`` of the same
+        ``legend=False`` it lies pixel for pixel over the analysed
+        region (over the image with ``full_image=True``). No record is
+        written: export next to ``res.export`` of the same
         results, whose record covers the drawings.
 
         Args:

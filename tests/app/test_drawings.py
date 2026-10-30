@@ -264,3 +264,34 @@ def test_repr_html_shows_four_then_more(five: Results, res: Results) -> None:
     assert 'd["D7-022"]' in html
     html = res.draw(color_by="D")._repr_html_()
     assert html.count("<img ") == 3 and "more" not in html
+
+
+@pytest.fixture
+def cut_res(analysis_col: Collection) -> Results:
+    """Analysed with the bottom 10 % cut: 200 x 144 px regions."""
+    analysis_col.set_params(None, region={"bottom_fraction": 0.1})
+    with warnings.catch_warnings():
+        # outdated detections, circles outside the region
+        warnings.simplefilter("ignore")
+        return analysis_col.analyze(progress=False)
+
+
+def test_drawings_show_the_analysed_region(
+    cut_res: Results, tmp_path: Path
+) -> None:
+    d = cut_res.draw(color_by="D", legend=False)
+    assert render(d["D7-017"]).shape[:2] == (144, 200)
+    full = cut_res.draw(color_by="D", legend=False, full_image=True)
+    assert render(full["D7-017"]).shape[:2] == (160, 200)
+    path, *_ = d.export(tmp_path / "out")
+    assert Image.open(path).size == (200, 144)
+
+
+def test_a_whole_image_region_draws_the_whole_image(res: Results) -> None:
+    d = res.draw(color_by="D", legend=False)
+    assert render(d["D7-017"]).shape[:2] == (160, 200)
+
+
+def test_full_image_must_be_true_or_false(res: Results) -> None:
+    with pytest.raises(ParamsError, match="full_image must be True or False"):
+        res.draw(color_by="D", full_image="no")
