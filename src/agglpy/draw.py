@@ -12,7 +12,8 @@ array (also a region at its place), ``legend`` labels given colours.
 
 Figures are made without pyplot: nothing is kept in a global registry,
 so a loop over many images holds no figures in memory. In Jupyter, a
-``Drawing`` as the last expression of a cell shows its figure.
+figure from ``figure`` / ``figure_pair`` or a ``Drawing`` as the last
+expression of a cell shows itself, with no ``%matplotlib inline``.
 """
 
 import copy
@@ -96,9 +97,24 @@ class Drawing:
         figure = self._figure()
         if figure is None or figure.canvas.manager is not None:
             return None
-        buffer = io.BytesIO()
-        figure.savefig(buffer, format="png")
-        return buffer.getvalue()
+        return _png(figure)
+
+
+class _ShownFigure(Figure):
+    """A figure that shows itself as the last expression of a cell.
+
+    Jupyter's inline backend shows a figure made without pyplot only
+    after ``%matplotlib inline`` or a first pyplot plot.
+    """
+
+    def _repr_png_(self) -> bytes:
+        return _png(self)
+
+
+def _png(figure: Figure) -> bytes:
+    buffer = io.BytesIO()
+    figure.savefig(buffer, format="png")
+    return buffer.getvalue()
 
 
 def figure(
@@ -841,7 +857,7 @@ def _panels(
     strip = round(_STRIP * width) if legend else 0
     total = count * width + strip
     face = "none" if background is None else background
-    fig = Figure(
+    fig = _ShownFigure(
         figsize=(total / _DPI, height / _DPI), dpi=_DPI, facecolor=face
     )
     axes: list[Axes] = []

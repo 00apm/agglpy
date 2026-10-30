@@ -58,6 +58,20 @@ def test_no_pyplot_figure_is_made():
     assert plt.get_fignums() == []
 
 
+def test_figures_show_in_jupyter():
+    # Jupyter's inline backend shows a figure made without pyplot only
+    # once something has switched the backend on; a figure that shows
+    # itself needs nothing
+    for fig in (draw.figure((20, 30))[0], draw.figure_pair((20, 30))[0]):
+        assert fig._repr_png_()[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_figures_show_through_ipython():
+    formatters = pytest.importorskip("IPython.core.formatters")
+    fig, _ = draw.figure((20, 30))
+    assert formatters.PNGFormatter()(fig)[:8] == b"\x89PNG\r\n\x1a\n"
+
+
 @pytest.mark.parametrize(
     "shape", [(0, 10), (10,), (10.5, 20), (True, 20), "ab", None]
 )
