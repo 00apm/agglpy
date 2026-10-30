@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="294 306.5 338 338" role="img" aria-labelledby="title">
+  <title id="title">agglpy</title>
+  <g id="symbol">
+    <g id="necks" fill="#ECEAE6">
+      <path id="neck-AD" d="M368.62 452.75A13.04 13.04 0 0 1 370.62 476.36L410 546L433.96 469.67A13.04 13.04 0 0 1 430.99 446.16L393 385Z"/>
+      <path id="neck-AC" d="M443.92 435.9A18.49 18.49 0 0 1 475.38 446.98L540 440L495.83 392.31A18.49 18.49 0 0 1 464.83 380.03L393 385Z"/>
+    </g>
+    <g id="particles" fill="#ECEAE6">
+      <circle id="particle-A" cx="393" cy="385" r="72"/>
+      <circle id="particle-C" cx="540" cy="440" r="65"/>
+      <circle id="particle-D" cx="410" cy="546" r="80"/>
+      <circle id="particle-G" cx="556" cy="592" r="46" fill="#EC9550"/>
+    </g>
+  </g>
+</svg>

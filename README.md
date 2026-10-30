@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/logo/agglpy-logo-dark.svg">
+    <img alt="agglpy" src="docs/logo/agglpy-logo-light.svg" width="420">
+  </picture>
+</p>
+
 # agglpy: particle and agglomerate detection
 
 > **Status: under development.** `v0.4.0` is the last release of the original API (`Manager` + `settings.yml`).

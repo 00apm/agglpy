@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="212.92 271.92 407.16 407.16" role="img" aria-labelledby="title">
+  <title id="title">agglpy</title>
+  <g id="symbol">
+    <g id="necks" fill="#30343B">
+      <path id="neck-AD" d="M373.54 454.32A10.52 10.52 0 0 1 375.26 473.93L410 546L428.92 468.27A10.52 10.52 0 0 1 426.51 448.73L393 385Z"/>
+      <path id="neck-AC" d="M449.55 429.56A14.26 14.26 0 0 1 475.01 438.68L540 440L490.11 398.34A14.26 14.26 0 0 1 464.91 388.5L393 385Z"/>
+      <path id="neck-DE" d="M330.34 538.64A8.94 8.94 0 0 1 314.02 542.8L275 569L320.49 580.8A8.94 8.94 0 0 1 337.27 579.32L410 546Z"/>
+    </g>
+    <g id="particles" fill="#30343B">
+      <circle id="particle-A" cx="393" cy="385" r="72"/>
+      <circle id="particle-B" cx="516" cy="350" r="32"/>
+      <circle id="particle-C" cx="540" cy="440" r="65"/>
+      <circle id="particle-D" cx="410" cy="546" r="80"/>
+      <circle id="particle-E" cx="275" cy="569" r="47"/>
+      <circle id="particle-F" cx="282" cy="466" r="28"/>
+      <circle id="particle-G" cx="556" cy="592" r="46" fill="#D98236"/>
+    </g>
+  </g>
+</svg>
