@@ -93,9 +93,13 @@ class Drawing:
 
     def _repr_png_(self) -> bytes | None:
         # pyplot figures have a manager and pyplot shows them itself;
-        # showing them here too would give the image twice.
+        # showing them here too would give the image twice. A widget
+        # canvas gives a figure from ``figure`` a manager too.
         figure = self._figure()
-        if figure is None or figure.canvas.manager is not None:
+        if figure is None or (
+            figure.canvas.manager is not None
+            and not isinstance(figure, ShownFigure)
+        ):
             return None
         return png(figure)
 

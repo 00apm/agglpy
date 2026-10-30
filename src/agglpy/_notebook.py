@@ -14,10 +14,15 @@ to it, never above its full size; zooming in then shows the detail.
 
 import functools
 import io
+import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any, Literal
+from weakref import WeakKeyDictionary
 
 import matplotlib as mpl
-from matplotlib.axis import Axis
+from matplotlib.axes import Axes
+from matplotlib.axis import Axis, Tick
 from matplotlib.figure import Figure
 from matplotlib.text import Text
 
@@ -69,42 +74,58 @@ class ShownFigure(Figure):
     def _repr_mimebundle_(self, **kwargs: Any) -> dict[str, Any] | None:
         # The widget backend registers display printers for Figure that
         # only redraw pyplot figures; IPython asks for this bundle
-        # before those printers' PNG. Called by IPython only, after
-        # ipykernel has set the backend, so get_backend imports no
-        # pyplot.
-        if mpl.get_backend() not in _WIDGET_BACKENDS:
+        # before those printers' PNG. Without ipympl imported its
+        # backend is not on, and get_backend would choose one (a GUI
+        # backend in terminal IPython).
+        if (
+            "ipympl.backend_nbagg" not in sys.modules
+            or mpl.get_backend() not in _WIDGET_BACKENDS
+        ):
             return None  # IPython: the PNG
+        # IPython adds the backend's PNG to the bundle, for viewers
+        # without widgets
         bundle: dict[str, Any] = widget(self)._repr_mimebundle_(**kwargs)
         return bundle
+
+    def savefig(self, *args: Any, **kwargs: Any) -> None:
+        """As ``Figure.savefig``, at full size after a fit to a cell."""
+        fit = getattr(self.canvas, "_agglpy_fit", None)
+        if fit is None:
+            super().savefig(*args, **kwargs)
+            return
+        with fit.full_size():
+            super().savefig(*args, **kwargs)
 
 
 def widget(figure: Figure) -> Any:
     """The figure on an ipympl canvas that fits the cell's width.
 
     A box with the width probe and the canvas; the canvas alone, at
-    ``FALLBACK_WIDTH``, without anywidget. The figure gets the canvas
-    once and keeps it, so every display shows the same zoom.
+    ``FALLBACK_WIDTH``, without anywidget. Made once per figure and
+    kept, so every display shows the same zoom.
     """
     from ipympl.backend_nbagg import Canvas, FigureManager
 
     canvas: Any = figure.canvas
-    if not isinstance(canvas, Canvas):
-        canvas = Canvas(figure)  # becomes figure.canvas
-        FigureManager(canvas, 0)  # the toolbar
-        canvas.header_visible = False  # "Figure 0" says nothing
-        canvas.toolbar_position = "top"  # the cell's width is the figure's
-        canvas.resizable = False  # a drag would not scale the fonts
-        canvas._agglpy_fit = _Fit(figure)
-        canvas._agglpy_fit(FALLBACK_WIDTH)
+    if isinstance(canvas, Canvas):
+        return canvas._agglpy_widget
+    canvas = Canvas(figure)  # becomes figure.canvas
+    FigureManager(canvas, 0)  # the toolbar
+    canvas.header_visible = False  # "Figure 0" says nothing
+    canvas.toolbar_position = "top"  # the cell's width is the figure's
+    canvas.resizable = False  # a drag would not scale the fonts
+    fit = canvas._agglpy_fit = _Fit(figure)
+    fit(FALLBACK_WIDTH)
+    canvas._agglpy_widget = canvas
     try:
         probe = _probe_class()()
     except ImportError:
         return canvas
     from ipywidgets import VBox
 
-    fit = canvas._agglpy_fit
     probe.observe(lambda change: fit(change["new"]), names="width")
-    return VBox([probe, canvas])
+    canvas._agglpy_widget = VBox([probe, canvas])
+    return canvas._agglpy_widget
 
 
 _Which = Literal["major", "minor"]
@@ -116,39 +137,76 @@ class _Fit:
 
     Never above the full size the figure was made at. Fonts are sized
     in points, which a smaller figure does not shrink: each text and
-    tick label is scaled from its full size. Lines keep their width,
-    so zoomed in they stay sharp.
+    tick label is scaled from its full size, a text added later taken
+    at full size when first seen. Lines keep their width, so zoomed in
+    they stay sharp.
     """
 
     def __init__(self, figure: Figure) -> None:
         self._figure = figure
-        self._size = figure.get_size_inches().copy()
+        width, height = figure.get_size_inches()
+        self._size = (float(width), float(height))
         # CSS px per inch: the dpi before any HiDPI scaling by the
         # browser's device pixel ratio
         self._dpi = figure.dpi
-        self._texts = [
-            (t, float(t.get_fontsize())) for t in figure.findobj(Text)
-        ]
-        self._ticks: list[tuple[Axis, _Which, float]] = []
-        for ax in figure.axes:
-            for axis in (ax.xaxis, ax.yaxis):
-                for which in _WHICH:
-                    ticks = axis.get_ticklabels(which=which)
-                    if ticks:
-                        size = float(ticks[0].get_fontsize())
-                        self._ticks.append((axis, which, size))
+        self._scale = 1.0
+        # full sizes, by text and by (axis, which); weak: a removed
+        # artist is not kept alive
+        self._texts: WeakKeyDictionary[Text, float] = WeakKeyDictionary()
+        self._ticks: WeakKeyDictionary[Axis, dict[_Which, float]] = (
+            WeakKeyDictionary()
+        )
 
     def __call__(self, width: int) -> None:
         if width <= 0:
             return
-        scale = min(1.0, width / (self._size[0] * self._dpi))
-        for text, size in self._texts:
-            text.set_fontsize(size * scale)
-        for axis, which, size in self._ticks:
-            axis.set_tick_params(which=which, labelsize=size * scale)
+        self._apply(min(1.0, width / (self._size[0] * self._dpi)))
         # forward: the canvas in the browser takes the new size
-        self._figure.set_size_inches(self._size * scale, forward=True)
+        self._figure.set_size_inches(self._scaled(self._scale), forward=True)
         self._figure.canvas.draw_idle()
+
+    @contextmanager
+    def full_size(self) -> Iterator[None]:
+        """The figure at full size inside the block, then fitted again."""
+        scale = self._scale
+        self._apply(1.0)
+        self._figure.set_size_inches(self._size, forward=False)
+        try:
+            yield
+        finally:
+            self._apply(scale)
+            self._figure.set_size_inches(self._scaled(scale), forward=False)
+
+    def _scaled(self, scale: float) -> tuple[float, float]:
+        return self._size[0] * scale, self._size[1] * scale
+
+    def _apply(self, scale: float) -> None:
+        """Scale every text and tick label from its full size."""
+        # tick labels go by the axis' tick params: matplotlib makes new
+        # ones (e.g. on zoom) at the size set there
+        labels = {
+            label
+            for tick in self._figure.findobj(Tick)
+            for label in (tick.label1, tick.label2)
+        }
+        for text in self._figure.findobj(Text):
+            if text in labels:
+                continue
+            full = self._texts.setdefault(text, float(text.get_fontsize()))
+            text.set_fontsize(full * scale)
+        # inset axes too (the colorbar's), which figure.axes leaves out
+        for ax in self._figure.findobj(Axes):
+            for axis in (ax.xaxis, ax.yaxis):
+                sizes = self._ticks.setdefault(axis, {})
+                for which in _WHICH:
+                    ticks = axis.get_ticklabels(which=which)
+                    if which not in sizes and ticks:
+                        sizes[which] = float(ticks[0].get_fontsize())
+                    if which in sizes:
+                        axis.set_tick_params(
+                            which=which, labelsize=sizes[which] * scale
+                        )
+        self._scale = scale
 
 
 @functools.cache
