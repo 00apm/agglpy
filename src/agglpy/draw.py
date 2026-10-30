@@ -12,11 +12,11 @@ array (also a region at its place), ``legend`` labels given colours.
 
 Figures are made without pyplot: nothing is kept in a global registry,
 so a loop over many images holds no figures in memory. In Jupyter, a
-``Drawing`` as the last expression of a cell shows its figure.
+figure from ``figure`` / ``figure_pair`` or a ``Drawing`` as the last
+expression of a cell shows itself, with no ``%matplotlib inline``.
 """
 
 import copy
-import io
 import numbers
 from collections.abc import Hashable, Mapping, Sequence
 from dataclasses import dataclass
@@ -43,6 +43,7 @@ from matplotlib.path import Path
 from matplotlib.typing import ColorType
 from numpy.typing import NDArray
 
+from agglpy._notebook import ShownFigure, png
 from agglpy.core.properties import _outline_arcs
 from agglpy.errors import ParamsError, TableError
 
@@ -92,13 +93,21 @@ class Drawing:
 
     def _repr_png_(self) -> bytes | None:
         # pyplot figures have a manager and pyplot shows them itself;
-        # showing them here too would give the image twice.
+        # showing them here too would give the image twice. A widget
+        # canvas gives a figure from ``figure`` a manager too.
         figure = self._figure()
-        if figure is None or figure.canvas.manager is not None:
+        if figure is None or (
+            figure.canvas.manager is not None
+            and not isinstance(figure, ShownFigure)
+        ):
             return None
-        buffer = io.BytesIO()
-        figure.savefig(buffer, format="png")
-        return buffer.getvalue()
+        return png(figure)
+
+    def _repr_mimebundle_(self, **kwargs: Any) -> dict[str, Any] | None:
+        figure = self._figure()
+        if not isinstance(figure, ShownFigure):
+            return None
+        return figure._repr_mimebundle_(**kwargs)
 
 
 def figure(
@@ -841,7 +850,7 @@ def _panels(
     strip = round(_STRIP * width) if legend else 0
     total = count * width + strip
     face = "none" if background is None else background
-    fig = Figure(
+    fig = ShownFigure(
         figsize=(total / _DPI, height / _DPI), dpi=_DPI, facecolor=face
     )
     axes: list[Axes] = []

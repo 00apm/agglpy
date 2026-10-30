@@ -48,6 +48,10 @@ notebook = [
     # + anywidget installed in whatever env actually hosts the JupyterLab
     # server, if that's not this env - see conda_env_dev.yaml.
     "anywidget >= 0.9, < 1",
+    # %matplotlib widget: agglpy's figures on a canvas that zooms. The
+    # JupyterLab server's env needs the same ipympl version (its
+    # frontend), else the canvas shows an error instead of the figure.
+    "ipympl >= 0.9.8, < 0.10",
 ]
 test = ["pytest >= 8.3.3, < 9", "pytest-regressions >= 2.5, < 3"]
 typing = [
@@ -143,6 +147,13 @@ ignore_errors = true
 module = ["scipy.*"]
 ignore_missing_imports = true
 
+# The notebook display's widget packages (ipympl: the user's optional
+# install for %matplotlib widget) are not in the typing extra; ipympl
+# and ipywidgets ship no type information.
+[[tool.mypy.overrides]]
+module = ["anywidget.*", "ipympl.*", "ipywidgets.*", "traitlets.*"]
+ignore_missing_imports = true
+
 [tool.importlinter]
 root_package = "agglpy"
 include_external_packages = true
@@ -154,6 +165,7 @@ include_external_packages = true
 name = "New code never imports the legacy modules (D-019)"
 type = "forbidden"
 source_modules = [
+    "agglpy._notebook",
     "agglpy._yaml",
     "agglpy.app",
     "agglpy.core",
@@ -198,7 +210,12 @@ source_modules = [
     "agglpy.pipeline",
     "agglpy.tables",
 ]
-forbidden_modules = ["agglpy.draw", "agglpy.export", "agglpy.io"]
+forbidden_modules = [
+    "agglpy._notebook",
+    "agglpy.draw",
+    "agglpy.export",
+    "agglpy.io",
+]
 
 # io and export know file formats, not the analysis: they need only the
 # foundation (draw needs the core's outline arcs).
@@ -227,6 +244,7 @@ forbidden_modules = ["agglpy.pipeline"]
 name = "Nothing below the application imports it"
 type = "forbidden"
 source_modules = [
+    "agglpy._notebook",
     "agglpy._yaml",
     "agglpy.core",
     "agglpy.draw",
@@ -247,6 +265,7 @@ name = "Only agglpy._yaml imports ruamel"
 type = "forbidden"
 allow_indirect_imports = true
 source_modules = [
+    "agglpy._notebook",
     "agglpy.app",
     "agglpy.core",
     "agglpy.draw",
