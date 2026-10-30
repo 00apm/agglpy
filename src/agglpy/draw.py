@@ -56,6 +56,8 @@ _DPI = 72
 _STRIP = 0.12
 # Legend text height as a fraction of the strip width.
 _TEXT = 0.1
+# Most rebuilds of a legend shrinking into the strip.
+_FIT_ROUNDS = 4
 # Label of the strip's axes, by which the draw functions find it.
 _STRIP_LABEL = "agglpy legend"
 # Default colours of label columns (10 colours).
@@ -810,14 +812,18 @@ def _place_legend(
     size = _font_size(fig, strip)
     key = _strip_legend(strip, handles, title, size)
     # The text size of the strip cuts long labels (counts) and tall
-    # legends on a short strip: rebuilt once, scaled to fit. Every
-    # length of a legend is in font sizes, so it scales linearly.
+    # legends on a short strip: rebuilt with the text scaled to fit.
+    # Small text shrinks less than its size (font hinting), hence a
+    # few measured rounds, not one.
     room = strip.get_window_extent()
-    box = key.get_window_extent()
-    scale = min(room.width / (box.x1 - room.x0), room.height / box.height)
-    if scale < 1:
+    for _ in range(_FIT_ROUNDS):
+        box = key.get_window_extent()
+        scale = min(room.width / (box.x1 - room.x0), room.height / box.height)
+        if scale >= 1:
+            break
+        size *= scale * 0.95
         key.remove()
-        key = _strip_legend(strip, handles, title, size * scale * 0.95)
+        key = _strip_legend(strip, handles, title, size)
     return key
 
 

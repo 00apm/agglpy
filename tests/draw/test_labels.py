@@ -171,6 +171,19 @@ def test_a_legend_fits_a_short_strip():
     assert _inside(fig, key)
 
 
+@pytest.mark.parametrize(
+    ("shape", "count"), [((20, 300), 3), ((30, 3072), 3), ((60, 3072), 10)]
+)
+def test_a_titled_legend_fits_a_short_strip(shape, count):
+    # below a few pt a legend shrinks less than its text: one rebuild
+    # at the scaled size was not enough
+    fig, ax = draw.figure(shape)
+    colours = {f"label {i}": "red" for i in range(count)}
+    key = draw.legend(ax, colours, title="title here")
+    render(fig)
+    assert _inside(fig, key)
+
+
 def test_a_legend_fits_the_strip_of_a_pair():
     fig, _, right = draw.figure_pair((300, 300))
     key = draw.legend(right, {"gone (1213)": "red"})
