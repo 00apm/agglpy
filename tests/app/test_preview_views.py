@@ -341,7 +341,11 @@ def test_side_by_side(pair: tuple[Preview, Preview]) -> None:
 def test_compare_mismatches(tuning_col: Collection) -> None:
     p = tuning_col["T1"].preview(progress=False)
     other = tuning_col["T2"].preview(progress=False)
-    for view in (p.circles, lambda **kw: p.edges(1, **kw)):
+    for view in (
+        p.circles,
+        lambda **kw: p.edges(1, **kw),
+        lambda **kw: p.stage("clahe", **kw),
+    ):
         with pytest.raises(ParamsError, match="preview of T1, got one of T2"):
             view(compare=other)
         with pytest.raises(ParamsError, match="must be another Preview"):
@@ -376,6 +380,9 @@ def test_full_image_shows_the_whole_image_with_the_region_outlined(
     assert shown.shape[:2] == (160, 224)
     assert _yellow(shown[142:146, 100])
     assert render(p.stage("clahe", full_image=True)).shape[:2] == (160, 200)
+    pair = render(p.stage("clahe", side_by_side=True, full_image=True))
+    assert pair.shape[:2] == (160, 400)
+    assert _yellow(pair[142:146, 100]) and _yellow(pair[142:146, 300])
     assert render(p.edges(1, full_image=True)).shape[:2] == (160, 200)
     # the raw cut, no outline
     cut = render(p.image(full_image=False))
@@ -403,6 +410,11 @@ def test_comparing_different_regions_shows_both(p: Preview) -> None:
     pair = render(q.edges(1, compare=p, side_by_side=True))
     assert pair.shape[:2] == (144, 424)
     assert _yellow(pair[126:129, 100]) and _yellow(pair[126:129, 300])
+    for fig in (q.stage("clahe", compare=p), p.stage("clahe", compare=q)):
+        shown = render(fig)
+        assert shown.shape[:2] == (144, 400)
+        assert _yellow(shown[126:129, 100]) and _yellow(shown[126:129, 300])
+        assert not _yellow(shown[142:144, :])
 
 
 def test_comparing_equal_regions_draws_no_outline(
