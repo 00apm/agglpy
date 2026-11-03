@@ -549,9 +549,8 @@ class Preview:
         ``name`` is a step that ran: ``"median"``, ``"rolling ball"``,
         ``"clahe"``; or ``"preprocessed"``, the image HCT runs on (the
         last step's, the raw region when none ran). With ``compare``,
-        two panels zoomed together:
-        ``compare``'s step left, this one's right (two grey images do
-        not overlay, so always side by side).
+        two panels zoomed together: ``compare``'s step left, this one's
+        right (two grey images do not overlay, so always side by side).
 
         Args:
             name: The step.

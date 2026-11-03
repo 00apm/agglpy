@@ -241,8 +241,9 @@ class Collection:
         Their ``note`` stays. Cells already holding 1/0 get 1/0.
 
         Raises:
-            ParamsError: If a name is not in the sheet; nothing is
-                written.
+            SheetError: If the sheet has problems; nothing is written.
+            ParamsError: If a name is not in the sheet or
+                ``agglpy.yml`` has problems; nothing is written.
         """
         self._set_include(images, True, None)
 
@@ -255,8 +256,9 @@ class Collection:
         Cells already holding 1/0 get 1/0.
 
         Raises:
-            ParamsError: If a name is not in the sheet; nothing is
-                written.
+            SheetError: If the sheet has problems; nothing is written.
+            ParamsError: If a name is not in the sheet or
+                ``agglpy.yml`` has problems; nothing is written.
         """
         self._set_include(images, False, note)
 
