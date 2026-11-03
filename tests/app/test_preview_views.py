@@ -179,6 +179,46 @@ def _image_axes(fig: Figure) -> list[Axes]:
     return [ax for ax in fig.axes if ax.get_label() != "agglpy legend"]
 
 
+def test_stage_side_by_side_and_compare(p: Preview) -> None:
+    held = {s.name: s.image for s in p._state.prepared.stages}
+    raw = p._state.prepared.raw
+    # the raw region | the step, zoomed together
+    fig = p.stage("median", side_by_side=True)
+    left, right = _image_axes(fig)
+    assert left.get_shared_x_axes().joined(left, right)
+    assert left.get_shared_y_axes().joined(left, right)
+    assert (_panel_texts(left), _panel_texts(right)) == (["raw"], ["median"])
+    shown = render(fig)
+    assert shown.shape[:2] == (144, 400)  # no strip
+    np.testing.assert_array_equal(
+        shown[30:100, 30:170, 0], raw[30:100, 30:170]
+    )
+    np.testing.assert_array_equal(
+        shown[30:100, 230:370, 0], held["median"][30:100, 30:170]
+    )
+    # compare: its step | this step, side by side whatever side_by_side
+    q = p.change_preprocess(median_blur=5)
+    fig = q.stage("median", compare=p)
+    left, right = _image_axes(fig)
+    assert _panel_texts(left) == ["before"]
+    assert _panel_texts(right) == ["preprocess.median_blur 3 → 5"]
+    shown = render(fig)
+    np.testing.assert_array_equal(
+        shown[30:100, 30:170, 0], held["median"][30:100, 30:170]
+    )
+    mine = {s.name: s.image for s in q._state.prepared.stages}["median"]
+    np.testing.assert_array_equal(
+        shown[30:100, 230:370, 0], mine[30:100, 30:170]
+    )
+    with pytest.raises(
+        ParamsError, match="no stage 'median' in compare: it ran rolling"
+    ):
+        q.stage("median", compare=p.change_preprocess(median_blur=None))
+    with pytest.raises(ParamsError, match="compare must be another Preview"):
+        q.stage("median", compare="p")  # type: ignore[arg-type]
+    assert "on stage, edges and circles" in repr(p)
+
+
 def test_circles_compare_overlay(pair: tuple[Preview, Preview]) -> None:
     p, q = pair
     fig = p.circles(1, compare=q)

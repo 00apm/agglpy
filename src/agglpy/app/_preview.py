@@ -536,32 +536,56 @@ class Preview:
         draw.image(ax, self._state.prepared.raw)
         return fig
 
-    def stage(self, name: str, *, full_image: bool = False) -> Figure:
+    def stage(
+        self,
+        name: str,
+        *,
+        compare: "Preview | None" = None,
+        side_by_side: bool = False,
+        full_image: bool = False,
+    ) -> Figure:
         """The region after a preprocessing step.
 
         ``name`` is a step that ran: ``"median"``, ``"rolling ball"``,
-        ``"clahe"``.
+        ``"clahe"``. With ``compare``, two panels zoomed together:
+        ``compare``'s step left, this one's right (two grey images do
+        not overlay, so always side by side).
 
         Args:
             name: The step.
+            compare: Another preview of this image that ran the step.
+            side_by_side: Without ``compare``, two panels zoomed
+                together: the raw image left, the step right.
             full_image: The whole image's area: the region at its place
                 and outlined, the rest black.
 
         Raises:
-            ParamsError: If no step of that name ran or ``full_image``
-                is not True / False.
+            ParamsError: If no step of that name ran (in either
+                preview), ``compare`` is not a preview of this image or
+                ``full_image`` is not True / False.
         """
         _check_full_image(full_image)
-        stages = self._state.prepared.stages
-        for stage in stages:
-            if stage.name == name:
-                fig, ax = self._figure(
-                    legend=False, background="black", full_image=full_image
-                )
-                draw.image(ax, stage.image, origin=self._origin())
-                return fig
-        ran = ", ".join(s.name for s in stages) or "no preprocessing"
-        raise ParamsError(f"no stage {name!r}: {self.image_name} ran {ran}")
+        mine = self._stage_image(name)
+        if compare is not None:
+            other = self._compared(compare, None)
+            theirs = other._stage_image(name, "in compare")
+            fig, left, right = self._pair(False, "black", full_image, other)
+            draw.image(left, theirs, origin=other._origin())
+            draw.image(right, mine, origin=self._origin())
+            self._pair_labels(left, right, other)
+            return fig
+        if side_by_side:
+            fig, left, right = self._pair(False, "black", full_image)
+            self._underlay(left, "raw", 1.0)
+            draw.image(right, mine, origin=self._origin())
+            _label(left, "raw")
+            _label(right, name)
+            return fig
+        fig, ax = self._figure(
+            legend=False, background="black", full_image=full_image
+        )
+        draw.image(ax, mine, origin=self._origin())
+        return fig
 
     def edges(
         self,
@@ -882,6 +906,16 @@ class Preview:
             if bounds != area:
                 _outline(ax, bounds)
 
+    def _stage_image(self, name: str, where: str = "") -> NDArray[np.uint8]:
+        stages = self._state.prepared.stages
+        for stage in stages:
+            if stage.name == name:
+                return stage.image
+        ran = ", ".join(s.name for s in stages) or "no preprocessing"
+        if where:
+            raise ParamsError(f"no stage {name!r} {where}: it ran {ran}")
+        raise ParamsError(f"no stage {name!r}: {self.image_name} ran {ran}")
+
     def _origin(self) -> tuple[float, float]:
         """Where the region's top-left pixel centre lies in the image."""
         b = self._state.prepared.bounds
@@ -1063,7 +1097,7 @@ class Preview:
                 ),
                 (
                     "… compare=other, side_by_side=True",
-                    "on edges and circles: against another preview",
+                    "on stage, edges and circles: against another preview",
                 ),
             ]
         views += [
