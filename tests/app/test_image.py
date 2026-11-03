@@ -66,6 +66,35 @@ def test_record_without_csv_or_unreadable_is_none(
     assert particles_col["D7-018"].detection is None
 
 
+def test_detection_params_are_the_recorded_ones(
+    particles_col: Collection,
+) -> None:
+    img = particles_col["D7-017"]
+    assert img.detection_params is None
+    particles_col.detect(progress=False)
+    detected = img.params
+    assert img.detection_params == detected
+    # agglpy.yml changed after the detection: the record still holds
+    # what the stored circles came from
+    particles_col.set_params(
+        "D7-017", hct={"ranges": [{"d_min": 14, "d_max": 44}]}
+    )
+    assert img.params != detected
+    assert img.detection_params == detected
+    p = img.preview(params=img.detection_params, progress=False)
+    pd.testing.assert_frame_equal(p.particles, img.particles)
+
+
+def test_detection_params_none_for_unreadable_record(
+    particles_col: Collection,
+) -> None:
+    particles_col.detect(progress=False)
+    folder = work(particles_col, "D7-017")
+    (folder / "particles_hct_record.yml").write_text("format: 2\n")
+    with pytest.warns(UserWarning):
+        assert particles_col["D7-017"].detection_params is None
+
+
 def test_unknown_name_is_key_error(particles_col: Collection) -> None:
     with pytest.raises(KeyError):
         particles_col["X"]
