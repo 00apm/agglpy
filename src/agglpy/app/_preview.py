@@ -547,7 +547,9 @@ class Preview:
         """The region after a preprocessing step.
 
         ``name`` is a step that ran: ``"median"``, ``"rolling ball"``,
-        ``"clahe"``. With ``compare``, two panels zoomed together:
+        ``"clahe"``; or ``"preprocessed"``, the image HCT runs on (the
+        last step's, the raw region when none ran). With ``compare``,
+        two panels zoomed together:
         ``compare``'s step left, this one's right (two grey images do
         not overlay, so always side by side).
 
@@ -907,14 +909,19 @@ class Preview:
                 _outline(ax, bounds)
 
     def _stage_image(self, name: str, where: str = "") -> NDArray[np.uint8]:
-        stages = self._state.prepared.stages
-        for stage in stages:
+        prepared = self._state.prepared
+        if name == "preprocessed":
+            return prepared.final
+        for stage in prepared.stages:
             if stage.name == name:
                 return stage.image
-        ran = ", ".join(s.name for s in stages) or "no preprocessing"
+        ran = ", ".join(s.name for s in prepared.stages) or "no preprocessing"
         if where:
             raise ParamsError(f"no stage {name!r} {where}: it ran {ran}")
-        raise ParamsError(f"no stage {name!r}: {self.image_name} ran {ran}")
+        raise ParamsError(
+            f"no stage {name!r}: {self.image_name} ran {ran} "
+            '("preprocessed": the image HCT runs on)'
+        )
 
     def _origin(self) -> tuple[float, float]:
         """Where the region's top-left pixel centre lies in the image."""
@@ -1075,13 +1082,13 @@ class Preview:
         stages = self._state.prepared.stages
         count = len(_ranges_of(self.params))
         views = [("p.image()", "the raw image, the region outlined")]
-        if stages:
-            views.append(
-                (
-                    " · ".join(f'p.stage("{s.name}")' for s in stages),
-                    "the region after a preprocessing step",
-                )
+        names = [*(s.name for s in stages), "preprocessed"]
+        views.append(
+            (
+                " · ".join(f'p.stage("{name}")' for name in names),
+                "the region after a step / as HCT sees it",
             )
+        )
         if count:
             ks = range(1, count + 1)
             views += [

@@ -219,6 +219,31 @@ def test_stage_side_by_side_and_compare(p: Preview) -> None:
     assert "on stage, edges and circles" in repr(p)
 
 
+def test_stage_preprocessed_is_what_hct_sees(p: Preview) -> None:
+    held = {s.name: s.image for s in p._state.prepared.stages}
+    np.testing.assert_array_equal(
+        render(p.stage("preprocessed"))[:, :, 0], held["clahe"]
+    )
+    # no preprocessing: the raw region
+    off = p.change_preprocess(median_blur=None, rolling_ball=None, clahe=None)
+    np.testing.assert_array_equal(
+        render(off.stage("preprocessed"))[:, :, 0],
+        p._state.prepared.raw[:144],
+    )
+    fig = off.stage("preprocessed", compare=p)
+    shown = render(fig)  # inner windows: the panel labels sit top left
+    np.testing.assert_array_equal(
+        shown[30:140, 30:190, 0], held["clahe"][30:140, 30:190]
+    )
+    np.testing.assert_array_equal(
+        shown[30:140, 230:390, 0], p._state.prepared.raw[30:140, 30:190]
+    )
+    assert 'p.stage("clahe") · p.stage("preprocessed")' in repr(p)
+    assert 'p.stage("preprocessed")' in repr(off)
+    with pytest.raises(ParamsError, match='"preprocessed": the image HCT'):
+        p.stage("blur")
+
+
 def test_circles_compare_overlay(pair: tuple[Preview, Preview]) -> None:
     p, q = pair
     fig = p.circles(1, compare=q)
