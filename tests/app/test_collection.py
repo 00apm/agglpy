@@ -379,6 +379,45 @@ def test_write_sheet_dropping_image_with_params(col: Collection) -> None:
     assert col.read_sheet()["image"].tolist() == ["D7-017", "D7-021"]
 
 
+def test_exclude_and_include(col: Collection) -> None:
+    col.exclude(["D7-017", "D7-021"], note="blurry")
+    t = col.read_sheet().set_index("image")
+    assert t["include"].tolist() == [False, None, False]
+    assert t["note"].tolist() == ["blurry", None, "blurry"]
+    col.include("D7-021")
+    t = col.read_sheet().set_index("image")
+    assert t.at["D7-021", "include"] is True
+    assert t.at["D7-021", "note"] == "blurry"
+    col.exclude("D7-017")
+    assert col.read_sheet().at[0, "note"] == "blurry"
+
+
+def test_exclude_keeps_one_zero_cells(col: Collection) -> None:
+    t = col.read_sheet()
+    t["include"] = [1, 1, 0]
+    col.write_sheet(t)
+    col.exclude("D7-017")
+    col.include("D7-021")
+    assert col.read_sheet()["include"].tolist() == [0, 1, 1]
+
+
+def test_exclude_keeps_one_zero_cells_csv(tmp_path: Path, raw: Path) -> None:
+    col = Collection.create(tmp_path / "c", images=raw, sheet_format="csv")
+    t = col.read_sheet()
+    t["include"] = ["1", "1", "0"]
+    col.write_sheet(t)
+    col.exclude("D7-017")
+    col.include("D7-021")
+    assert col.read_sheet()["include"].tolist() == ["0", "1", "1"]
+
+
+def test_exclude_unknown_name_writes_nothing(col: Collection) -> None:
+    before = col.sheet_path.read_bytes()
+    with pytest.raises(ParamsError, match="no image 'D7-099', 'x' in"):
+        col.exclude(["D7-017", "D7-099", "x"])
+    assert col.sheet_path.read_bytes() == before
+
+
 def test_formula_sheet_fails_open(col: Collection) -> None:
     book = openpyxl.load_workbook(col.sheet_path)
     book.worksheets[0]["F1"] = "group"
