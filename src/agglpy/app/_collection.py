@@ -270,7 +270,10 @@ class Collection:
             listed = ", ".join(repr(n) for n in unknown)
             raise ParamsError(f"no image {listed} in {sheet.path.name}")
         table = self.read_sheet()
-        rows = table["image"].isin(names)
+        # Rows from the checked names: a cell may hold 17 for "17"
+        rows = pd.Series(
+            [e.image in names for e in sheet.entries], index=table.index
+        )
         cells = [
             _include_cell(old, value) if row else old
             for old, row in zip(table["include"], rows)

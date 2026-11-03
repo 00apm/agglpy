@@ -411,6 +411,16 @@ def test_exclude_keeps_one_zero_cells_csv(tmp_path: Path, raw: Path) -> None:
     assert col.read_sheet()["include"].tolist() == ["0", "1", "1"]
 
 
+def test_exclude_number_name(col: Collection) -> None:
+    t = col.read_sheet()
+    t.at[0, "image"] = 17
+    col.write_sheet(t)
+    col.exclude("17", note="blurry")
+    t = col.read_sheet().set_index("image")
+    assert t.at[17, "include"] is False
+    assert t.at[17, "note"] == "blurry"
+
+
 def test_exclude_unknown_name_writes_nothing(col: Collection) -> None:
     before = col.sheet_path.read_bytes()
     with pytest.raises(ParamsError, match="no image 'D7-099', 'x' in"):
