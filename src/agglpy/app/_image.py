@@ -141,6 +141,22 @@ class Image:
         return self._record(HCT_CSV, HCT_RECORD, DetectionRecord)
 
     @property
+    def detection_params(self) -> ImageParams | None:
+        """The params ``particles_hct.csv`` was detected with, or None.
+
+        From the detection's record, so they stay what the stored
+        circles came from when ``agglpy.yml`` changes later. Give them
+        to ``preview(params=...)`` to see that detection again; a CSV
+        edited by hand since (``status()``: ``edited by hand``) no
+        longer matches it. None when there is no detection or its
+        record does not read.
+        """
+        if not (self._folder / HCT_CSV).is_file():
+            return None
+        record = read_record(self._folder / HCT_RECORD, DetectionRecord)
+        return None if record is None else record.params
+
+    @property
     def correction(self) -> dict[str, Any] | None:
         """The record of ``particles_corrected.csv`` as plain data, or
         None."""

@@ -235,6 +235,56 @@ class Collection:
         config.check(new.names)
         write_sheet(sheet.path, header, rows)
 
+    def include(self, images: str | Sequence[str]) -> None:
+        """Set ``include`` true for ``images`` (a name or a list).
+
+        Their ``note`` stays. Cells already holding 1/0 get 1/0.
+
+        Raises:
+            SheetError: If the sheet has problems; nothing is written.
+            ParamsError: If a name is not in the sheet or
+                ``agglpy.yml`` has problems; nothing is written.
+        """
+        self._set_include(images, True, None)
+
+    def exclude(
+        self, images: str | Sequence[str], *, note: str | None = None
+    ) -> None:
+        """Set ``include`` false for ``images`` (a name or a list).
+
+        ``note`` (the reason) replaces their ``note``; None keeps it.
+        Cells already holding 1/0 get 1/0.
+
+        Raises:
+            SheetError: If the sheet has problems; nothing is written.
+            ParamsError: If a name is not in the sheet or
+                ``agglpy.yml`` has problems; nothing is written.
+        """
+        self._set_include(images, False, note)
+
+    def _set_include(
+        self, images: str | Sequence[str], value: bool, note: str | None
+    ) -> None:
+        sheet = validate(read_grid(self.sheet_path))
+        names = [images] if isinstance(images, str) else list(images)
+        unknown = [n for n in dict.fromkeys(names) if n not in sheet.names]
+        if unknown:
+            listed = ", ".join(repr(n) for n in unknown)
+            raise ParamsError(f"no image {listed} in {sheet.path.name}")
+        table = self.read_sheet()
+        # Rows from the checked names: a cell may hold 17 for "17"
+        rows = pd.Series(
+            [e.image in names for e in sheet.entries], index=table.index
+        )
+        cells = [
+            _include_cell(old, value) if row else old
+            for old, row in zip(table["include"], rows)
+        ]
+        table["include"] = pd.Series(cells, index=table.index, dtype=object)
+        if note is not None:
+            table["note"] = table["note"].mask(rows, note)
+        self.write_sheet(table)
+
     def add_images(
         self,
         images: PathLike | Sequence[PathLike],
@@ -604,6 +654,15 @@ def _numbered(rows: list[list[object]]) -> list[tuple[int, list[object]]]:
 
 def _same_file(path: Path) -> str:
     return os.path.normcase(str(path))
+
+
+def _include_cell(old: object, value: bool) -> object:
+    """``value`` for an ``include`` cell, as 1/0 when it holds 1/0."""
+    if isinstance(old, int | float) and not isinstance(old, bool):
+        return int(value)
+    if isinstance(old, str) and old.strip() in ("0", "1"):
+        return "1" if value else "0"
+    return value
 
 
 def _known(sheet: Sheet, image: str) -> None:

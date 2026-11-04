@@ -179,6 +179,71 @@ def _image_axes(fig: Figure) -> list[Axes]:
     return [ax for ax in fig.axes if ax.get_label() != "agglpy legend"]
 
 
+def test_stage_side_by_side_and_compare(p: Preview) -> None:
+    held = {s.name: s.image for s in p._state.prepared.stages}
+    raw = p._state.prepared.raw
+    # the raw region | the step, zoomed together
+    fig = p.stage("median", side_by_side=True)
+    left, right = _image_axes(fig)
+    assert left.get_shared_x_axes().joined(left, right)
+    assert left.get_shared_y_axes().joined(left, right)
+    assert (_panel_texts(left), _panel_texts(right)) == (["raw"], ["median"])
+    shown = render(fig)
+    assert shown.shape[:2] == (144, 400)  # no strip
+    np.testing.assert_array_equal(
+        shown[30:100, 30:170, 0], raw[30:100, 30:170]
+    )
+    np.testing.assert_array_equal(
+        shown[30:100, 230:370, 0], held["median"][30:100, 30:170]
+    )
+    # compare: its step | this step, side by side whatever side_by_side
+    q = p.change_preprocess(median_blur=5)
+    fig = q.stage("median", compare=p)
+    left, right = _image_axes(fig)
+    assert _panel_texts(left) == ["before"]
+    assert _panel_texts(right) == ["preprocess.median_blur 3 → 5"]
+    shown = render(fig)
+    np.testing.assert_array_equal(
+        shown[30:100, 30:170, 0], held["median"][30:100, 30:170]
+    )
+    mine = {s.name: s.image for s in q._state.prepared.stages}["median"]
+    np.testing.assert_array_equal(
+        shown[30:100, 230:370, 0], mine[30:100, 30:170]
+    )
+    with pytest.raises(
+        ParamsError, match="no stage 'median' in compare: it ran rolling"
+    ):
+        q.stage("median", compare=p.change_preprocess(median_blur=None))
+    with pytest.raises(ParamsError, match="compare must be another Preview"):
+        q.stage("median", compare="p")  # type: ignore[arg-type]
+    assert "on stage, edges and circles" in repr(p)
+
+
+def test_stage_preprocessed_is_what_hct_sees(p: Preview) -> None:
+    held = {s.name: s.image for s in p._state.prepared.stages}
+    np.testing.assert_array_equal(
+        render(p.stage("preprocessed"))[:, :, 0], held["clahe"]
+    )
+    # no preprocessing: the raw region
+    off = p.change_preprocess(median_blur=None, rolling_ball=None, clahe=None)
+    np.testing.assert_array_equal(
+        render(off.stage("preprocessed"))[:, :, 0],
+        p._state.prepared.raw[:144],
+    )
+    fig = off.stage("preprocessed", compare=p)
+    shown = render(fig)  # inner windows: the panel labels sit top left
+    np.testing.assert_array_equal(
+        shown[30:140, 30:190, 0], held["clahe"][30:140, 30:190]
+    )
+    np.testing.assert_array_equal(
+        shown[30:140, 230:390, 0], p._state.prepared.raw[30:140, 30:190]
+    )
+    assert 'p.stage("clahe") · p.stage("preprocessed")' in repr(p)
+    assert 'p.stage("preprocessed")' in repr(off)
+    with pytest.raises(ParamsError, match='"preprocessed": the image HCT'):
+        p.stage("blur")
+
+
 def test_circles_compare_overlay(pair: tuple[Preview, Preview]) -> None:
     p, q = pair
     fig = p.circles(1, compare=q)
@@ -276,7 +341,11 @@ def test_side_by_side(pair: tuple[Preview, Preview]) -> None:
 def test_compare_mismatches(tuning_col: Collection) -> None:
     p = tuning_col["T1"].preview(progress=False)
     other = tuning_col["T2"].preview(progress=False)
-    for view in (p.circles, lambda **kw: p.edges(1, **kw)):
+    for view in (
+        p.circles,
+        lambda **kw: p.edges(1, **kw),
+        lambda **kw: p.stage("clahe", **kw),
+    ):
         with pytest.raises(ParamsError, match="preview of T1, got one of T2"):
             view(compare=other)
         with pytest.raises(ParamsError, match="must be another Preview"):
@@ -311,6 +380,9 @@ def test_full_image_shows_the_whole_image_with_the_region_outlined(
     assert shown.shape[:2] == (160, 224)
     assert _yellow(shown[142:146, 100])
     assert render(p.stage("clahe", full_image=True)).shape[:2] == (160, 200)
+    pair = render(p.stage("clahe", side_by_side=True, full_image=True))
+    assert pair.shape[:2] == (160, 400)
+    assert _yellow(pair[142:146, 100]) and _yellow(pair[142:146, 300])
     assert render(p.edges(1, full_image=True)).shape[:2] == (160, 200)
     # the raw cut, no outline
     cut = render(p.image(full_image=False))
@@ -338,6 +410,11 @@ def test_comparing_different_regions_shows_both(p: Preview) -> None:
     pair = render(q.edges(1, compare=p, side_by_side=True))
     assert pair.shape[:2] == (144, 424)
     assert _yellow(pair[126:129, 100]) and _yellow(pair[126:129, 300])
+    for fig in (q.stage("clahe", compare=p), p.stage("clahe", compare=q)):
+        shown = render(fig)
+        assert shown.shape[:2] == (144, 400)
+        assert _yellow(shown[126:129, 100]) and _yellow(shown[126:129, 300])
+        assert not _yellow(shown[142:144, :])
 
 
 def test_comparing_equal_regions_draws_no_outline(
