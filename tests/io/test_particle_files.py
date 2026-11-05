@@ -246,19 +246,21 @@ def test_near_circles_are_read_as_circles_and_warned(tmp_path: Path) -> None:
             "1,0,a,Oval,none,0,0,60,60",
             "2,1,b,Oval,none,100,0,30,31",  # |W - H| = 1: a circle
             "3,2,c,Oval,none,200,0,31,30",
+            # float32 noise of ImageJ's subpixel bounds: a circle, unlisted
+            "4,3,d,Oval,none,300,0,182.4000,182.3999",
         ],
     )
     with pytest.warns(NonCircularParticlesWarning) as record:
         table = read_particles(path)
     assert len(record) == 1  # one warning per file
     message = str(record[0].message)
-    assert "p.csv: 3 ROIs" in message
+    assert "p.csv: 4 ROIs" in message
     assert "2 near-circular ovals read as circles" in message
     assert "ids 2, 3" in message
     assert "dropped" not in message
     # r = (W + H) / 4; centre from each side's own half
-    assert table["r"].tolist() == [30.0, 15.25, 15.25]
-    assert table["y"].tolist() == [29.5, 15.0, 14.5]
+    assert table["r"].tolist()[:3] == [30.0, 15.25, 15.25]
+    assert table["y"].tolist()[:3] == [29.5, 15.0, 14.5]
 
 
 def test_non_circular_rois_are_dropped_and_warned(tmp_path: Path) -> None:

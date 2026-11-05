@@ -311,6 +311,10 @@ _MAX_LISTED = 10
 # An ImageJ oval is read as a circle up to this |Width - Height| (px):
 # the grain of ImageJ's integer bounding boxes.
 _NEAR_CIRCLE_PX = 1.0
+# Up to this |Width - Height| (px) an oval is an exact circle, not
+# warned: ImageJ keeps subpixel bounds as float32, so a drawn circle
+# comes out with 1e-4 to 1e-3 px between Width and Height.
+_ROUNDING_PX = 0.01
 
 
 def read_particles(path: PathLike, *, format: str = "auto") -> pd.DataFrame:
@@ -325,7 +329,9 @@ def read_particles(path: PathLike, *, format: str = "auto") -> pd.DataFrame:
       (``x = X + Width/2 - 0.5``), ``r = (Width + Height)/4`` and
       ``id = Index + 1``, the number Fiji shows. Ovals with
       ``|Width - Height| <= 1`` px are read as circles; other shapes
-      are dropped. Either gives one ``NonCircularParticlesWarning``.
+      are dropped. Either gives one ``NonCircularParticlesWarning``,
+      except for differences up to 0.01 px (ImageJ's float32
+      rounding).
 
     Only the geometry is read: the result has exactly the columns
     ``id, x, y, r``, and any other column in the file is ignored. A
@@ -463,7 +469,7 @@ def _from_imagej(raw: pd.DataFrame, path: Path) -> pd.DataFrame:
     ids = numbers["Index"] + 1  # the number Fiji shows
     oval = raw["Type"] == "Oval"
     gap = (w - h).abs()
-    near = oval & (gap > 0) & (gap <= _NEAR_CIRCLE_PX)
+    near = oval & (gap > _ROUNDING_PX) & (gap <= _NEAR_CIRCLE_PX)
     keep = oval & (gap <= _NEAR_CIRCLE_PX)
     if near.any() or not keep.all():
         _warn_shapes(raw, ids, near, ~keep, path)
