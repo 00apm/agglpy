@@ -2,6 +2,7 @@
 
 import contextlib
 import os
+import shutil
 import unicodedata
 import warnings
 from collections.abc import Mapping, Sequence
@@ -39,13 +40,19 @@ from agglpy.app._sources import (
     stored_path,
 )
 from agglpy.app._status import table as status_table
-from agglpy.app._work import EXPORTS_FOLDER, WORK_FOLDER
+from agglpy.app._work import (
+    CORRECTED_CSV,
+    EXPORTS_FOLDER,
+    WORK_FOLDER,
+    image_folder,
+)
 from agglpy.errors import (
     OutputExistsError,
     ParamsError,
     SheetError,
     TableError,
 )
+from agglpy.export import _check_replaceable
 from agglpy.params import HCTParams, PreprocessParams, RegionParams
 
 __all__ = ["Collection"]
@@ -343,6 +350,73 @@ class Collection:
         write_sheet(sheet.path, new_header, old + rows)
         column = new_header.index("image")
         return [str(row[column]) for row in rows]
+
+    def remove_images(
+        self, images: Images, *, force: bool = False
+    ) -> list[str]:
+        """Take ``images`` out of the collection.
+
+        Removes each image's sheet row, its entry in ``agglpy.yml`` and
+        its work folder ``agglpy/<name>/``. ``images``: a name, a list
+        of names, or a True / False Series on the rows of ``status()``
+        or ``read_sheet()``. The image file is never touched:
+        ``add_images`` on its folder adds it again. ``exclude`` keeps
+        an image in the collection without using it.
+
+        Returns:
+            The removed names, in sheet order.
+
+        Raises:
+            ParamsError: If a name is not in the sheet or
+                ``agglpy.yml`` has problems; nothing is changed.
+            TableError: If a mask is not on the sheet's rows; nothing
+                is changed.
+            OutputExistsError: If an image has a manual correction
+                (``particles_corrected.csv``) and ``force`` is False;
+                nothing is changed.
+            OutputLockedError: If the sheet, ``agglpy.yml`` or a file
+                in a work folder is held open; nothing is changed.
+        """
+        sheet, config = self._read()
+        names = _names(sheet, images)
+        if not names:
+            return []
+        folders = [image_folder(self._folder, n) for n in names]
+        if not force:
+            corrected = [
+                f"{n} has a manual correction "
+                f"({WORK_FOLDER}/{n}/{CORRECTED_CSV}); "
+                "remove_images(..., force=True) deletes it too"
+                for n, f in zip(names, folders)
+                if (f / CORRECTED_CSV).is_file()
+            ]
+            if corrected:
+                raise OutputExistsError("\n".join(corrected))
+        grid = read_grid(sheet.path)
+        gone = {e.row for e in sheet.entries if e.image in names}
+        named = [i for i, name in enumerate(grid.header) if name]
+        header = [grid.header[i] for i in named]
+        rows = [
+            [cells[i] for i in named]
+            for number, cells in grid.rows
+            if number not in gone
+        ]
+        new = validate(Grid(sheet.path, header, _numbered(rows)))
+        for name in names:
+            config.reset(name)
+        config.check(new.names)
+        work = [p for f in folders if f.is_dir() for p in f.rglob("*")]
+        _check_replaceable(
+            [sheet.path, config.path, *(p for p in work if p.is_file())]
+        )
+        # the sheet first: a stop after it leaves a yml entry that every
+        # call reports, never params dropped silently
+        write_sheet(sheet.path, header, rows)
+        self._write_config(new, config)
+        for folder in folders:
+            if folder.is_dir():
+                shutil.rmtree(folder)
+        return names
 
     def _new_rows(
         self,
