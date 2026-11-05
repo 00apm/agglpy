@@ -229,6 +229,21 @@ def test_selection_by_name_and_include(particles_col: Collection) -> None:
     assert rep["image"].tolist() == ["D7-017", "D7-019"]
 
 
+def test_detect_by_mask(particles_col: Collection) -> None:
+    mask = particles_col.read_sheet().image == "D7-018"
+    rep = particles_col.detect(mask, progress=False)
+    assert rep["image"].tolist() == ["D7-018"]
+    work = particles_col.folder / "agglpy"
+    assert sorted(p.name for p in work.iterdir()) == ["D7-018"]
+
+
+def test_detect_empty_mask_runs_nothing(particles_col: Collection) -> None:
+    mask = particles_col.read_sheet().image == "X"
+    rep = particles_col.detect(mask, progress=False)
+    assert len(rep) == 0
+    assert list((particles_col.folder / "agglpy").iterdir()) == []
+
+
 def test_unknown_name_raises_before_running(
     particles_col: Collection,
 ) -> None:

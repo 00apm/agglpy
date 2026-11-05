@@ -21,6 +21,7 @@ from agglpy.errors import (
     OutputLockedError,
     ParamsError,
     SheetError,
+    TableError,
 )
 from agglpy.params import PreprocessParams
 
@@ -426,6 +427,72 @@ def test_exclude_unknown_name_writes_nothing(col: Collection) -> None:
     with pytest.raises(ParamsError, match="no image 'D7-099', 'x' in"):
         col.exclude(["D7-017", "D7-099", "x"])
     assert col.sheet_path.read_bytes() == before
+
+
+def test_exclude_by_status_mask(analysis_col: Collection) -> None:
+    col = analysis_col
+    st = col.status()
+    col.exclude(st.particle_set == "hct", note="no correction")
+    t = col.read_sheet()
+    assert t["include"].tolist() == [False, True, False, False]
+    assert t["note"].tolist() == [
+        "no correction",
+        None,
+        "no correction",
+        "out of focus",
+    ]
+
+
+def test_masks_of_status_and_read_sheet_combine(
+    analysis_col: Collection,
+) -> None:
+    st, sh = analysis_col.status(), analysis_col.read_sheet()
+    analysis_col.exclude((st.particle_set == "hct") & (sh.series == "a"))
+    assert analysis_col.read_sheet()["include"].tolist() == [
+        False,
+        True,
+        True,
+        False,
+    ]
+
+
+def test_include_by_mask(analysis_col: Collection) -> None:
+    analysis_col.include(analysis_col.read_sheet().image == "D7-020")
+    assert analysis_col.read_sheet()["include"].tolist() == [True] * 4
+
+
+def test_series_of_names_still_works(analysis_col: Collection) -> None:
+    st = analysis_col.status()
+    analysis_col.exclude(st.loc[st.particle_set == "hct", "image"])
+    assert analysis_col.read_sheet()["include"].tolist() == [
+        False,
+        True,
+        False,
+        False,
+    ]
+
+
+@pytest.mark.parametrize("cut", ["shorter", "filtered", "na", "numbers"])
+def test_mask_with_other_index_writes_nothing(
+    col: Collection, cut: str
+) -> None:
+    mask = col.read_sheet().image == "D7-017"
+    bad = {
+        "shorter": mask.iloc[:-1],
+        "filtered": mask[mask],
+        "na": mask.astype("boolean").where(mask.index > 0),
+        "numbers": mask.astype(int),
+    }[cut]
+    before = col.sheet_path.read_bytes()
+    with pytest.raises(TableError, match=r"status\(\) or read_sheet\(\)"):
+        col.exclude(bad)
+    assert col.sheet_path.read_bytes() == before
+
+
+def test_empty_mask_writes_nothing(col: Collection) -> None:
+    before = col.sheet_path.stat().st_mtime_ns
+    col.exclude(col.read_sheet().image == "none of them")
+    assert col.sheet_path.stat().st_mtime_ns == before
 
 
 def test_formula_sheet_fails_open(col: Collection) -> None:
