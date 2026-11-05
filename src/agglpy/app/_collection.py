@@ -3,6 +3,7 @@
 import contextlib
 import os
 import shutil
+import stat
 import unicodedata
 import warnings
 from collections.abc import Mapping, Sequence
@@ -405,17 +406,18 @@ class Collection:
         for name in names:
             config.reset(name)
         config.check(new.names)
-        work = [p for f in folders if f.is_dir() for p in f.rglob("*")]
-        _check_replaceable(
-            [sheet.path, config.path, *(p for p in work if p.is_file())]
-        )
+        folders = [f for f in folders if f.is_dir()]
+        files = [p for f in folders for p in f.rglob("*") if p.is_file()]
+        # a folder can't be renamed while a program works inside it
+        _check_replaceable([sheet.path, config.path, *files, *folders])
         # the sheet first: a stop after it leaves a yml entry that every
         # call reports, never params dropped silently
         write_sheet(sheet.path, header, rows)
         self._write_config(new, config)
+        for path in files:  # Windows refuses to delete read-only files
+            path.chmod(stat.S_IWRITE | stat.S_IREAD)
         for folder in folders:
-            if folder.is_dir():
-                shutil.rmtree(folder)
+            shutil.rmtree(folder)
         return names
 
     def _new_rows(

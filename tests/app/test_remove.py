@@ -1,5 +1,7 @@
 """Collection.remove_images: sheet row, yml entry and work folder."""
 
+import os
+import stat
 import warnings
 from pathlib import Path
 
@@ -101,6 +103,33 @@ def test_remove_locked_file_changes_nothing(
         col.remove_images("D7-017")
     monkeypatch.undo()
     assert _files(col) == before
+
+
+def test_remove_busy_folder_changes_nothing(
+    analysis_col: Collection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    col = analysis_col
+    before = _files(col)
+    rename = Path.rename
+
+    def busy(self: Path, target: Path) -> Path:
+        if self.name == "D7-017":  # a terminal's working folder
+            raise PermissionError(32, "in use", str(self))
+        return rename(self, target)
+
+    monkeypatch.setattr(Path, "rename", busy)
+    with pytest.raises(OutputLockedError, match="D7-017"):
+        col.remove_images("D7-017")
+    monkeypatch.undo()
+    assert _files(col) == before
+
+
+def test_remove_read_only_file(analysis_col: Collection) -> None:
+    col = analysis_col
+    csv = col.folder / "agglpy" / "D7-017" / "particles_hct.csv"
+    os.chmod(csv, stat.S_IREAD)
+    assert col.remove_images("D7-017") == ["D7-017"]
+    assert not csv.parent.exists()
 
 
 def test_remove_then_add_images_adds_it_again(
