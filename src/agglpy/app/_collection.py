@@ -40,12 +40,19 @@ from agglpy.app._sources import (
 )
 from agglpy.app._status import table as status_table
 from agglpy.app._work import EXPORTS_FOLDER, WORK_FOLDER
-from agglpy.errors import OutputExistsError, ParamsError, SheetError
+from agglpy.errors import (
+    OutputExistsError,
+    ParamsError,
+    SheetError,
+    TableError,
+)
 from agglpy.params import HCTParams, PreprocessParams, RegionParams
 
 __all__ = ["Collection"]
 
 _FORMATS = ("xlsx", "csv")
+# a name, names, or a True / False Series on the sheet's rows
+Images = str | Sequence[str] | pd.Series
 
 
 class Collection:
@@ -235,42 +242,46 @@ class Collection:
         config.check(new.names)
         write_sheet(sheet.path, header, rows)
 
-    def include(self, images: str | Sequence[str]) -> None:
-        """Set ``include`` true for ``images`` (a name or a list).
+    def include(self, images: Images) -> None:
+        """Set ``include`` true for ``images``.
 
-        Their ``note`` stays. Cells already holding 1/0 get 1/0.
+        ``images``: a name, a list of names, or a True / False Series
+        on the rows of ``status()`` or ``read_sheet()``. Their ``note``
+        stays. Cells already holding 1/0 get 1/0.
 
         Raises:
             SheetError: If the sheet has problems; nothing is written.
             ParamsError: If a name is not in the sheet or
                 ``agglpy.yml`` has problems; nothing is written.
+            TableError: If a mask is not on the sheet's rows; nothing
+                is written.
         """
         self._set_include(images, True, None)
 
-    def exclude(
-        self, images: str | Sequence[str], *, note: str | None = None
-    ) -> None:
-        """Set ``include`` false for ``images`` (a name or a list).
+    def exclude(self, images: Images, *, note: str | None = None) -> None:
+        """Set ``include`` false for ``images``.
 
-        ``note`` (the reason) replaces their ``note``; None keeps it.
-        Cells already holding 1/0 get 1/0.
+        ``images``: a name, a list of names, or a True / False Series
+        on the rows of ``status()`` or ``read_sheet()``. ``note`` (the
+        reason) replaces their ``note``; None keeps it. Cells already
+        holding 1/0 get 1/0.
 
         Raises:
             SheetError: If the sheet has problems; nothing is written.
             ParamsError: If a name is not in the sheet or
                 ``agglpy.yml`` has problems; nothing is written.
+            TableError: If a mask is not on the sheet's rows; nothing
+                is written.
         """
         self._set_include(images, False, note)
 
     def _set_include(
-        self, images: str | Sequence[str], value: bool, note: str | None
+        self, images: Images, value: bool, note: str | None
     ) -> None:
         sheet = validate(read_grid(self.sheet_path))
-        names = [images] if isinstance(images, str) else list(images)
-        unknown = [n for n in dict.fromkeys(names) if n not in sheet.names]
-        if unknown:
-            listed = ", ".join(repr(n) for n in unknown)
-            raise ParamsError(f"no image {listed} in {sheet.path.name}")
+        names = _names(sheet, images)
+        if not names:
+            return
         table = self.read_sheet()
         # Rows from the checked names: a cell may hold 17 for "17"
         rows = pd.Series(
@@ -439,7 +450,7 @@ class Collection:
 
     def detect(
         self,
-        images: str | Sequence[str] | None = None,
+        images: Images | None = None,
         *,
         force: bool = False,
         progress: bool = True,
@@ -447,8 +458,10 @@ class Collection:
         """Detect particles (HCT) on the images, one after another.
 
         Writes ``agglpy/<name>/particles_hct.csv`` and its record per
-        image. ``images`` is a name or a list of names (also images
-        with ``include`` false); None takes every included image. An
+        image. ``images`` is a name, a list of names, or a True / False
+        Series on the rows of ``status()`` or ``read_sheet()`` (also
+        images with ``include`` false); None takes every included
+        image. An
         image is skipped while its record matches its params and image
         file; ``force=True`` detects it again. A
         ``particles_hct.csv`` changed by a person is kept unless
@@ -468,6 +481,8 @@ class Collection:
         Raises:
             ParamsError: If a name is not in the sheet or
                 ``agglpy.yml`` has problems; nothing runs.
+            TableError: If a mask is not on the sheet's rows; nothing
+                runs.
 
         Warns:
             IncompleteRunWarning: If an image ended ``kept``, ``error``
@@ -475,17 +490,10 @@ class Collection:
             LossyImageWarning: If an image file is JPEG-compressed.
         """
         sheet, config = self._read(check=True)
-        wanted = [images] if isinstance(images, str) else images
-        if wanted is None:
+        if images is None:
             names = [e.image for e in sheet.entries if e.include]
         else:
-            unknown = [
-                n for n in dict.fromkeys(wanted) if n not in sheet.names
-            ]
-            if unknown:
-                listed = ", ".join(repr(n) for n in unknown)
-                raise ParamsError(f"no image {listed} in {sheet.path.name}")
-            names = [n for n in sheet.names if n in set(wanted)]
+            names = _names(sheet, images)
         table, summaries = run_detect(
             self._folder, sheet, config, names, force=force, progress=progress
         )
@@ -663,6 +671,39 @@ def _include_cell(old: object, value: bool) -> object:
     if isinstance(old, str) and old.strip() in ("0", "1"):
         return "1" if value else "0"
     return value
+
+
+_BAD_MASK = (
+    "images must be a True / False Series on the rows of status() or "
+    "read_sheet(), e.g. col.status().particle_set == 'hct'"
+)
+
+
+def _names(sheet: Sheet, images: Images) -> list[str]:
+    """The images ``images`` selects, in sheet order, each once.
+
+    A bool Series is a mask on the sheet's rows (the index of
+    ``status()`` and ``read_sheet()``); any other value lists names.
+
+    Raises:
+        TableError: If a mask is not on the sheet's rows, has missing
+            values, or a Series holds neither bools nor names.
+        ParamsError: If a name is not in the sheet.
+    """
+    if isinstance(images, pd.Series):
+        if pd.api.types.is_bool_dtype(images):
+            rows = pd.RangeIndex(len(sheet.entries))
+            if not images.index.equals(rows) or images.isna().any():
+                raise TableError(_BAD_MASK)
+            return [e.image for e, keep in zip(sheet.entries, images) if keep]
+        if not all(isinstance(v, str) for v in images):
+            raise TableError(_BAD_MASK)
+    wanted = [images] if isinstance(images, str) else list(images)
+    unknown = [n for n in dict.fromkeys(wanted) if n not in sheet.names]
+    if unknown:
+        listed = ", ".join(repr(n) for n in unknown)
+        raise ParamsError(f"no image {listed} in {sheet.path.name}")
+    return [n for n in sheet.names if n in set(wanted)]
 
 
 def _known(sheet: Sheet, image: str) -> None:
