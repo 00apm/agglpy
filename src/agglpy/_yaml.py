@@ -2,7 +2,8 @@
 
 The one module that imports the YAML library, so replacing it means
 changing one file. Files load in round-trip mode: a person's comments
-in ``agglpy.yml`` survive agglpy writing the file. Files agglpy writes
+in ``agglpy.yml`` survive agglpy writing the file; files agglpy only
+reads back may load plain (``comments=False``). Files agglpy writes
 quote the YAML 1.1 words (``yes``, ``on``, ...) and write ``null``, so
 PyYAML-based tools read them the same.
 """
@@ -65,13 +66,19 @@ def _yaml() -> YAML:
     return y
 
 
-def loads(text: str, source: str) -> Any:
+def loads(text: str, source: str, *, comments: bool = True) -> Any:
     """Load YAML text, keeping comments.
+
+    ``comments=False`` gives plain dicts and lists, several times
+    faster: for files agglpy only reads back, never rewrites.
 
     Raises FileFormatError on a syntax error or a repeated key, naming
     ``source`` and the line (1-based).
     """
     try:
+        if not comments:
+            # one instance per call, as _yaml(): not thread-safe
+            return YAML(typ="safe").load(text)
         return _yaml().load(text)
     except MarkedYAMLError as e:
         mark = e.problem_mark or e.context_mark

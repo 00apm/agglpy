@@ -271,7 +271,7 @@ def read_record(path: Path, kind: type[R]) -> R | None:
     """
     try:
         text = path.read_text(encoding="utf-8-sig")
-        data = _yaml.loads(text, path.name)
+        data = _yaml.loads(text, path.name, comments=False)
         return cast(R, _parse(data, kind))
     except FileNotFoundError:
         return None

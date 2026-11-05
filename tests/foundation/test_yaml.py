@@ -82,8 +82,18 @@ def test_null_is_written_as_null() -> None:
     assert _yaml.dumps({"a": None}) == "a: null\n"
 
 
-def test_exponent_float_and_yes_text() -> None:
-    assert _yaml.loads("a: 1e-6\nb: yes\n", "t") == {"a": 1e-06, "b": "yes"}
+@pytest.mark.parametrize("comments", [True, False])
+def test_exponent_float_and_yes_text(comments: bool) -> None:
+    data = _yaml.loads("a: 1e-6\nb: yes\n", "t", comments=comments)
+    assert data == {"a": 1e-06, "b": "yes"}
+
+
+def test_loads_without_comments_gives_plain_data() -> None:
+    data = _yaml.loads("# top\na:  # note\n  - b: 1\n", "t", comments=False)
+    assert data == {"a": [{"b": 1}]}
+    assert type(data) is dict
+    assert type(data["a"]) is list
+    assert type(data["a"][0]) is dict
 
 
 def test_yaml11_words_are_quoted() -> None:
@@ -102,14 +112,16 @@ def test_long_text_is_not_wrapped() -> None:
     assert _yaml.dumps({"a": "x " * 100}).count("\n") == 1
 
 
-def test_syntax_error_names_source_and_line() -> None:
+@pytest.mark.parametrize("comments", [True, False])
+def test_syntax_error_names_source_and_line(comments: bool) -> None:
     with pytest.raises(FileFormatError, match=r"agglpy\.yml, line 2"):
-        _yaml.loads("a: [1,\n", "agglpy.yml")
+        _yaml.loads("a: [1,\n", "agglpy.yml", comments=comments)
 
 
-def test_repeated_key_is_an_error() -> None:
+@pytest.mark.parametrize("comments", [True, False])
+def test_repeated_key_is_an_error(comments: bool) -> None:
     with pytest.raises(FileFormatError, match="t, line 2"):
-        _yaml.loads("a: 1\na: 2\n", "t")
+        _yaml.loads("a: 1\na: 2\n", "t", comments=comments)
 
 
 def test_load_reads_utf8_file(tmp_path: Path) -> None:
