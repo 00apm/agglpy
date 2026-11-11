@@ -39,8 +39,22 @@ from agglpy.params import _number
 # Built-in metrics by family, in the column order of ``summary``.
 _FAMILIES: MappingProxyType[str, tuple[str, ...]] = MappingProxyType(
     {
-        "counts": ("N_primary", "N_aerosol", "N_pp1", "N_ppA", "N_aggl"),
-        "ratios": ("Ra", "agglomerated_fraction", "n_ppA", "n_ppP"),
+        "counts": (
+            "N_primary",
+            "N_aerosol",
+            "N_pp1",
+            "N_ppA",
+            "N_aggl",
+            "N_merges",
+        ),
+        "ratios": (
+            "Ra",
+            "agglomerated_fraction",
+            "merge_ratio",
+            "n_ppA",
+            "n_ppP",
+        ),
+        "contacts": ("N_contacts", "N_loops", "coordination_mean"),
         "per_area": (
             "coverage",
             "N_primary_per_area",
@@ -92,13 +106,28 @@ def summary(
       (aerosol particles: agglomerates and single particles), ``N_pp1``
       (single particles), ``N_ppA = N_primary - N_pp1`` (particles in
       agglomerates), ``N_aggl = N_aerosol - N_pp1`` (agglomerates of
-      two or more particles).
+      two or more particles), ``N_merges = N_primary - N_aerosol``
+      (merges that joined the primary particles into the aerosol
+      particles: the sum of ``member_count - 1``, the rank of the
+      contact graph).
     - ``ratios``, from the pooled counts: ``Ra = N_aggl / N_primary``,
       the agglomeration ratio of Gotoh et al. (1996), equal to theirs
-      when no particle is lost or added; ``agglomerated_fraction =
+      when no particle is lost or added; it is not monotonic (0 ... 0.5,
+      it falls when agglomerates merge); ``agglomerated_fraction =
       1 - N_pp1 / N_primary``, the number fraction of primary particles
-      bound in agglomerates (ER in agglpy <= 0.4); ``n_ppA = N_ppA /
-      N_aggl``; ``n_ppP = N_primary / N_aerosol``.
+      bound in agglomerates (ER in agglpy <= 0.4); ``merge_ratio =
+      N_merges / (N_primary - 1) = (N_primary - N_aerosol) /
+      (N_primary - 1)``, the degree of agglomeration: 0 when all are
+      single, 1 when all form one agglomerate, growing with every merge
+      (NaN below 2 particles); exactly, ``agglomerated_fraction =
+      merge_ratio * (N_primary - 1) / N_primary + Ra``; ``n_ppA = N_ppA
+      / N_aggl``; ``n_ppP = N_primary / N_aerosol``.
+    - ``contacts``, from the agglomerates' ``contact_count``:
+      ``N_contacts`` (its sum), ``N_loops = N_contacts - N_merges`` (the
+      circuit rank: contacts beyond those that hold the agglomerates
+      together), ``coordination_mean = 2 * N_contacts / N_primary``
+      (each contact has two ends). Possible contacts, so upper bounds
+      (``agglomerates.find_agglomerates``).
     - ``per_area``, over the summed ``fov_area``: ``coverage`` (summed
       agglomerate ``area`` / FoV area: the covered surface fraction;
       agglomerates never overlap, so this is the exact union of all
@@ -123,7 +152,7 @@ def summary(
         images: The images table (``agglpy.core._images``).
         particles: Particle table with ``image``, ``D``.
         agglomerates: Agglomerate table with ``image``,
-            ``member_count``, ``D``, ``area``.
+            ``member_count``, ``D``, ``area``, ``contact_count``.
         by: ``None`` (all images, one row), ``"image"``, an images-table
             column or a list of them (one row per existing
             combination; an empty cell is its own group). A ``by``
@@ -154,6 +183,8 @@ def summary(
         require(agglomerates, ["D"], "agglomerates")
     if "per_area" in families:
         require(agglomerates, ["area"], "agglomerates")
+    if "contacts" in families:
+        require(agglomerates, ["contact_count"], "agglomerates")
     p_image = image_positions(images, particles, "particles")
     a_image = image_positions(images, agglomerates, "agglomerates")
     members = numbers(agglomerates, "member_count", "agglomerates")
@@ -172,6 +203,7 @@ def summary(
         "N_pp1": n_pp1,
         "N_ppA": n_primary - n_pp1,
         "N_aggl": n_aerosol - n_pp1,
+        "N_merges": n_primary - n_aerosol,
     }
     columns: dict[str, NDArray[np.generic]] = {
         "n_images": np.bincount(groups.codes, minlength=k)
@@ -182,6 +214,8 @@ def summary(
             columns.update(counts)
         if "ratios" in families:
             columns.update(_ratios(counts))
+        if "contacts" in families:
+            columns.update(_contacts(agglomerates, a_group, k, counts))
         if "per_area" in families:
             columns.update(
                 _per_area(images, groups, agglomerates, a_group, counts)
@@ -362,11 +396,34 @@ def _ratios(
     counts: dict[str, NDArray[np.int64]],
 ) -> dict[str, NDArray[np.float64]]:
     primary = counts["N_primary"]
+    # Explicit: 0 merges / (0 - 1) particles would give -0.0, not NaN.
+    merge_ratio = np.full(len(primary), np.nan)
+    np.divide(
+        counts["N_merges"], primary - 1, out=merge_ratio, where=primary >= 2
+    )
     return {
         "Ra": counts["N_aggl"] / primary,
         "agglomerated_fraction": 1 - counts["N_pp1"] / primary,
+        "merge_ratio": merge_ratio,
         "n_ppA": counts["N_ppA"] / counts["N_aggl"],
         "n_ppP": primary / counts["N_aerosol"],
+    }
+
+
+def _contacts(
+    agglomerates: pd.DataFrame,
+    a_group: NDArray[np.intp],
+    k: int,
+    counts: dict[str, NDArray[np.int64]],
+) -> dict[str, NDArray[np.generic]]:
+    contact_count = numbers(agglomerates, "contact_count", "agglomerates")
+    n_contacts = np.bincount(
+        a_group, weights=contact_count, minlength=k
+    ).astype(np.int64)
+    return {
+        "N_contacts": n_contacts,
+        "N_loops": n_contacts - counts["N_merges"],
+        "coordination_mean": 2 * n_contacts / counts["N_primary"],
     }
 
 

@@ -17,20 +17,23 @@ import pandas as pd
 import pytest
 
 from agglpy.core.agglomerates import (
+    _check_contacts,
     _Contacts,
     _find_contacts,
     _find_enclosed,
+    _find_inside,
     _label_agglomerates,
     find_agglomerates,
     select_agglomerates,
 )
 from agglpy.core.metrics import summary
+from agglpy.core.properties import agglomerate_properties
 from agglpy.errors import (
     DuplicateParticlesWarning,
     ParticleTableError,
     TableError,
 )
-from agglpy.tables import validate_particles
+from agglpy.tables import make_particles, validate_particles
 
 from support.synthetic.adapters import (
     ADAPTERS,
@@ -288,7 +291,9 @@ def test_agglomerates_of_empty_table():
 
 
 def _enclosed(table: pd.DataFrame) -> list[bool]:
-    return _find_enclosed(table, _find_contacts(table)).tolist()
+    contacts = _find_contacts(table)
+    inside = _find_inside(table, contacts)
+    return _find_enclosed(table, contacts, inside).tolist()
 
 
 def test_small_particle_inside_large_is_enclosed():
@@ -331,19 +336,23 @@ def test_duplicate_warning_counts_enclosed_particles_not_pairs():
 
 
 def test_enclosed_of_empty_table():
-    flags = _find_enclosed(_table([], [], []), _contacts())
+    flags = _find_enclosed(
+        _table([], [], []), _contacts(), np.zeros(0, dtype=bool)
+    )
     assert flags.dtype == bool
     assert flags.name == "enclosed"
     assert len(flags) == 0
 
 
-def test_find_agglomerates_adds_both_columns():
+def test_find_agglomerates_adds_its_columns():
     table = _table([0, 14, 100], [0, 0, 0], [10, 4, 3])
-    out = find_agglomerates(table)
+    out, _ = find_agglomerates(table)
     assert out["agglomerate_id"].tolist() == [0, 0, 1]
     assert out["enclosed"].tolist() == [False, False, False]
+    assert out["coordination"].tolist() == [1, 1, 0]
     assert out["agglomerate_id"].dtype == np.int64
     assert out["enclosed"].dtype == bool
+    assert out["coordination"].dtype == np.int64
 
 
 def test_find_agglomerates_does_not_modify_its_input():
@@ -356,21 +365,26 @@ def test_find_agglomerates_does_not_modify_its_input():
 def test_custom_index_is_reset():
     table = _table([0, 14, 100], [0, 0, 0], [10, 4, 3])
     table.index = [30, 10, 20]
-    out = find_agglomerates(table)
+    out, _ = find_agglomerates(table)
     assert list(out.index) == [0, 1, 2]
     assert out["id"].tolist() == [1, 2, 3]  # rows keep the input order
 
 
 def test_regrouping_gives_the_same_result():
-    once = find_agglomerates(_table([0, 2, 50], [0, 0, 0], [10, 4, 3]))
-    pd.testing.assert_frame_equal(find_agglomerates(once), once)
+    once, contacts = find_agglomerates(
+        _table([0, 2, 50], [0, 0, 0], [10, 4, 3])
+    )
+    again, contacts_again = find_agglomerates(once)
+    pd.testing.assert_frame_equal(again, once)
+    pd.testing.assert_frame_equal(contacts_again, contacts)
 
 
 def test_empty_table():
-    out = find_agglomerates(_table([], [], []))
+    out, _ = find_agglomerates(_table([], [], []))
     assert len(out) == 0
     assert out["agglomerate_id"].dtype == np.int64
     assert out["enclosed"].dtype == bool
+    assert out["coordination"].dtype == np.int64
 
 
 def test_find_agglomerates_warns_once_about_duplicates():
@@ -387,6 +401,267 @@ def test_find_agglomerates_warns_once_about_duplicates():
 def test_find_agglomerates_rejects_a_broken_table():
     with pytest.raises(ParticleTableError):
         find_agglomerates(pd.DataFrame({"id": [1], "x": [0.0], "y": [0.0]}))
+
+
+# --- Possible contacts -------------------------------------------------
+
+
+def _possible(x, y, r) -> tuple[pd.DataFrame, pd.DataFrame]:
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DuplicateParticlesWarning)
+        return find_agglomerates(make_particles(x, y, r))
+
+
+def _pair_set(contacts: pd.DataFrame) -> set[tuple[int, int]]:
+    return set(zip(contacts.id_a, contacts.id_b, strict=True))
+
+
+# (x, y, r, expected pairs (id_a, id_b), coordination); ids run 1 ... n
+POSSIBLE = {
+    # B, C inside A, apart: exact, 2
+    "apart_inside": (
+        [0, -8, 8],
+        [0, 0, 0],
+        [20, 5, 5],
+        {(1, 2), (1, 3)},
+        [2, 1, 1],
+    ),
+    # C inside B inside A: A-C impossible, 2
+    "nested": (
+        [0, 2, 4],
+        [0, 0, 0],
+        [20, 10, 3],
+        {(1, 2), (2, 3)},
+        [1, 2, 1],
+    ),
+    # B, C inside A, overlapping each other: upper bound 3
+    "overlapping_inside": (
+        [0, -3, 3],
+        [0, 0, 0],
+        [20, 5, 5],
+        {(1, 2), (1, 3), (2, 3)},
+        [2, 2, 2],
+    ),
+    # C inside B and A, B crosses A's outline: A-C stays possible
+    "lens": (
+        [0, 18, 15],
+        [0, 0, 0],
+        [20, 6, 2],
+        {(1, 2), (1, 3), (2, 3)},
+        [2, 2, 2],
+    ),
+    # D inside C inside B inside A, concentric: neighbouring levels only
+    "deep": (
+        [0] * 4,
+        [0] * 4,
+        [20, 10, 5, 2],
+        {(1, 2), (2, 3), (3, 4)},
+        [1, 2, 2, 1],
+    ),
+}
+
+
+@pytest.mark.parametrize("name", POSSIBLE)
+def test_possible_contacts(name: str):
+    x, y, r, pairs, coordination = POSSIBLE[name]
+    found, contacts = _possible(x, y, r)
+    assert _pair_set(contacts) == pairs
+    assert found["coordination"].tolist() == coordination
+    # pruning never changes the grouping
+    assert found["agglomerate_id"].nunique() == 1
+
+
+def test_worked_example_of_seven_particles():
+    # triangle 1-2-3, chain 4-5-6, single 7
+    found, contacts = _possible(
+        [0, 8, 4, 100, 108, 116, 200], [0, 0, 7, 0, 0, 0, 0], [5] * 7
+    )
+    assert found["coordination"].tolist() == [2, 2, 2, 1, 2, 1, 0]
+    assert contacts["agglomerate_id"].tolist() == [0, 0, 0, 1, 1]
+    agg = agglomerate_properties(found, contacts)
+    assert agg["contact_count"].tolist() == [3, 2, 0]
+    assert agg["loop_count"].tolist() == [1, 0, 0]
+
+
+CONTACT_DTYPES = [np.int64, np.int64, np.int64, bool]
+
+
+def test_contacts_table_columns_order_and_dtypes():
+    _, contacts = _possible([0, 8, 4, 100], [0, 0, 7, 0], [5, 5, 5, 5])
+    assert list(contacts.columns) == [
+        "agglomerate_id",
+        "id_a",
+        "id_b",
+        "inside",
+    ]
+    assert contacts.dtypes.tolist() == CONTACT_DTYPES
+    assert contacts.index.equals(pd.RangeIndex(len(contacts)))
+    assert list(zip(contacts.id_a, contacts.id_b, strict=True)) == sorted(
+        _pair_set(contacts)
+    )
+
+
+def test_contacts_are_sorted_by_agglomerate_then_ids():
+    # rows 2, 3 (agglomerate 1) come before row 4 (agglomerate 0);
+    # id_a is the larger particle (id 4 in the first pair)
+    _, contacts = _possible([0, 100, 108, 9], [0, 0, 0, 0], [5, 5, 5, 6])
+    assert contacts[["agglomerate_id", "id_a", "id_b"]].values.tolist() == [
+        [0, 4, 1],
+        [1, 2, 3],
+    ]
+
+
+def test_inside_marks_a_smaller_particle_inside_the_larger():
+    _, contacts = _possible([0, 2, 24], [0, 0, 0], [10, 4, 15])
+    assert contacts[["id_a", "id_b", "inside"]].values.tolist() == [
+        [1, 2, True],
+        [3, 1, False],
+    ]
+
+
+@pytest.mark.parametrize("n", [0, 1])
+def test_contacts_of_tiny_tables(n: int):
+    found, contacts = _possible([0] * n, [0] * n, [5] * n)
+    assert len(contacts) == 0
+    assert contacts.dtypes.tolist() == CONTACT_DTYPES
+    assert found["coordination"].tolist() == [0] * n
+
+
+def test_three_identical_circles_keep_a_chain():
+    found, contacts = _possible([0, 0, 0], [0, 0, 0], [5, 5, 5])
+    assert _pair_set(contacts) == {(1, 2), (2, 3)}
+    assert found["enclosed"].tolist() == [False, True, True]
+
+
+def _brute_force_possible(table: pd.DataFrame) -> set[tuple[int, int]]:
+    """Possible contacts as (id_a, id_b), from checking every triple."""
+    x, y, r, ids = (table[c].to_numpy() for c in ("x", "y", "r", "id"))
+    n = len(table)
+
+    def owns(i: int, j: int) -> bool:
+        return r[i] > r[j] or (r[i] == r[j] and ids[i] < ids[j])
+
+    def dist(i: int, j: int) -> float:
+        dx, dy = x[i] - x[j], y[i] - y[j]
+        return float(np.sqrt(dx * dx + dy * dy))
+
+    def holds(i: int, j: int) -> bool:  # disk j inside disk i
+        return owns(i, j) and dist(i, j) <= r[i] - r[j]
+
+    pairs = set()
+    for i in range(n):
+        for j in range(n):
+            if i == j or not owns(i, j) or dist(i, j) > r[i] + r[j]:
+                continue
+            if not any(holds(i, k) and holds(k, j) for k in range(n)):
+                pairs.add((int(ids[i]), int(ids[j])))
+    return pairs
+
+
+@pytest.mark.parametrize("seed", range(5))
+def test_possible_contacts_match_brute_force(seed: int):
+    # 15 circles in a 40 px square, r in [2, 12]: nesting is common.
+    rng = np.random.default_rng(seed)
+    x, y = rng.uniform(0, 40, 15), rng.uniform(0, 40, 15)
+    r = rng.uniform(2, 12, 15)
+    found, contacts = _possible(x, y, r)
+    assert found["enclosed"].any(), "needs nesting"
+    assert _pair_set(contacts) == _brute_force_possible(found)
+    ends = pd.Series(np.concatenate([contacts.id_a, contacts.id_b]))
+    counts = ends.value_counts()
+    assert found["coordination"].tolist() == [
+        int(counts.get(i, 0)) for i in found["id"]
+    ]
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        (lambda p, c: (p, c.drop(columns="id_b")), "missing columns"),
+        (lambda p, c: (p.drop(columns="id"), c), "missing columns"),
+        # particles filtered without their contacts: say how to fix it
+        (
+            lambda p, c: (p[p.id != 2], c),
+            "not in the particle table; filter the contacts",
+        ),
+        (
+            lambda p, c: (p.assign(id=[1, 2, 3, 3, 5]), c),
+            r"particles: ids 3 repeat",
+        ),
+        (
+            lambda p, c: (p, c.assign(agglomerate_id=c.agglomerate_id + 1)),
+            "agglomerate",
+        ),
+        (lambda p, c: (p, c.assign(id_a=c.id_a + 0.5)), "integers"),
+        # a filtered table: area and loop_count would be wrong
+        (lambda p, c: (p, c.iloc[:-1]), "not held together"),
+        (lambda p, c: (p, c.iloc[:0]), "not held together"),
+        (lambda p, c: (p, c.assign(id_b=c.id_a)), "itself"),
+        (lambda p, c: (p, pd.concat([c, c.iloc[:1]])), "repeat"),
+        (
+            lambda p, c: (
+                p,
+                pd.concat(
+                    [
+                        c,
+                        c.iloc[:1].rename(
+                            columns={"id_a": "id_b", "id_b": "id_a"}
+                        ),
+                    ]
+                ),
+            ),
+            "repeat",
+        ),
+    ],
+    ids=[
+        "contacts column",
+        "particles column",
+        "id",
+        "repeated id",
+        "agglomerate",
+        "float",
+        "missing pair",
+        "no pairs",
+        "self pair",
+        "repeated pair",
+        "swapped repeat",
+    ],
+)
+def test_check_contacts_rejects(change, message: str):
+    found, contacts = _possible([0, 8, 4, 100, 108], [0, 0, 7, 0, 0], [5] * 5)
+    with pytest.raises(TableError, match=message):
+        _check_contacts(*change(found, contacts))
+
+
+def test_check_contacts_accepts_a_csv_round_trip(tmp_path: Path):
+    found, contacts = _possible([0, 8, 4], [0, 0, 7], [5, 5, 5])
+    columns = ("id", "agglomerate_id", "id_a", "id_b")
+    for name, table in (("p", found), ("c", contacts)):
+        table.astype({c: float for c in columns if c in table}).to_csv(
+            tmp_path / f"{name}.csv", index=False
+        )
+    p, c = (pd.read_csv(tmp_path / f"{n}.csv") for n in ("p", "c"))
+    _check_contacts(p, c)
+    assert agglomerate_properties(p, c)["contact_count"].tolist() == [3]
+
+
+@pytest.mark.parametrize(
+    "inside",
+    [None, ["yes", "no", "yes"]],
+    ids=["missing", "text"],
+)
+def test_inside_is_not_read(inside):
+    # for information only: the area decides containment itself
+    found, contacts = _possible([0, 8, 4], [0, 0, 7], [5, 5, 5])
+    expected = agglomerate_properties(found, contacts)
+    if inside is None:
+        changed = contacts.drop(columns="inside")
+    else:
+        changed = contacts.assign(inside=inside)
+    _check_contacts(found, changed)
+    pd.testing.assert_frame_equal(
+        agglomerate_properties(found, changed), expected
+    )
 
 
 # --- select_agglomerates ----------------------------------------------

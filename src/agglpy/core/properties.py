@@ -2,8 +2,8 @@
 
 ``particle_properties`` adds each particle's size to the particle
 table; ``agglomerate_properties`` builds the agglomerate table, one row
-per ``agglomerate_id``. Both take the table from
-``agglomerates.find_agglomerates`` and never modify it.
+per ``agglomerate_id``. Both take the tables from
+``agglomerates.find_agglomerates`` and never modify them.
 
 Every value describes the circle model: each particle is a sphere
 whose projection is its detected circle. Enclosed particles are members
@@ -26,18 +26,26 @@ import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 
-from agglpy.core.agglomerates import _find_contacts
+from agglpy.core.agglomerates import (
+    _check_contacts,
+    _contact_rows,
+    _Contacts,
+)
 from agglpy.core.region import Bounds
 from agglpy.errors import ParticleTableError
 from agglpy.params import _positive
 
 # Length exponent of each property column: 0 count, ratio or flag,
 # 1 length (px), 2 area (px²), 3 volume (px³). D, area and volume mean
-# the same for a particle and an agglomerate.
+# the same for a particle and an agglomerate. ``coordination`` is the
+# particle column of find_agglomerates; the rest are in table order.
 DIMENSIONS: MappingProxyType[str, int] = MappingProxyType(
     {
+        "coordination": 0,
         "member_count": 0,
         "enclosed_count": 0,
+        "contact_count": 0,
+        "loop_count": 0,
         "volume": 3,
         "D": 1,
         "surface": 2,
@@ -66,7 +74,7 @@ _GEOMETRY: MappingProxyType[str, int] = MappingProxyType(
     {"x": 1, "y": 1, "r": 1}
 )
 
-_AGGLOMERATE_INPUT = ("x", "y", "r", "agglomerate_id", "enclosed")
+_AGGLOMERATE_INPUT = ("id", "x", "y", "r", "agglomerate_id", "enclosed")
 
 # Agglomerates up to this size get their max Feret diameter from all
 # member pairs at once; larger ones are pruned first.
@@ -120,7 +128,9 @@ def particle_properties(
 
 
 def agglomerate_properties(
-    table: pd.DataFrame, bounds: Bounds | None = None
+    table: pd.DataFrame,
+    contacts: pd.DataFrame,
+    bounds: Bounds | None = None,
 ) -> pd.DataFrame:
     """Measure every agglomerate of one image.
 
@@ -128,6 +138,13 @@ def agglomerate_properties(
     enclosed ones included. Column definitions (px, px², px³):
 
     - ``member_count``, ``enclosed_count``: members, enclosed members.
+    - ``contact_count``: possible contacts between the members (rows
+      of ``contacts``; see ``find_agglomerates``), an upper bound of the
+      true contacts, which are at least ``member_count - 1``.
+    - ``loop_count``: ``contact_count - member_count + 1``, the contacts
+      beyond the ``member_count - 1`` that hold the agglomerate
+      together (the circuit rank of its contact graph); an upper bound;
+      0 for a chain or a branched agglomerate.
     - ``volume``: sum of the member sphere volumes; ``D``: diameter of
       one sphere with that volume (the agglomerate's size).
     - ``surface``: sum of the member sphere surfaces. Spheres touching
@@ -159,7 +176,9 @@ def agglomerate_properties(
 
     Args:
         table: The particle table from ``find_agglomerates``; only
-            ``x, y, r, agglomerate_id, enclosed`` are read.
+            ``id, x, y, r, agglomerate_id, enclosed`` are read.
+        contacts: The contacts table from ``find_agglomerates`` for
+            these particles, all of it (``inside`` is not read).
         bounds: The analysed region (``core.region.region_bounds``);
             None adds no ``touches_edge``.
 
@@ -172,6 +191,7 @@ def agglomerate_properties(
         ParticleTableError: If a needed column is missing; ``x, y, r``
             are not finite numbers or ``r <= 0``; ``agglomerate_id``
             does not hold integers; ``enclosed`` is not True / False.
+        TableError: If ``contacts`` are not pairs of these particles.
     """
     _require(table, _AGGLOMERATE_INPUT)
     # A table fresh from find_agglomerates is clean, but one read back
@@ -188,12 +208,18 @@ def agglomerate_properties(
         _integers(table, "agglomerate_id"), return_inverse=True
     )
     groups = _Groups(codes, len(ids), r)
+    pairs = _check_contacts(table, contacts)
+    # Every pair's agglomerate is one of ids (checked above).
+    contact_count = np.bincount(
+        np.searchsorted(ids, pairs.agglomerate_id), minlength=len(ids)
+    ).astype(np.int64)
 
     columns: dict[str, NDArray[np.generic]] = {"agglomerate_id": ids}
-    columns.update(_sizes(groups, r, enclosed))
+    columns.update(_sizes(groups, r, enclosed, contact_count))
     x_com, y_com, rg = _centre_of_mass(groups, x, y, r)
     columns.update(x_com=x_com, y_com=y_com, rg=rg)
-    area = _union_area(groups, x, y, r, x_com, y_com)
+    covering = _contact_rows(pairs.ids, pairs.id_a, pairs.id_b)
+    area = _union_area(groups, x, y, r, x_com, y_com, covering)
     columns.update(area=area, D_pa=np.sqrt(4 * area / np.pi))
     # Along a fixed axis, a union of circles reaches exactly from the
     # lowest edge (c - r) to the highest (c + r): no search needed.
@@ -283,7 +309,10 @@ class _Groups:
 
 
 def _sizes(
-    groups: _Groups, r: NDArray[np.float64], enclosed: NDArray[np.bool_]
+    groups: _Groups,
+    r: NDArray[np.float64],
+    enclosed: NDArray[np.bool_],
+    contact_count: NDArray[np.int64],
 ) -> dict[str, NDArray[np.generic]]:
     d = 2 * r
     count = groups.count
@@ -320,6 +349,9 @@ def _sizes(
     return {
         "member_count": count,
         "enclosed_count": enclosed_count,
+        "contact_count": contact_count,
+        # contacts beyond the count - 1 that hold the members together
+        "loop_count": contact_count - count + 1,
         "volume": volume,
         "D": _equivalent_diameter(volume),
         "surface": surface,
@@ -360,15 +392,16 @@ def _union_area(
     r: NDArray[np.float64],
     x_com: NDArray[np.float64],
     y_com: NDArray[np.float64],
+    pairs: _Contacts,
 ) -> NDArray[np.float64]:
     """Exact area of the union of each agglomerate's member circles.
 
     Green's theorem: the area is ½∮(x dy - y dx) along the union's
     boundary, which is made of the outline arcs (``_outline_arcs``).
     """
-    circle, a, b = _outline_arcs(groups.codes, x, y, r)
+    circle, a, b = _outline_arcs(x, y, r, pairs)
     # Centres relative to the agglomerate's centre of mass keep the
-    # terms small (only here: the contact search needs image positions).
+    # terms small.
     rr = r[circle]
     cx = (x - x_com[groups.codes])[circle]
     cy = (y - y_com[groups.codes])[circle]
@@ -385,17 +418,19 @@ def _union_area(
 
 
 def _outline_arcs(
-    codes: NDArray[np.intp],
     x: NDArray[np.float64],
     y: NDArray[np.float64],
     r: NDArray[np.float64],
+    pairs: _Contacts,
 ) -> tuple[NDArray[np.intp], NDArray[np.float64], NDArray[np.float64]]:
     """Arcs of each circle's outline outside every other member circle.
 
     Together they are the boundary of each agglomerate's union of
     circles, the edge of a hole inside a ring of particles included.
-    ``codes`` gives each circle's agglomerate (0 … k-1); only members of
-    one agglomerate cover each other.
+    Only the circles of ``pairs`` (the contacts of
+    ``find_agglomerates``, as row positions) cover each other. A pair
+    left out as impossible (C inside B inside X) changes nothing: B
+    covers all of C.
 
     Returns (circle, start, end) in radians, sorted by circle and start,
     with ``0 <= start < end``: an arc across angle 0 is one arc with
@@ -403,7 +438,7 @@ def _outline_arcs(
     covered completely (enclosed, or by neighbours together) has none.
     """
     n = len(r)
-    circle, start, end = _covered_arcs(codes, x, y, r)
+    circle, start, end = _covered_arcs(x, y, r, pairs)
 
     # Sweep each circle's covered arcs by start angle, keeping the
     # furthest end reached so far: a gap between that end and the next
@@ -464,23 +499,18 @@ def _outline_arcs(
 
 
 def _covered_arcs(
-    codes: NDArray[np.intp],
     x: NDArray[np.float64],
     y: NDArray[np.float64],
     r: NDArray[np.float64],
+    pairs: _Contacts,
 ) -> tuple[NDArray[np.intp], NDArray[np.float64], NDArray[np.float64]]:
-    """Arcs of each circle's outline covered by another circle.
+    """Arcs of each circle's outline covered by the other circle of a
+    pair (``larger`` the circle that may hold the other).
 
     Returns (circle, start, end) with ``0 <= start <= end <= 2π``; an
     arc across angle 0 is split in two.
     """
-    n = len(r)
-    contacts = _find_contacts(
-        pd.DataFrame({"id": np.arange(n), "x": x, "y": y, "r": r})
-    )
-    # Only members of one agglomerate cover each other.
-    same = codes[contacts.larger] == codes[contacts.smaller]
-    big, small = contacts.larger[same], contacts.smaller[same]
+    big, small = pairs
     dx: NDArray[np.float64] = x[small] - x[big]
     dy: NDArray[np.float64] = y[small] - y[big]
     d = np.sqrt(dx * dx + dy * dy)

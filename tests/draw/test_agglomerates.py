@@ -17,51 +17,54 @@ WHITE = [255, 255, 255, 255]
 VIRIDIS = matplotlib.colormaps["viridis"]
 
 
-def tables() -> tuple[pd.DataFrame, pd.DataFrame]:
-    """A pair crossing at x = 40 (agglomerate 1) and a single particle."""
-    p = find_agglomerates(
+def tables() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """A pair crossing at x = 40 (agglomerate 1) and a single particle;
+    particles, agglomerates and contacts."""
+    p, contacts = find_agglomerates(
         make_particles([30, 50, 50], [40, 40, 90], [12, 12, 5])
     )
-    return p, agglomerate_properties(p)
+    return p, agglomerate_properties(p, contacts), contacts
 
 
-def drawn(p, agg, **options) -> tuple[np.ndarray, draw.Drawing]:
+def drawn(p, agg, c, **options) -> tuple[np.ndarray, draw.Drawing]:
     fig, ax = draw.figure((120, 100), legend=False)
     options = {"legend": False, **options}
-    drawing = draw.agglomerates(ax, p, agg, **options)
+    drawing = draw.agglomerates(ax, p, agg, c, **options)
     return render(fig), drawing
 
 
 def test_the_overlap_is_filled_once():
-    p, agg = tables()
-    image, _ = drawn(p, agg, color_by="member_count", linewidth=0)
+    p, agg, c = tables()
+    image, _ = drawn(p, agg, c, color_by="member_count", linewidth=0)
     # same colour inside one circle only and inside both
     np.testing.assert_array_equal(image[40, 25], image[40, 40])
     assert (image[40, 25] != WHITE).any()
 
 
 def test_colour_is_the_agglomerate_value():
-    p, agg = tables()
+    p, agg, c = tables()
     image, _ = drawn(
-        p, agg, color_by="member_count", cmap="viridis", alpha=1.0
+        p, agg, c, color_by="member_count", cmap="viridis", alpha=1.0
     )
     np.testing.assert_array_equal(image[40, 25], rgba(VIRIDIS(1.0)))
     np.testing.assert_array_equal(image[90, 50], rgba(VIRIDIS(0.0)))
 
 
 def test_image_alpha_dims_the_image():
-    p, agg = tables()
+    p, agg, c = tables()
     image = np.full((120, 100), 200, dtype=np.uint8)
     rendered, _ = drawn(
-        p, agg, color_by="member_count", image=image, image_alpha=0.4
+        p, agg, c, color_by="member_count", image=image, image_alpha=0.4
     )
     # 0.4 * 200 + 0.6 * 255 on the white figure
     np.testing.assert_allclose(rendered[5, 5, :3], 233, atol=1)
 
 
 def test_no_inner_circle_lines():
-    p, agg = tables()
-    image, _ = drawn(p, agg, color_by="member_count", alpha=0.0, linewidth=4)
+    p, agg, c = tables()
+    image, _ = drawn(
+        p, agg, c, color_by="member_count", alpha=0.0, linewidth=4
+    )
     # x = 38 lies on the right circle's edge, inside the left circle
     np.testing.assert_array_equal(image[40, 38], WHITE)
     # the outer outline at the left circle's far edge is drawn
@@ -69,17 +72,18 @@ def test_no_inner_circle_lines():
 
 
 def test_outline_arcs_are_one_path_per_agglomerate():
-    p, agg = tables()
-    _, drawing = drawn(p, agg, color_by="member_count")
+    p, agg, c = tables()
+    _, drawing = drawn(p, agg, c, color_by="member_count")
     assert len(drawing.outlines.get_paths()) == 2
     assert len(drawing.fills.get_paths()) == 2
 
 
 def test_members_of_unselected_agglomerates_are_others():
-    p, agg = tables()
+    p, agg, c = tables()
     image, drawing = drawn(
         p,
         agg,
+        c,
         color_by="member_count",
         select=agg["member_count"] > 1,
         linewidth=6,
@@ -91,17 +95,18 @@ def test_members_of_unselected_agglomerates_are_others():
 
 def test_a_hole_in_a_ring_is_outlined_and_not_filled():
     angle = np.linspace(0, 2 * np.pi, 24, endpoint=False)
-    p = find_agglomerates(
+    p, contacts = find_agglomerates(
         make_particles(
             60 + 40 * np.cos(angle), 60 + 40 * np.sin(angle), np.full(24, 7.0)
         )
     )
-    agg = agglomerate_properties(p)
+    agg = agglomerate_properties(p, contacts)
     fig, ax = draw.figure((120, 120), legend=False)
     draw.agglomerates(
         ax,
         p,
         agg,
+        contacts,
         color_by="member_count",
         alpha=1.0,
         linewidth=0,
@@ -112,18 +117,34 @@ def test_a_hole_in_a_ring_is_outlined_and_not_filled():
 
 
 def test_particles_need_agglomerate_ids():
-    p, agg = tables()
+    p, agg, c = tables()
     with pytest.raises(TableError, match="agglomerate_id"):
-        drawn(p.drop(columns="agglomerate_id"), agg, color_by="area")
+        drawn(p.drop(columns="agglomerate_id"), agg, c, color_by="area")
 
 
 def test_repeated_agglomerate_ids_raise():
-    p, agg = tables()
+    p, agg, c = tables()
     with pytest.raises(TableError, match="agglomerate_id"):
-        drawn(p, pd.concat([agg, agg]), color_by="area")
+        drawn(p, pd.concat([agg, agg]), c, color_by="area")
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        lambda c: c.assign(id_b=c.id_b + 10),  # ids of another image
+        lambda c: c.assign(agglomerate_id=c.agglomerate_id + 1),
+        # without its pair, the crossing pair would be two circles
+        lambda c: c.iloc[:0],
+    ],
+    ids=["unknown id", "other agglomerate", "missing pair"],
+)
+def test_agglomerates_rejects_contacts_of_another_table(change):
+    p, agg, c = tables()
+    with pytest.raises(TableError, match="contacts"):
+        drawn(p, agg, change(c), color_by="member_count")
 
 
 def test_select_is_on_the_agglomerate_table():
-    p, agg = tables()
+    p, agg, c = tables()
     with pytest.raises(TableError, match="select"):
-        drawn(p, agg, color_by="area", select=p["r"] > 5)
+        drawn(p, agg, c, color_by="area", select=p["r"] > 5)

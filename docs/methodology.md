@@ -101,7 +101,20 @@ Once pairwise connections are known, agglomerates are formed by a **recursive/DF
 
 A particle with no connections becomes a single-particle "agglomerate." These are not true agglomerates — which is why agglpy's output is more accurately described as *aerosol particle data* rather than strictly *agglomerate data*.
 
-Codebase: `aggl.py` (`Particle`/`Agglomerate` construction and classification into `"collector" | "attached2coll" | "separate" | "similar"`, driven by `Manager.collector_threshold`).
+**Possible contacts.** The connections that group the particles are not all contacts. A circle is the projection of a sphere, so overlapping circles show that two particles *may* touch. One case is known to be impossible: when $P_k$ lies inside $P_j$ and $P_j$ inside $P_i$ (all three containments $s \le r_L - r_s$), the inner $P_k$ cannot reach the outer $P_i$ through the middle one. agglpy lists the *possible contacts*: every connected pair except such an outer–inner pair; with deeper nesting only neighbouring levels stay. Dropping these pairs changes no grouping (the dropped pair is always linked through the middle particle), no enclosed flag and no projected area (the middle particle covers the inner one). Every other overlap is kept, also when it cannot be decided from the image, e.g. two particles inside a larger one that overlap each other: they count as three contacts, though only two of them may be real.
+
+For an agglomerate of $n$ members, the true contacts therefore lie between two bounds:
+
+$$n - 1 \le C_{true} \le C,$$
+
+where $C$ is the number of possible contacts (`contact_count`): at least $n - 1$ contacts hold the members together (a chain or a branched agglomerate), at most the possible ones are real. Derived from it:
+
+- `coordination` (per particle): its possible contacts, an upper bound of the coordination number;
+- `loop_count` (per agglomerate) $= C - n + 1$: the contacts beyond those that hold it together, the circuit rank of its contact graph; 0 for a chain or a branched agglomerate; an upper bound.
+
+Caveats: the image is a 2D projection; tangency is decided on the detected circles, so a contact depends on about 1 px of the detection; duplicate circles of one particle (warned at detection) add contacts; an agglomerate cut by the image edge (`touches_edge`) misses the contacts outside it; particles hidden on the far side add none (the contact values have no with-hidden variant, section 7).
+
+Codebase: `agglpy.core.agglomerates.find_agglomerates` returns the particles (with `agglomerate_id`, `enclosed`, `coordination`) and the contact pairs; `agglpy.core.properties.agglomerate_properties` gives `contact_count` and `loop_count`. agglpy 0.4: `aggl.py` (`Particle`/`Agglomerate` construction and classification into `"collector" | "attached2coll" | "separate" | "similar"`, driven by `Manager.collector_threshold`).
 
 ## 7. Hidden primary particles: enclosed particles and the with-hidden values
 
@@ -147,7 +160,13 @@ Metrics describe a group of images: one image, a user group (a column of the ima
 
 **Across images.** `summary_across_images` computes each metric per image, then the mean, the sample standard deviation $s$, the number of images $n$ with a value and the confidence interval $\bar{x} \pm t_{(1+c)/2,\,n-1}\, s/\sqrt{n}$ (level $c$, 0.95 by default). Each image weighs equally, so this describes the typical image; with $n = 1$ the spread is undefined (NaN). `values_across_images` does the same for any per-image value.
 
-**Counts and ratios.** $N_{primary}$ primary particles, $N_{aerosol}$ aerosol particles (agglomerates and single particles), $N_{pp1}$ single particles, $N_{ppA} = N_{primary} - N_{pp1}$, $N_{aggl} = N_{aerosol} - N_{pp1}$. The agglomeration ratio $R_a = N_{aggl}/N_{primary}$ is that of Gotoh et al. (1996), when no particle is lost or added between deposition and counting. The agglomerated fraction $1 - N_{pp1}/N_{primary}$ is the number fraction of primary particles bound in agglomerates (called ER in agglpy ≤ 0.4). $n_{ppA} = N_{ppA}/N_{aggl}$ and $n_{ppP} = N_{primary}/N_{aerosol}$ are the mean numbers of primary particles per agglomerate and per aerosol particle.
+**Counts and ratios.** $N_{primary}$ primary particles, $N_{aerosol}$ aerosol particles (agglomerates and single particles), $N_{pp1}$ single particles, $N_{ppA} = N_{primary} - N_{pp1}$, $N_{aggl} = N_{aerosol} - N_{pp1}$, and $N_{merges} = N_{primary} - N_{aerosol}$, the merges that joined the primary particles into the aerosol particles (the sum of $n - 1$ over the agglomerates; the rank of the contact graph). The agglomeration ratio $R_a = N_{aggl}/N_{primary}$ is that of Gotoh et al. (1996), when no particle is lost or added between deposition and counting. $R_a$ is not monotonic: it lies between 0 and 0.5 and falls when two agglomerates merge into one. The agglomerated fraction $F = 1 - N_{pp1}/N_{primary}$ is the number fraction of primary particles bound in agglomerates (called ER in agglpy ≤ 0.4). The merge ratio
+
+$$M = \frac{N_{merges}}{N_{primary} - 1} = \frac{N_{primary} - N_{aerosol}}{N_{primary} - 1}$$
+
+is the degree of agglomeration: 0 when every particle is single, 1 when all form one agglomerate, and it grows with every merge (undefined, NaN, below two particles). The three are linked exactly by $F = M\,(N_{primary} - 1)/N_{primary} + R_a$. Example: a triangle of three particles, a chain of three and a single particle give $N_{primary} = 7$, $N_{aerosol} = 3$, $N_{merges} = 4$, $R_a = 2/7 = 0.286$, $F = 6/7 = 0.857$ and $M = 4/6 = 0.667$. $n_{ppA} = N_{ppA}/N_{aggl}$ and $n_{ppP} = N_{primary}/N_{aerosol}$ are the mean numbers of primary particles per agglomerate and per aerosol particle.
+
+**Contacts.** From the possible contacts of section 6: $N_{contacts}$, the summed `contact_count`; $N_{loops} = N_{contacts} - N_{merges}$, the summed `loop_count` (circuit rank); and the mean coordination number $\bar{z} = 2 N_{contacts} / N_{primary}$ (each contact has two ends). All three are upper bounds. In the example above, $N_{contacts} = 5$ (3 in the triangle, 2 in the chain), $N_{loops} = 1$ and $\bar{z} = 10/7 = 1.43$.
 
 **Per area.** With the analysed area of each image (field of view), `coverage` is the summed projected area of the agglomerates over the summed field of view (agglomerates never share area, so this is the exact union of all circles), and `N_*_per_area` are the counts per unit area. Circles crossing the image border count in full, so these values are biased high for large agglomerates on small images.
 

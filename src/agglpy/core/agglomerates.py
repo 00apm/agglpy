@@ -1,27 +1,39 @@
-"""Group particles into agglomerates.
+"""Group particles into agglomerates and list their contacts.
 
 Two particles touch when the distance of their centres is at most the
-sum of their radii, compared exactly in px (D-037). An agglomerate is a
-set of particles linked by a chain of contacts. Every particle belongs
-to exactly one, so the whole grouping is one column of the particle
-table, ``agglomerate_id``. ``enclosed`` marks a particle lying
-completely inside a larger particle (old name ``idj``).
+sum of their radii, compared exactly in px. An agglomerate is a set of
+particles linked by a chain of contacts. Every particle belongs to
+exactly one, so the whole grouping is one column of the particle table,
+``agglomerate_id``. ``enclosed`` marks a particle lying completely
+inside a larger particle (old name ``idj``).
+
+The contacts table lists the *possible* contacts: every pair of
+overlapping circles except an outer X and an inner C with some B such
+that C lies inside B and B inside X (an inner particle cannot reach an
+outer one through the one between). A circle shows only the projection
+of a sphere, so overlapping circles need not touch: within an
+agglomerate of n members, ``n - 1 <= true contacts <= possible
+contacts``. Caveats: 2D projection; tangency decided within about 1 px
+of the detection; duplicate circles (warned) add contacts; agglomerates
+cut by the image edge (``touches_edge``) and particles hidden behind
+others miss theirs.
 
 ``find_agglomerates`` takes a validated particle table
-(``tables.validate_particles``), never modifies it and runs the three
-private grouping steps (contacts, labels, enclosed) in order.
+(``tables.validate_particles``), never modifies it and runs the private
+steps (contacts, labels, enclosed, possible contacts) in order.
 ``select_agglomerates`` takes a consistent subset of the particle and
 agglomerate tables.
 """
 
 import itertools
 import warnings
-from typing import NamedTuple
+from collections.abc import Sequence
+from typing import Any, NamedTuple
 
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
-from scipy.sparse import coo_matrix
+from scipy.sparse import coo_matrix, csr_matrix
 from scipy.sparse.csgraph import connected_components
 from scipy.spatial import cKDTree
 
@@ -130,17 +142,40 @@ def _label_agglomerates(
     )
 
 
-def _find_enclosed(particles: pd.DataFrame, contacts: _Contacts) -> pd.Series:
+def _find_inside(
+    particles: pd.DataFrame, contacts: _Contacts
+) -> NDArray[np.bool_]:
+    """Per contact: the smaller circle lies inside the larger one.
+
+    Outline included: ``d <= r_large - r_small``. Contacts are
+    oriented, so only the smaller member can be inside; of two
+    identical circles, the one with the higher id.
+    """
+    if not len(contacts.larger):
+        return np.zeros(0, dtype=bool)
+    xy = particles[["x", "y"]].to_numpy(dtype=np.float64)
+    r = particles["r"].to_numpy(dtype=np.float64)
+    larger, smaller = contacts
+    inside: NDArray[np.bool_] = (
+        _distance(xy, larger, smaller) <= r[larger] - r[smaller]
+    )
+    return inside
+
+
+def _find_enclosed(
+    particles: pd.DataFrame, contacts: _Contacts, inside: NDArray[np.bool_]
+) -> pd.Series:
     """Flag particles lying completely inside a larger particle.
 
     A particle is enclosed when its circle, outline included, is inside
-    the circle of a particle it touches: ``d <= r_large - r_small``.
-    For two identical circles only the one with the higher id is
-    enclosed.
+    the circle of a particle it touches (``_find_inside``). For two
+    identical circles only the one with the higher id is enclosed.
 
     Args:
         particles: A validated particle table.
         contacts: Its contacts (``_find_contacts``).
+        inside: Per contact, whether it is an enclosure
+            (``_find_inside``).
 
     Returns:
         ``enclosed`` (bool) per particle, on the table's index.
@@ -152,18 +187,67 @@ def _find_enclosed(particles: pd.DataFrame, contacts: _Contacts) -> pd.Series:
             counted as an enclosed particle.
     """
     enclosed = np.zeros(len(particles), dtype=bool)
-    if len(contacts.larger):
-        xy = particles[["x", "y"]].to_numpy(dtype=np.float64)
-        r = particles["r"].to_numpy(dtype=np.float64)
-        larger, smaller = contacts
-        # Contacts are oriented: only the smaller member can be inside.
-        inside = _distance(xy, larger, smaller) <= r[larger] - r[smaller]
-        enclosed[smaller[inside]] = True
-        if inside.any():
-            _warn_enclosed_duplicates(
-                particles, larger[inside], smaller[inside]
-            )
+    if inside.any():
+        larger, smaller = contacts.larger[inside], contacts.smaller[inside]
+        enclosed[smaller] = True
+        _warn_enclosed_duplicates(particles, larger, smaller)
     return pd.Series(enclosed, index=particles.index, name="enclosed")
+
+
+def _possible(
+    contacts: _Contacts, inside: NDArray[np.bool_], n: int
+) -> NDArray[np.bool_]:
+    """Per contact: it can be real (not X-C with C inside B inside X)."""
+    keep = np.ones(len(inside), dtype=bool)
+    if inside.any():
+        big, small = contacts.larger[inside], contacts.smaller[inside]
+        held = csr_matrix(
+            (np.ones(len(big), dtype=np.int64), (big, small)), shape=(n, n)
+        )
+        # (held @ held)[X, C] > 0: some B holds C and is held by X. Only
+        # enclosures can be dropped: a crossing pair always stays.
+        via = np.asarray((held @ held)[big, small]).ravel()
+        keep[np.flatnonzero(inside)[via > 0]] = False
+    return keep
+
+
+# The columns a contacts table needs; ``inside`` is for information.
+_PAIR_COLUMNS = ("agglomerate_id", "id_a", "id_b")
+
+
+class _Pairs(NamedTuple):
+    """A checked contacts table, read once (``_check_contacts``).
+
+    ``ids`` are the particle ids in row order; ``agglomerate_id``,
+    ``id_a`` and ``id_b`` one value per pair.
+    """
+
+    ids: NDArray[np.int64]
+    agglomerate_id: NDArray[np.int64]
+    id_a: NDArray[np.int64]
+    id_b: NDArray[np.int64]
+
+
+def _contacts_table(
+    particles: pd.DataFrame,
+    contacts: _Contacts,
+    inside: NDArray[np.bool_],
+    keep: NDArray[np.bool_],
+) -> pd.DataFrame:
+    """The kept contacts by particle id, sorted by agglomerate and ids."""
+    ids = particles["id"].to_numpy(dtype=np.int64)
+    labels = particles["agglomerate_id"].to_numpy(dtype=np.int64)
+    larger, smaller = contacts.larger[keep], contacts.smaller[keep]
+    table = pd.DataFrame(
+        {
+            "agglomerate_id": labels[larger],
+            "id_a": ids[larger],
+            "id_b": ids[smaller],
+            "inside": inside[keep],
+        }
+    ).astype({"agglomerate_id": np.int64, "id_a": np.int64, "id_b": np.int64})
+    order = np.lexsort((table["id_b"], table["id_a"], table["agglomerate_id"]))
+    return table.iloc[order].reset_index(drop=True)
 
 
 def _warn_enclosed_duplicates(
@@ -207,16 +291,27 @@ def _distance(
     return np.sqrt(dx * dx + dy * dy)
 
 
-def find_agglomerates(particles: pd.DataFrame) -> pd.DataFrame:
-    """Group particles into agglomerates and flag enclosed particles.
+def find_agglomerates(
+    particles: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Group particles into agglomerates and list their contacts.
 
     Args:
         particles: A particle table.
 
     Returns:
-        A validated copy (fresh index, rows in input order) with the
-        columns ``agglomerate_id`` (int64) and ``enclosed`` (bool),
-        replacing any from an earlier run.
+        ``(particles, contacts)``. ``particles``: a validated copy
+        (fresh index, rows in input order) with the columns
+        ``agglomerate_id`` (int64), ``enclosed`` (bool) and
+        ``coordination`` (int64, the particle's possible contacts),
+        replacing any from an earlier run. ``contacts``: one row per
+        possible contact (see the module docstring), columns
+        ``agglomerate_id``, ``id_a``, ``id_b`` (int64; ``id_a`` the
+        larger particle, of equal ones the lower id) and ``inside``
+        (bool: ``id_b`` lies inside ``id_a``), sorted by
+        ``agglomerate_id, id_a, id_b``, with a fresh ``RangeIndex``.
+        Possible contacts are an upper bound: ``coordination`` may
+        count a particle that only overlaps in the projection.
 
     Raises:
         ParticleTableError: If the table breaks the schema.
@@ -227,10 +322,139 @@ def find_agglomerates(particles: pd.DataFrame) -> pd.DataFrame:
     # The caller saw the general duplicate warning when the table was
     # made; only the one about enclosed duplicates comes from here.
     table = validate_particles(particles, warn_duplicates=False)
+    n = len(table)
     contacts = _find_contacts(table)
     table["agglomerate_id"] = _label_agglomerates(table, contacts)
-    table["enclosed"] = _find_enclosed(table, contacts)
-    return table
+    inside = _find_inside(table, contacts)
+    table["enclosed"] = _find_enclosed(table, contacts, inside)
+    keep = _possible(contacts, inside, n)
+    ends = np.concatenate([contacts.larger[keep], contacts.smaller[keep]])
+    table["coordination"] = np.bincount(ends, minlength=n).astype(np.int64)
+    return table, _contacts_table(table, contacts, inside, keep)
+
+
+def _check_contacts(particles: pd.DataFrame, contacts: pd.DataFrame) -> _Pairs:
+    """Check that ``contacts`` are the contact pairs of these particles.
+
+    Particle ids must be unique. Every ``id_a`` / ``id_b`` must be a
+    particle id, both particles must belong to the row's
+    ``agglomerate_id``, no pair may join a particle with itself or
+    repeat, and the pairs must hold every agglomerate together: a
+    filtered table would give wrong areas, outlines and negative loop
+    counts. Ids may be whole floats (a table read back from a CSV
+    file). ``inside`` is not needed.
+
+    Returns:
+        The ids, read once, for the caller to use.
+
+    Raises:
+        TableError: If a column is missing, an id is not an integer or
+            repeats, or the pairs do not match the particles.
+    """
+    for name, table, columns in (
+        ("particles", particles, ("id", "agglomerate_id")),
+        ("contacts", contacts, _PAIR_COLUMNS),
+    ):
+        missing = [c for c in columns if c not in table.columns]
+        if missing:
+            raise TableError(f"{name}: missing columns {missing}")
+    ids = _whole(particles, "id", "particles")
+    repeats = pd.Index(ids).duplicated()
+    if repeats.any():
+        raise TableError(
+            f"particles: ids {_some(np.unique(ids[repeats]))} repeat; "
+            "each particle needs its own id"
+        )
+    labels = pd.Series(_whole(particles, "agglomerate_id", "particles"), ids)
+    pair_label = _whole(contacts, "agglomerate_id", "contacts")
+    ends = {e: _whole(contacts, e, "contacts") for e in ("id_a", "id_b")}
+    unknown = np.setdiff1d(np.concatenate(list(ends.values())), ids)
+    if len(unknown):
+        raise TableError(
+            f"contacts: ids {_some(unknown)} not in the particle table; "
+            "filter the contacts like the particles (e.g. to the same "
+            "agglomerates)"
+        )
+    wrong = np.zeros(len(contacts), dtype=bool)
+    for end in ends.values():
+        wrong |= labels.reindex(end).to_numpy() != pair_label
+    if wrong.any():
+        rows = contacts[wrong].head(_MAX_LISTED)
+        listed = ", ".join(
+            f"({a}, {b}) in {g}"
+            for g, a, b in rows[["agglomerate_id", "id_a", "id_b"]].to_numpy()
+        )
+        raise TableError(
+            "contacts: pairs whose ends are not both in the row's "
+            f"agglomerate: {listed}"
+        )
+    a, b = ends["id_a"], ends["id_b"]
+    if (a == b).any():
+        raise TableError(
+            "contacts: pairs of a particle with itself: ids "
+            f"{_some(np.unique(a[a == b]))}"
+        )
+    pairs = pd.DataFrame({"a": np.minimum(a, b), "b": np.maximum(a, b)})
+    repeated = pairs[pairs.duplicated()].drop_duplicates()
+    if len(repeated):
+        listed = _some([f"({x}, {y})" for x, y in repeated.to_numpy()])
+        raise TableError(f"contacts: pairs repeat: {listed}")
+    # An agglomerate is held together exactly when its members form one
+    # connected group of the pairs.
+    n = len(labels)
+    at = _contact_rows(ids, a, b)
+    graph = coo_matrix(
+        (np.ones(len(a), dtype=np.int8), (at.larger, at.smaller)),
+        shape=(n, n),
+    )
+    _, group = connected_components(graph, directed=False)
+    groups = pd.Series(group).groupby(labels.to_numpy()).nunique()
+    split = groups.index[groups.to_numpy() > 1]
+    if len(split):
+        raise TableError(
+            "contacts: agglomerates not held together by their pairs: "
+            f"{_some(split)}; give the whole contacts table of "
+            "find_agglomerates for these particles"
+        )
+    return _Pairs(ids, pair_label, a, b)
+
+
+def _some(values: Sequence[object] | NDArray[Any] | pd.Index) -> str:
+    """Up to ten values, then how many more."""
+    listed = ", ".join(map(str, values[:_MAX_LISTED]))
+    more = len(values) - _MAX_LISTED
+    return listed + (f" and {more} more" if more > 0 else "")
+
+
+def _contact_rows(
+    ids: NDArray[np.int64],
+    id_a: NDArray[np.int64],
+    id_b: NDArray[np.int64],
+) -> _Contacts:
+    """Pairs of particle ids as row positions in ``ids``.
+
+    ``larger`` is the row of ``id_a``. Every id of the pairs must be in
+    ``ids`` (``_check_contacts``, or pairs chosen for these rows).
+    """
+    index = pd.Index(ids)
+    return _Contacts(
+        index.get_indexer(pd.Index(id_a)).astype(np.intp),
+        index.get_indexer(pd.Index(id_b)).astype(np.intp),
+    )
+
+
+def _whole(table: pd.DataFrame, column: str, name: str) -> NDArray[np.int64]:
+    # Whole floats pass (3.0 after a CSV round trip); 0.5, NaN or text
+    # would be cut or match nothing without a word.
+    values = table[column]
+    if pd.api.types.is_integer_dtype(values):
+        return values.to_numpy(dtype=np.int64)
+    numbers = pd.to_numeric(values, errors="coerce").to_numpy(
+        dtype=np.float64, na_value=np.nan
+    )
+    if not (np.isfinite(numbers) & (numbers == np.round(numbers))).all():
+        raise TableError(f"{name}: column {column!r} must hold integers")
+    return numbers.astype(np.int64)
 
 
 def select_agglomerates(

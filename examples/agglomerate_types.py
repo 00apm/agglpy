@@ -77,7 +77,8 @@ def type_counts(
 # particles; `img2` has two single particles.
 #
 # Each image goes through the core: `find_agglomerates` groups the
-# particles, `agglomerate_properties` measures each agglomerate (one
+# particles and lists their contacts, `agglomerate_properties`
+# measures each agglomerate from both tables (one
 # row each, with `member_count` and `size_ratio`). The `image` column
 # says where each row came from, so the tables can be stacked.
 
@@ -90,7 +91,7 @@ images = {
 }
 agglomerates = pd.concat(
     [
-        agglomerate_properties(find_agglomerates(p)).assign(image=name)
+        agglomerate_properties(*find_agglomerates(p)).assign(image=name)
         for name, p in images.items()
     ],
     ignore_index=True,

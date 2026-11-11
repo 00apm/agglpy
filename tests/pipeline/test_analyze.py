@@ -87,6 +87,19 @@ def test_with_a_size_the_outside_circle_is_dropped_and_warned():
     assert res.region == REGION
 
 
+def test_contacts_are_pairs_of_kept_particles():
+    pairs = ["agglomerate_id", "id_a", "id_b", "inside"]
+    # without a size: 1-2 and 4-5 (equal radii: the lower id first)
+    res = analyze(_table())
+    assert res.contacts[pairs].values.tolist() == [
+        [0, 1, 2, False],
+        [2, 4, 5, False],
+    ]
+    # with it, 4 is dropped and takes its contact along
+    res = _analyze_quietly(_table(), **SIZE, region=REGION)
+    assert res.contacts[pairs].values.tolist() == [[0, 1, 2, False]]
+
+
 def test_the_warning_points_at_the_caller():
     with pytest.warns(ParticlesOutsideRegionWarning) as record:
         analyze(_table(), **SIZE, region=REGION)
