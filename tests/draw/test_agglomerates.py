@@ -128,22 +128,15 @@ def test_repeated_agglomerate_ids_raise():
         drawn(p, pd.concat([agg, agg]), c, color_by="area")
 
 
-def test_the_pairs_give_the_outline():
-    # without its pair, the crossing pair is outlined as two circles:
-    # the inner line at x = 38 (see test_no_inner_circle_lines) shows
-    p, agg, c = tables()
-    options = {"color_by": "member_count", "alpha": 0.0, "linewidth": 4}
-    image, _ = drawn(p, agg, c.iloc[:0], **options)
-    assert (image[40, 38] != WHITE).any()
-
-
 @pytest.mark.parametrize(
     "change",
     [
         lambda c: c.assign(id_b=c.id_b + 10),  # ids of another image
         lambda c: c.assign(agglomerate_id=c.agglomerate_id + 1),
+        # without its pair, the crossing pair would be two circles
+        lambda c: c.iloc[:0],
     ],
-    ids=["unknown id", "other agglomerate"],
+    ids=["unknown id", "other agglomerate", "missing pair"],
 )
 def test_agglomerates_rejects_contacts_of_another_table(change):
     p, agg, c = tables()

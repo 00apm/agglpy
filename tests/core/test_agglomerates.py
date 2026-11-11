@@ -585,8 +585,38 @@ def test_possible_contacts_match_brute_force(seed: int):
             "agglomerate",
         ),
         (lambda p, c: (p, c.assign(id_a=c.id_a + 0.5)), "integers"),
+        # a filtered table: area and loop_count would be wrong
+        (lambda p, c: (p, c.iloc[:-1]), "not held together"),
+        (lambda p, c: (p, c.iloc[:0]), "not held together"),
+        (lambda p, c: (p, c.assign(id_b=c.id_a)), "itself"),
+        (lambda p, c: (p, pd.concat([c, c.iloc[:1]])), "repeat"),
+        (
+            lambda p, c: (
+                p,
+                pd.concat(
+                    [
+                        c,
+                        c.iloc[:1].rename(
+                            columns={"id_a": "id_b", "id_b": "id_a"}
+                        ),
+                    ]
+                ),
+            ),
+            "repeat",
+        ),
     ],
-    ids=["contacts column", "particles column", "id", "agglomerate", "float"],
+    ids=[
+        "contacts column",
+        "particles column",
+        "id",
+        "agglomerate",
+        "float",
+        "missing pair",
+        "no pairs",
+        "self pair",
+        "repeated pair",
+        "swapped repeat",
+    ],
 )
 def test_check_contacts_rejects(change, message: str):
     found, contacts = _possible([0, 8, 4, 100, 108], [0, 0, 7, 0, 0], [5] * 5)

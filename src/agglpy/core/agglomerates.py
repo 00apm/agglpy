@@ -27,7 +27,8 @@ agglomerate tables.
 
 import itertools
 import warnings
-from typing import NamedTuple
+from collections.abc import Sequence
+from typing import Any, NamedTuple
 
 import numpy as np
 import pandas as pd
@@ -319,15 +320,18 @@ def find_agglomerates(
 
 
 def _check_contacts(particles: pd.DataFrame, contacts: pd.DataFrame) -> None:
-    """Check that ``contacts`` are pairs of these particles.
+    """Check that ``contacts`` are the contact pairs of these particles.
 
-    Every ``id_a`` / ``id_b`` must be a particle id, and both particles
-    must belong to the row's ``agglomerate_id``. Ids may be whole floats
-    (a table read back from a CSV file).
+    Every ``id_a`` / ``id_b`` must be a particle id, both particles must
+    belong to the row's ``agglomerate_id``, no pair may join a particle
+    with itself or repeat, and the pairs must hold every agglomerate
+    together: a filtered table would give wrong areas, outlines and
+    negative loop counts. Ids may be whole floats (a table read back
+    from a CSV file).
 
     Raises:
         TableError: If a column is missing, an id is not an integer, or
-            a pair does not match the particles.
+            the pairs do not match the particles.
     """
     for name, table, columns in (
         ("particles", particles, ("id", "agglomerate_id")),
@@ -344,11 +348,8 @@ def _check_contacts(particles: pd.DataFrame, contacts: pd.DataFrame) -> None:
     ends = {e: _whole(contacts, e, "contacts") for e in ("id_a", "id_b")}
     unknown = np.setdiff1d(np.concatenate(list(ends.values())), labels.index)
     if len(unknown):
-        listed = ", ".join(map(str, unknown[:_MAX_LISTED]))
-        more = len(unknown) - _MAX_LISTED
-        suffix = f" and {more} more" if more > 0 else ""
         raise TableError(
-            f"contacts: ids {listed}{suffix} not in the particle table"
+            f"contacts: ids {_some(unknown)} not in the particle table"
         )
     wrong = np.zeros(len(contacts), dtype=bool)
     for end in ends.values():
@@ -363,6 +364,41 @@ def _check_contacts(particles: pd.DataFrame, contacts: pd.DataFrame) -> None:
             "contacts: pairs whose ends are not both in the row's "
             f"agglomerate: {listed}"
         )
+    a, b = ends["id_a"], ends["id_b"]
+    if (a == b).any():
+        raise TableError(
+            "contacts: pairs of a particle with itself: ids "
+            f"{_some(np.unique(a[a == b]))}"
+        )
+    pairs = pd.DataFrame({"a": np.minimum(a, b), "b": np.maximum(a, b)})
+    repeated = pairs[pairs.duplicated()].drop_duplicates()
+    if len(repeated):
+        listed = _some([f"({x}, {y})" for x, y in repeated.to_numpy()])
+        raise TableError(f"contacts: pairs repeat: {listed}")
+    # An agglomerate is held together exactly when its members form one
+    # connected group of the pairs.
+    n = len(labels)
+    at = _contact_rows(labels.index.to_numpy(), contacts)
+    graph = coo_matrix(
+        (np.ones(len(a), dtype=np.int8), (at.larger, at.smaller)),
+        shape=(n, n),
+    )
+    _, group = connected_components(graph, directed=False)
+    groups = pd.Series(group).groupby(labels.to_numpy()).nunique()
+    split = groups.index[groups.to_numpy() > 1]
+    if len(split):
+        raise TableError(
+            "contacts: agglomerates not held together by their pairs: "
+            f"{_some(split)}; give the whole contacts table of "
+            "find_agglomerates for these particles"
+        )
+
+
+def _some(values: Sequence[object] | NDArray[Any] | pd.Index) -> str:
+    """Up to ten values, then how many more."""
+    listed = ", ".join(map(str, values[:_MAX_LISTED]))
+    more = len(values) - _MAX_LISTED
+    return listed + (f" and {more} more" if more > 0 else "")
 
 
 def _contact_rows(
