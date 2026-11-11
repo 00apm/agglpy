@@ -365,6 +365,22 @@ def _check_contacts(particles: pd.DataFrame, contacts: pd.DataFrame) -> None:
         )
 
 
+def _contact_rows(
+    ids: NDArray[np.integer], contacts: pd.DataFrame
+) -> _Contacts:
+    """The pairs of ``contacts`` as row positions in ``ids``.
+
+    ``larger`` is the row of ``id_a``. Every id of the pairs must be in
+    ``ids`` (``_check_contacts``, or pairs chosen for these rows).
+    """
+    index = pd.Index(np.asarray(ids, dtype=np.int64))
+    a, b = (
+        index.get_indexer(pd.Index(_whole(contacts, end, "contacts")))
+        for end in ("id_a", "id_b")
+    )
+    return _Contacts(a.astype(np.intp), b.astype(np.intp))
+
+
 def _whole(table: pd.DataFrame, column: str, name: str) -> NDArray[np.int64]:
     # Whole floats pass (3.0 after a CSV round trip); 0.5, NaN or text
     # would be cut or match nothing without a word.

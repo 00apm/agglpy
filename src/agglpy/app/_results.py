@@ -602,8 +602,9 @@ class Results:
         size = float(row.pixel_size)
         mine = self.particles.image == name
         particles = self.particles.loc[mine, ["x", "y", "r"]] / size
+        particles["id"] = self.particles.id[mine]
         particles["agglomerate_id"] = self.particles.agglomerate_id[mine]
-        agglomerates = None
+        agglomerates = contacts = None
         # under its own name: color_by="r" must not replace r in px
         if what == "particles":
             particles[_VALUES] = self.particles[color_by][mine]
@@ -611,6 +612,9 @@ class Results:
             mine = self.agglomerates.image == name
             agglomerates = self.agglomerates.loc[mine, ["agglomerate_id"]]
             agglomerates[_VALUES] = self.agglomerates[color_by][mine]
+            contacts = self.contacts[self.contacts.image == name].drop(
+                columns="image"
+            )
         select = chosen[mine]
         width, height = int(row.width), int(row.height)
         region = self._origin.images[name]["region"]
@@ -618,6 +622,7 @@ class Results:
         return _Sheet(
             particles,
             agglomerates,
+            contacts,
             select.copy(),
             width,
             height,
@@ -686,6 +691,7 @@ class _Sheet:
 
     particles: pd.DataFrame
     agglomerates: pd.DataFrame | None
+    contacts: pd.DataFrame | None
     select: pd.Series
     width: int
     height: int
@@ -746,7 +752,7 @@ class Drawings(Mapping[str, Figure]):
             background=self._background,
             origin=origin,
         )
-        if sheet.agglomerates is None:
+        if sheet.agglomerates is None or sheet.contacts is None:
             _draw.particles(
                 ax,
                 sheet.particles,
@@ -760,6 +766,7 @@ class Drawings(Mapping[str, Figure]):
                 ax,
                 sheet.particles,
                 sheet.agglomerates,
+                sheet.contacts,
                 color_by=_VALUES,
                 select=sheet.select,
                 image=image,

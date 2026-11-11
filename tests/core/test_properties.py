@@ -14,7 +14,7 @@ import pandas as pd
 import pytest
 
 from agglpy.core import properties
-from agglpy.core.agglomerates import _find_contacts, find_agglomerates
+from agglpy.core.agglomerates import _contact_rows, find_agglomerates
 from agglpy.core.properties import (
     DIMENSIONS,
     agglomerate_properties,
@@ -427,24 +427,6 @@ def test_nearly_internally_tangent_circle_area(gap: float):
     assert p["area"] == pytest.approx(100 * math.pi, rel=1e-9)
 
 
-def test_contact_search_gets_image_positions(monkeypatch):
-    # Review Focus 1: centres shifted to each agglomerate's centre of
-    # mass would pile every agglomerate onto the origin. The area stays
-    # right but the contact search gets ~1000x slower, so only a check
-    # of the call itself catches it.
-    seen = []
-
-    def spy(particles: pd.DataFrame):
-        seen.append(particles[["x", "y"]].to_numpy().copy())
-        return _find_contacts(particles)
-
-    monkeypatch.setattr(properties, "_find_contacts", spy)
-    table, contacts = _found([0, 14, 500], [0, 0, 300], [10, 4, 5])
-    agglomerate_properties(table, contacts)
-    assert len(seen) == 1
-    np.testing.assert_array_equal(seen[0], table[["x", "y"]].to_numpy())
-
-
 def _pixel_area(x, y, r, h: float) -> float:
     """Union area counted on a grid of spacing h (cell centres)."""
     x, y, r = map(np.asarray, (x, y, r))
@@ -697,13 +679,14 @@ def test_to_physical_leaves_touches_edge_alone():
 FULL = 2 * math.pi
 
 
-def _arcs(x, y, r, codes=None) -> list[tuple[int, float, float]]:
-    """Outline arcs as (circle, start, end); one agglomerate by default."""
+def _arcs(x, y, r, contacts=None) -> list[tuple[int, float, float]]:
+    """Outline arcs as (circle, start, end); by default the circles
+    cover each other along the pairs ``find_agglomerates`` lists."""
+    table, found = _found(x, y, r)
+    contacts = found if contacts is None else contacts
+    pairs = _contact_rows(table["id"].to_numpy(), contacts)
     x, y, r = (np.asarray(v, dtype=np.float64) for v in (x, y, r))
-    codes = np.zeros(len(r), dtype=np.intp) if codes is None else codes
-    circle, start, end = properties._outline_arcs(
-        np.asarray(codes, dtype=np.intp), x, y, r
-    )
+    circle, start, end = properties._outline_arcs(x, y, r, pairs)
     return list(zip(circle.tolist(), start.tolist(), end.tolist()))
 
 
@@ -749,9 +732,31 @@ def test_a_circle_covered_by_two_others_has_no_outline_arc():
     assert [c for c, _, _ in arcs] == [0, 1]
 
 
-def test_only_members_of_one_agglomerate_cover_each_other():
-    arcs = _arcs([0, 10], [0, 0], [10, 10], codes=[0, 1])
+def test_only_given_pairs_cover():
+    _, contacts = _found([0, 10], [0, 0], [10, 10])
+    arcs = _arcs([0, 10], [0, 0], [10, 10], contacts=contacts.iloc[:0])
     assert arcs == [(0, 0.0, FULL), (1, 0.0, FULL)]
+
+
+def test_a_pruned_pair_changes_no_arc():
+    # C inside B inside A: the pair A-C is not listed, B covers C
+    x, y, r = [0, 2, 4], [0, 0, 0], [20, 10, 3]
+    _, contacts = _found(x, y, r)
+    full = pd.concat(
+        [
+            contacts,
+            pd.DataFrame(
+                {
+                    "agglomerate_id": [0],
+                    "id_a": [1],
+                    "id_b": [3],
+                    "inside": [True],
+                }
+            ),
+        ]
+    )
+    assert len(contacts) == 2
+    assert _arcs(x, y, r) == _arcs(x, y, r, contacts=full) == [(0, 0.0, FULL)]
 
 
 def test_a_ring_keeps_the_edge_of_its_hole():
@@ -778,7 +783,7 @@ def test_outline_arcs_are_exactly_the_uncovered_outline(seed: int):
         rng.uniform(2, 8, 12),
     )
     codes = _particles(x, y, r)["agglomerate_id"].to_numpy()
-    arcs = _arcs(x, y, r, codes)
+    arcs = _arcs(x, y, r)
     for c, a, b in arcs:
         assert 0 <= a < b <= a + FULL
     # Points of each outline: outside every other member if and only if

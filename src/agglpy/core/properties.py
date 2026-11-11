@@ -26,7 +26,12 @@ import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 
-from agglpy.core.agglomerates import _check_contacts, _find_contacts
+from agglpy.core.agglomerates import (
+    _check_contacts,
+    _contact_rows,
+    _Contacts,
+    _whole,
+)
 from agglpy.core.region import Bounds
 from agglpy.errors import ParticleTableError
 from agglpy.params import _positive
@@ -216,7 +221,8 @@ def agglomerate_properties(
     columns.update(_sizes(groups, r, enclosed, contact_count))
     x_com, y_com, rg = _centre_of_mass(groups, x, y, r)
     columns.update(x_com=x_com, y_com=y_com, rg=rg)
-    area = _union_area(groups, x, y, r, x_com, y_com)
+    pairs = _contact_rows(_whole(table, "id", "particles"), contacts)
+    area = _union_area(groups, x, y, r, x_com, y_com, pairs)
     columns.update(area=area, D_pa=np.sqrt(4 * area / np.pi))
     # Along a fixed axis, a union of circles reaches exactly from the
     # lowest edge (c - r) to the highest (c + r): no search needed.
@@ -389,15 +395,16 @@ def _union_area(
     r: NDArray[np.float64],
     x_com: NDArray[np.float64],
     y_com: NDArray[np.float64],
+    pairs: _Contacts,
 ) -> NDArray[np.float64]:
     """Exact area of the union of each agglomerate's member circles.
 
     Green's theorem: the area is ½∮(x dy - y dx) along the union's
     boundary, which is made of the outline arcs (``_outline_arcs``).
     """
-    circle, a, b = _outline_arcs(groups.codes, x, y, r)
+    circle, a, b = _outline_arcs(x, y, r, pairs)
     # Centres relative to the agglomerate's centre of mass keep the
-    # terms small (only here: the contact search needs image positions).
+    # terms small.
     rr = r[circle]
     cx = (x - x_com[groups.codes])[circle]
     cy = (y - y_com[groups.codes])[circle]
@@ -414,17 +421,19 @@ def _union_area(
 
 
 def _outline_arcs(
-    codes: NDArray[np.intp],
     x: NDArray[np.float64],
     y: NDArray[np.float64],
     r: NDArray[np.float64],
+    pairs: _Contacts,
 ) -> tuple[NDArray[np.intp], NDArray[np.float64], NDArray[np.float64]]:
     """Arcs of each circle's outline outside every other member circle.
 
     Together they are the boundary of each agglomerate's union of
     circles, the edge of a hole inside a ring of particles included.
-    ``codes`` gives each circle's agglomerate (0 … k-1); only members of
-    one agglomerate cover each other.
+    Only the circles of ``pairs`` (the contacts of
+    ``find_agglomerates``, as row positions) cover each other. A pair
+    left out as impossible (C inside B inside X) changes nothing: B
+    covers all of C.
 
     Returns (circle, start, end) in radians, sorted by circle and start,
     with ``0 <= start < end``: an arc across angle 0 is one arc with
@@ -432,7 +441,7 @@ def _outline_arcs(
     covered completely (enclosed, or by neighbours together) has none.
     """
     n = len(r)
-    circle, start, end = _covered_arcs(codes, x, y, r)
+    circle, start, end = _covered_arcs(x, y, r, pairs)
 
     # Sweep each circle's covered arcs by start angle, keeping the
     # furthest end reached so far: a gap between that end and the next
@@ -493,23 +502,18 @@ def _outline_arcs(
 
 
 def _covered_arcs(
-    codes: NDArray[np.intp],
     x: NDArray[np.float64],
     y: NDArray[np.float64],
     r: NDArray[np.float64],
+    pairs: _Contacts,
 ) -> tuple[NDArray[np.intp], NDArray[np.float64], NDArray[np.float64]]:
-    """Arcs of each circle's outline covered by another circle.
+    """Arcs of each circle's outline covered by the other circle of a
+    pair (``larger`` the circle that may hold the other).
 
     Returns (circle, start, end) with ``0 <= start <= end <= 2π``; an
     arc across angle 0 is split in two.
     """
-    n = len(r)
-    contacts = _find_contacts(
-        pd.DataFrame({"id": np.arange(n), "x": x, "y": y, "r": r})
-    )
-    # Only members of one agglomerate cover each other.
-    same = codes[contacts.larger] == codes[contacts.smaller]
-    big, small = contacts.larger[same], contacts.smaller[same]
+    big, small = pairs
     dx: NDArray[np.float64] = x[small] - x[big]
     dy: NDArray[np.float64] = y[small] - y[big]
     d = np.sqrt(dx * dx + dy * dy)
