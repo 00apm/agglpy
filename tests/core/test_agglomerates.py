@@ -577,9 +577,17 @@ def test_possible_contacts_match_brute_force(seed: int):
 @pytest.mark.parametrize(
     ("change", "message"),
     [
-        (lambda p, c: (p, c.drop(columns="inside")), "missing columns"),
+        (lambda p, c: (p, c.drop(columns="id_b")), "missing columns"),
         (lambda p, c: (p.drop(columns="id"), c), "missing columns"),
-        (lambda p, c: (p[p.id != 2], c), "not in the particle table"),
+        # particles filtered without their contacts: say how to fix it
+        (
+            lambda p, c: (p[p.id != 2], c),
+            "not in the particle table; filter the contacts",
+        ),
+        (
+            lambda p, c: (p.assign(id=[1, 2, 3, 3, 5]), c),
+            r"particles: ids 3 repeat",
+        ),
         (
             lambda p, c: (p, c.assign(agglomerate_id=c.agglomerate_id + 1)),
             "agglomerate",
@@ -609,6 +617,7 @@ def test_possible_contacts_match_brute_force(seed: int):
         "contacts column",
         "particles column",
         "id",
+        "repeated id",
         "agglomerate",
         "float",
         "missing pair",
@@ -634,6 +643,25 @@ def test_check_contacts_accepts_a_csv_round_trip(tmp_path: Path):
     p, c = (pd.read_csv(tmp_path / f"{n}.csv") for n in ("p", "c"))
     _check_contacts(p, c)
     assert agglomerate_properties(p, c)["contact_count"].tolist() == [3]
+
+
+@pytest.mark.parametrize(
+    "inside",
+    [None, ["yes", "no", "yes"]],
+    ids=["missing", "text"],
+)
+def test_inside_is_not_read(inside):
+    # for information only: the area decides containment itself
+    found, contacts = _possible([0, 8, 4], [0, 0, 7], [5, 5, 5])
+    expected = agglomerate_properties(found, contacts)
+    if inside is None:
+        changed = contacts.drop(columns="inside")
+    else:
+        changed = contacts.assign(inside=inside)
+    _check_contacts(found, changed)
+    pd.testing.assert_frame_equal(
+        agglomerate_properties(found, changed), expected
+    )
 
 
 # --- select_agglomerates ----------------------------------------------

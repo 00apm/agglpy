@@ -684,7 +684,11 @@ def _arcs(x, y, r, contacts=None) -> list[tuple[int, float, float]]:
     cover each other along the pairs ``find_agglomerates`` lists."""
     table, found = _found(x, y, r)
     contacts = found if contacts is None else contacts
-    pairs = _contact_rows(table["id"].to_numpy(), contacts)
+    pairs = _contact_rows(
+        table["id"].to_numpy(),
+        contacts["id_a"].to_numpy(),
+        contacts["id_b"].to_numpy(),
+    )
     x, y, r = (np.asarray(v, dtype=np.float64) for v in (x, y, r))
     circle, start, end = properties._outline_arcs(x, y, r, pairs)
     return list(zip(circle.tolist(), start.tolist(), end.tolist()))

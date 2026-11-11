@@ -378,9 +378,9 @@ def agglomerates(
             ``agglomerate_id``).
         agglomerates: The image's agglomerate table
             (``agglomerate_id`` and ``color_by``).
-        contacts: The image's contact pairs (``find_agglomerates``);
-            they give the outline: only circles of a pair cover each
-            other.
+        contacts: The image's contact pairs (``find_agglomerates``),
+            all of them; they give the outline: only circles of a pair
+            cover each other.
         color_by: The agglomerate column that gives the colours (see
             ``particles``).
         select: A boolean Series on the agglomerate table's index; None
@@ -404,7 +404,7 @@ def agglomerates(
     ids = _ids(agglomerates, "agglomerate")
     if len(np.unique(ids)) < len(ids):
         raise TableError("agglomerate_id repeats in the agglomerate table")
-    _check_contacts(particles, contacts)
+    pairs = _check_contacts(particles, contacts)
     values = _column(agglomerates, color_by)
     chosen = _selection(agglomerates, select)
     style = _Style(alpha, linewidth, image_alpha)
@@ -426,9 +426,9 @@ def agglomerates(
         drawn = row >= 0
         codes = row[drawn]
         # the pairs of the coloured agglomerates: both ends are drawn
-        pairs = _contact_rows(
-            particles["id"].to_numpy()[drawn],
-            contacts[contacts["agglomerate_id"].isin(ids[colored])],
+        mine = np.isin(pairs.agglomerate_id, ids[colored])
+        covering = _contact_rows(
+            pairs.ids[drawn], pairs.id_a[mine], pairs.id_b[mine]
         )
         fills = PathCollection(
             _union_paths(codes, x[drawn], y[drawn], r[drawn], len(rgba)),
@@ -437,7 +437,7 @@ def agglomerates(
         )
         outlines = PathCollection(
             _outline_paths(
-                codes, x[drawn], y[drawn], r[drawn], pairs, len(rgba)
+                codes, x[drawn], y[drawn], r[drawn], covering, len(rgba)
             ),
             facecolors="none",
             edgecolors=rgba,

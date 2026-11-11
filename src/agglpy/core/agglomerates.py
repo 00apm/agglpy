@@ -211,7 +211,21 @@ def _possible(
     return keep
 
 
-_CONTACT_COLUMNS = ("agglomerate_id", "id_a", "id_b", "inside")
+# The columns a contacts table needs; ``inside`` is for information.
+_PAIR_COLUMNS = ("agglomerate_id", "id_a", "id_b")
+
+
+class _Pairs(NamedTuple):
+    """A checked contacts table, read once (``_check_contacts``).
+
+    ``ids`` are the particle ids in row order; ``agglomerate_id``,
+    ``id_a`` and ``id_b`` one value per pair.
+    """
+
+    ids: NDArray[np.int64]
+    agglomerate_id: NDArray[np.int64]
+    id_a: NDArray[np.int64]
+    id_b: NDArray[np.int64]
 
 
 def _contacts_table(
@@ -319,37 +333,47 @@ def find_agglomerates(
     return table, _contacts_table(table, contacts, inside, keep)
 
 
-def _check_contacts(particles: pd.DataFrame, contacts: pd.DataFrame) -> None:
+def _check_contacts(particles: pd.DataFrame, contacts: pd.DataFrame) -> _Pairs:
     """Check that ``contacts`` are the contact pairs of these particles.
 
-    Every ``id_a`` / ``id_b`` must be a particle id, both particles must
-    belong to the row's ``agglomerate_id``, no pair may join a particle
-    with itself or repeat, and the pairs must hold every agglomerate
-    together: a filtered table would give wrong areas, outlines and
-    negative loop counts. Ids may be whole floats (a table read back
-    from a CSV file).
+    Particle ids must be unique. Every ``id_a`` / ``id_b`` must be a
+    particle id, both particles must belong to the row's
+    ``agglomerate_id``, no pair may join a particle with itself or
+    repeat, and the pairs must hold every agglomerate together: a
+    filtered table would give wrong areas, outlines and negative loop
+    counts. Ids may be whole floats (a table read back from a CSV
+    file). ``inside`` is not needed.
+
+    Returns:
+        The ids, read once, for the caller to use.
 
     Raises:
-        TableError: If a column is missing, an id is not an integer, or
-            the pairs do not match the particles.
+        TableError: If a column is missing, an id is not an integer or
+            repeats, or the pairs do not match the particles.
     """
     for name, table, columns in (
         ("particles", particles, ("id", "agglomerate_id")),
-        ("contacts", contacts, _CONTACT_COLUMNS),
+        ("contacts", contacts, _PAIR_COLUMNS),
     ):
         missing = [c for c in columns if c not in table.columns]
         if missing:
             raise TableError(f"{name}: missing columns {missing}")
-    labels = pd.Series(
-        _whole(particles, "agglomerate_id", "particles"),
-        index=_whole(particles, "id", "particles"),
-    )
+    ids = _whole(particles, "id", "particles")
+    repeats = pd.Index(ids).duplicated()
+    if repeats.any():
+        raise TableError(
+            f"particles: ids {_some(np.unique(ids[repeats]))} repeat; "
+            "each particle needs its own id"
+        )
+    labels = pd.Series(_whole(particles, "agglomerate_id", "particles"), ids)
     pair_label = _whole(contacts, "agglomerate_id", "contacts")
     ends = {e: _whole(contacts, e, "contacts") for e in ("id_a", "id_b")}
-    unknown = np.setdiff1d(np.concatenate(list(ends.values())), labels.index)
+    unknown = np.setdiff1d(np.concatenate(list(ends.values())), ids)
     if len(unknown):
         raise TableError(
-            f"contacts: ids {_some(unknown)} not in the particle table"
+            f"contacts: ids {_some(unknown)} not in the particle table; "
+            "filter the contacts like the particles (e.g. to the same "
+            "agglomerates)"
         )
     wrong = np.zeros(len(contacts), dtype=bool)
     for end in ends.values():
@@ -378,7 +402,7 @@ def _check_contacts(particles: pd.DataFrame, contacts: pd.DataFrame) -> None:
     # An agglomerate is held together exactly when its members form one
     # connected group of the pairs.
     n = len(labels)
-    at = _contact_rows(labels.index.to_numpy(), contacts)
+    at = _contact_rows(ids, a, b)
     graph = coo_matrix(
         (np.ones(len(a), dtype=np.int8), (at.larger, at.smaller)),
         shape=(n, n),
@@ -392,6 +416,7 @@ def _check_contacts(particles: pd.DataFrame, contacts: pd.DataFrame) -> None:
             f"{_some(split)}; give the whole contacts table of "
             "find_agglomerates for these particles"
         )
+    return _Pairs(ids, pair_label, a, b)
 
 
 def _some(values: Sequence[object] | NDArray[Any] | pd.Index) -> str:
@@ -402,19 +427,20 @@ def _some(values: Sequence[object] | NDArray[Any] | pd.Index) -> str:
 
 
 def _contact_rows(
-    ids: NDArray[np.integer], contacts: pd.DataFrame
+    ids: NDArray[np.int64],
+    id_a: NDArray[np.int64],
+    id_b: NDArray[np.int64],
 ) -> _Contacts:
-    """The pairs of ``contacts`` as row positions in ``ids``.
+    """Pairs of particle ids as row positions in ``ids``.
 
     ``larger`` is the row of ``id_a``. Every id of the pairs must be in
     ``ids`` (``_check_contacts``, or pairs chosen for these rows).
     """
-    index = pd.Index(np.asarray(ids, dtype=np.int64))
-    a, b = (
-        index.get_indexer(pd.Index(_whole(contacts, end, "contacts")))
-        for end in ("id_a", "id_b")
+    index = pd.Index(ids)
+    return _Contacts(
+        index.get_indexer(pd.Index(id_a)).astype(np.intp),
+        index.get_indexer(pd.Index(id_b)).astype(np.intp),
     )
-    return _Contacts(a.astype(np.intp), b.astype(np.intp))
 
 
 def _whole(table: pd.DataFrame, column: str, name: str) -> NDArray[np.int64]:

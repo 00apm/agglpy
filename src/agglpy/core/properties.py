@@ -30,7 +30,6 @@ from agglpy.core.agglomerates import (
     _check_contacts,
     _contact_rows,
     _Contacts,
-    _whole,
 )
 from agglpy.core.region import Bounds
 from agglpy.errors import ParticleTableError
@@ -178,7 +177,8 @@ def agglomerate_properties(
     Args:
         table: The particle table from ``find_agglomerates``; only
             ``id, x, y, r, agglomerate_id, enclosed`` are read.
-        contacts: The contacts table from ``find_agglomerates``.
+        contacts: The contacts table from ``find_agglomerates`` for
+            these particles, all of it (``inside`` is not read).
         bounds: The analysed region (``core.region.region_bounds``);
             None adds no ``touches_edge``.
 
@@ -208,21 +208,18 @@ def agglomerate_properties(
         _integers(table, "agglomerate_id"), return_inverse=True
     )
     groups = _Groups(codes, len(ids), r)
-    _check_contacts(table, contacts)
+    pairs = _check_contacts(table, contacts)
     # Every pair's agglomerate is one of ids (checked above).
     contact_count = np.bincount(
-        np.searchsorted(
-            ids, contacts["agglomerate_id"].to_numpy(dtype=np.int64)
-        ),
-        minlength=len(ids),
+        np.searchsorted(ids, pairs.agglomerate_id), minlength=len(ids)
     ).astype(np.int64)
 
     columns: dict[str, NDArray[np.generic]] = {"agglomerate_id": ids}
     columns.update(_sizes(groups, r, enclosed, contact_count))
     x_com, y_com, rg = _centre_of_mass(groups, x, y, r)
     columns.update(x_com=x_com, y_com=y_com, rg=rg)
-    pairs = _contact_rows(_whole(table, "id", "particles"), contacts)
-    area = _union_area(groups, x, y, r, x_com, y_com, pairs)
+    covering = _contact_rows(pairs.ids, pairs.id_a, pairs.id_b)
+    area = _union_area(groups, x, y, r, x_com, y_com, covering)
     columns.update(area=area, D_pa=np.sqrt(4 * area / np.pi))
     # Along a fixed axis, a union of circles reaches exactly from the
     # lowest edge (c - r) to the highest (c + r): no search needed.
