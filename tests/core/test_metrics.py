@@ -74,7 +74,8 @@ def _scene(
     """Images, particles and agglomerates from member counts per image.
 
     Every particle has ``D = 2``; agglomerate ``j`` of an image has
-    ``D = 10 + j`` and ``area = 1``. An image with ``[]`` is blank.
+    ``D = 10 + j``, ``area = 1`` and ``contact_count = count - 1`` (a
+    chain). An image with ``[]`` is blank.
     """
     images = pd.DataFrame(
         {
@@ -85,14 +86,21 @@ def _scene(
     particles, agglomerates = [], []
     for image, counts in member_counts.items():
         for j, count in enumerate(counts):
-            agglomerates.append((image, j, count, 10.0 + j, 1.0))
+            agglomerates.append((image, j, count, 10.0 + j, 1.0, count - 1))
             particles += [(image, j, 2.0)] * count
     return (
         images,
         pd.DataFrame(particles, columns=["image", "agglomerate_id", "D"]),
         pd.DataFrame(
             agglomerates,
-            columns=["image", "agglomerate_id", "member_count", "D", "area"],
+            columns=[
+                "image",
+                "agglomerate_id",
+                "member_count",
+                "D",
+                "area",
+                "contact_count",
+            ],
         ),
     )
 
@@ -117,6 +125,65 @@ def test_summary_pools_counts_and_ratios():
     assert row["n_ppP"] == pytest.approx(22 / 19, rel=RTOL)
 
 
+def test_summary_merges_and_contacts():
+    out = summary(*_scene(RA_EXAMPLE))
+    row = out.iloc[0]
+    # N 22, N_aerosol 19 -> 3 merges; chains: 3 contacts, no loop
+    assert row["N_merges"] == 3
+    assert row["merge_ratio"] == pytest.approx(3 / 21, rel=RTOL)
+    assert (row["N_contacts"], row["N_loops"]) == (3, 0)
+    assert row["coordination_mean"] == pytest.approx(6 / 22, rel=RTOL)
+    counts = out[["N_merges", "N_contacts", "N_loops"]]
+    assert counts.dtypes.tolist() == [np.int64] * 3
+
+
+def test_worked_example_of_seven_particles():
+    # triangle, chain of three, single (see test_agglomerates)
+    found, contacts = find_agglomerates(
+        make_particles(
+            [0, 8, 4, 100, 108, 116, 200], [0, 0, 7, 0, 0, 0, 0], [5] * 7
+        )
+    )
+    images = pd.DataFrame({"image": ["A"], "fov_area": [math.nan]})
+    row = summary(
+        images,
+        particle_properties(found).assign(image="A"),
+        agglomerate_properties(found, contacts).assign(image="A"),
+        metrics=["counts", "ratios", "contacts"],
+    ).iloc[0]
+    assert (row["N_primary"], row["N_aerosol"], row["N_merges"]) == (7, 3, 4)
+    assert row["merge_ratio"] == pytest.approx(4 / 6, rel=RTOL)
+    assert row["Ra"] == pytest.approx(2 / 7, rel=RTOL)
+    # F = merge_ratio (N - 1) / N + Ra
+    assert row["agglomerated_fraction"] == pytest.approx(
+        row["merge_ratio"] * 6 / 7 + row["Ra"], rel=RTOL
+    )
+    assert (row["N_contacts"], row["N_loops"]) == (5, 1)
+    assert row["coordination_mean"] == pytest.approx(10 / 7, rel=RTOL)
+
+
+@pytest.mark.parametrize("counts", [[], [1]])
+def test_merge_ratio_nan_below_two_particles(counts: list[int]):
+    row = summary(*_scene({"A": counts})).iloc[0]
+    # N = 0 would give -0.0 without the guard
+    assert math.isnan(row["merge_ratio"])
+
+
+def test_merge_ratio_across_images_is_the_mean_per_image():
+    out = summary_across_images(*_scene(RA_EXAMPLE), metrics="ratios")
+    mean = out.set_index("metric").loc["merge_ratio", "mean"]
+    # A: 1 merge of 2 particles; B: 2 merges of 20
+    assert mean == pytest.approx((1 / 1 + 2 / 19) / 2, rel=RTOL)
+
+
+def test_contacts_family_needs_contact_count():
+    images, particles, agglomerates = _scene(RA_EXAMPLE)
+    agglomerates = agglomerates.drop(columns="contact_count")
+    summary(images, particles, agglomerates, metrics=["counts", "ratios"])
+    with pytest.raises(TableError, match="contact_count"):
+        summary(images, particles, agglomerates, metrics="contacts")
+
+
 def test_summary_by_image():
     out = summary(*_scene(RA_EXAMPLE), by="image")
     assert out["image"].tolist() == ["A", "B"]
@@ -134,10 +201,15 @@ def test_summary_columns_in_family_order():
         "N_pp1",
         "N_ppA",
         "N_aggl",
+        "N_merges",
         "Ra",
         "agglomerated_fraction",
+        "merge_ratio",
         "n_ppA",
         "n_ppP",
+        "N_contacts",
+        "N_loops",
+        "coordination_mean",
         "coverage",
         "N_primary_per_area",
         "N_aerosol_per_area",
@@ -172,7 +244,19 @@ def test_blank_image_keeps_its_row():
         0,
         0,
     )
-    for name in ("Ra", "agglomerated_fraction", "n_ppA", "n_ppP"):
+    assert (blank["N_merges"], blank["N_contacts"], blank["N_loops"]) == (
+        0,
+        0,
+        0,
+    )
+    for name in (
+        "Ra",
+        "agglomerated_fraction",
+        "merge_ratio",
+        "n_ppA",
+        "n_ppP",
+        "coordination_mean",
+    ):
         assert math.isnan(blank[name]), name
     for name in ("particle_D_mean", "particle_SMD", "aerosol_D50"):
         assert math.isnan(blank[name]), name
@@ -264,12 +348,14 @@ def test_metrics_narrow_the_table_in_family_order():
         "N_pp1",
         "N_ppA",
         "N_aggl",
+        "N_merges",
         "Ra",
         "agglomerated_fraction",
+        "merge_ratio",
         "n_ppA",
         "n_ppP",
     ]
-    assert list(summary(*scene, metrics="counts").columns)[-1] == "N_aggl"
+    assert list(summary(*scene, metrics="counts").columns)[-1] == "N_merges"
 
 
 def test_fov_area_is_needed_only_for_per_area():
@@ -623,8 +709,10 @@ def test_summary_across_images_uses_per_image_metrics():
         "N_pp1",
         "N_ppA",
         "N_aggl",
+        "N_merges",
         "Ra",
         "agglomerated_fraction",
+        "merge_ratio",
         "n_ppA",
         "n_ppP",
     ]
@@ -652,7 +740,7 @@ def test_summary_across_images_by_group():
         "ci_low",
         "ci_high",
     ]
-    assert out["condition"].tolist() == ["x"] * 4 + ["y"] * 4
+    assert out["condition"].tolist() == ["x"] * 5 + ["y"] * 5
     ra = out[out["metric"] == "Ra"]
     assert ra["mean"].tolist() == [0.5, 0.1]
 
