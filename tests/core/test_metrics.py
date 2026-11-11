@@ -331,10 +331,10 @@ def test_summary_is_unit_agnostic():
         "A": ([0, 14, 2, 100], [0, 0, 0, 0], [10, 4, 2, 3]),
         "B": ([0, 30], [0, 0], [10, 20]),
     }.items():
-        found = find_agglomerates(make_particles(x, y, r))
+        found, contacts = find_agglomerates(make_particles(x, y, r))
         tables = (
             particle_properties(found).assign(image=image),
-            agglomerate_properties(found).assign(image=image),
+            agglomerate_properties(found, contacts).assign(image=image),
         )
         px.append(tables)
         physical.append(tuple(to_physical(t, p) for t in tables))

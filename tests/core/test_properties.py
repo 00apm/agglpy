@@ -70,11 +70,16 @@ def test_agglomerate_properties(
 # ---------------------------------------------------------------------
 
 
-def _particles(x, y, r) -> pd.DataFrame:
-    """Particles grouped into agglomerates; duplicates allowed."""
+def _found(x, y, r) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Particles grouped into agglomerates, and their contacts;
+    duplicates allowed."""
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DuplicateParticlesWarning)
         return find_agglomerates(make_particles(x, y, r))
+
+
+def _particles(x, y, r) -> pd.DataFrame:
+    return _found(x, y, r)[0]
 
 
 def sphere(r: float) -> float:
@@ -126,7 +131,7 @@ def test_particle_properties_needs_r():
 
 def _one(x, y, r) -> pd.Series:
     """Properties of the only agglomerate of these circles."""
-    table = agglomerate_properties(_particles(x, y, r))
+    table = agglomerate_properties(*_found(x, y, r))
     assert len(table) == 1
     return table.iloc[0]
 
@@ -190,6 +195,7 @@ def test_equal_members_have_zero_std():
 def test_one_row_per_agglomerate_sorted_by_id():
     table = pd.DataFrame(
         {
+            "id": [1, 2, 3],
             "x": [0.0, 100.0, 14.0],
             "y": [0.0, 0.0, 0.0],
             "r": [10.0, 3.0, 4.0],
@@ -198,7 +204,10 @@ def test_one_row_per_agglomerate_sorted_by_id():
         },
         index=[5, 6, 7],
     )
-    out = agglomerate_properties(table)
+    contacts = pd.DataFrame(
+        {"agglomerate_id": [7], "id_a": [1], "id_b": [3], "inside": [False]}
+    )
+    out = agglomerate_properties(table, contacts)
     assert out.columns[0] == "agglomerate_id"
     assert out["agglomerate_id"].tolist() == [3, 7]
     assert out["member_count"].tolist() == [1, 2]
@@ -206,21 +215,43 @@ def test_one_row_per_agglomerate_sorted_by_id():
 
 
 def test_agglomerate_properties_does_not_modify_its_input():
-    table = _particles(*ABC)
-    before = table.copy()
-    agglomerate_properties(table)
-    pd.testing.assert_frame_equal(table, before)
+    table, contacts = _found(*ABC)
+    before = table.copy(), contacts.copy()
+    agglomerate_properties(table, contacts)
+    pd.testing.assert_frame_equal(table, before[0])
+    pd.testing.assert_frame_equal(contacts, before[1])
 
 
-def test_agglomerate_properties_needs_its_columns():
-    table = _particles(*ABC).drop(columns="enclosed")
-    with pytest.raises(ParticleTableError, match="enclosed"):
-        agglomerate_properties(table)
+@pytest.mark.parametrize("column", ["enclosed", "id"])
+def test_agglomerate_properties_needs_its_columns(column: str):
+    table, contacts = _found(*ABC)
+    with pytest.raises(ParticleTableError, match=column):
+        agglomerate_properties(table.drop(columns=column), contacts)
+
+
+def test_agglomerate_properties_adds_contact_and_loop_counts():
+    # ABC: A-B, A-C (C inside A); a triangle; a single circle
+    table, contacts = _found(
+        [0, 14, 2, 100, 108, 104, 300],
+        [0, 0, 0, 0, 0, 7, 0],
+        [10, 4, 2, 5, 5, 5, 3],
+    )
+    out = agglomerate_properties(table, contacts)
+    assert out["contact_count"].tolist() == [2, 3, 0]
+    assert out["loop_count"].tolist() == [0, 1, 0]
+    columns = list(out.columns)
+    at = columns.index("enclosed_count")
+    assert columns[at + 1 : at + 3] == ["contact_count", "loop_count"]
+    empty = agglomerate_properties(*_found([], [], []))
+    for name in ("contact_count", "loop_count"):
+        assert out[name].dtype == np.int64
+        assert empty[name].dtype == np.int64
 
 
 def _bare(**columns) -> pd.DataFrame:
     """Two agglomerates (A + B touching, C alone), columns overridable."""
     table = {
+        "id": [1, 2, 3],
         "x": [0.0, 14.0, 100.0],
         "y": [0.0, 0.0, 0.0],
         "r": [10.0, 4.0, 5.0],
@@ -229,6 +260,13 @@ def _bare(**columns) -> pd.DataFrame:
     }
     table.update(columns)
     return pd.DataFrame(table)
+
+
+def _bare_contacts() -> pd.DataFrame:
+    """The one contact of ``_bare``: A-B."""
+    return pd.DataFrame(
+        {"agglomerate_id": [0], "id_a": [1], "id_b": [2], "inside": [False]}
+    )
 
 
 @pytest.mark.parametrize(
@@ -243,12 +281,12 @@ def _bare(**columns) -> pd.DataFrame:
 )
 def test_agglomerate_properties_rejects_a_non_boolean_enclosed(enclosed):
     with pytest.raises(ParticleTableError, match="'enclosed'"):
-        agglomerate_properties(_bare(enclosed=enclosed))
+        agglomerate_properties(_bare(enclosed=enclosed), _bare_contacts())
 
 
 def test_agglomerate_properties_accepts_python_bools_in_an_object_column():
     enclosed = pd.Series([False, True, False], dtype=object)
-    out = agglomerate_properties(_bare(enclosed=enclosed))
+    out = agglomerate_properties(_bare(enclosed=enclosed), _bare_contacts())
     assert out["enclosed_count"].tolist() == [1, 0]
 
 
@@ -257,11 +295,13 @@ def test_agglomerate_properties_accepts_python_bools_in_an_object_column():
 )
 def test_agglomerate_properties_rejects_non_integer_ids(ids):
     with pytest.raises(ParticleTableError, match="'agglomerate_id'"):
-        agglomerate_properties(_bare(agglomerate_id=ids))
+        agglomerate_properties(_bare(agglomerate_id=ids), _bare_contacts())
 
 
 def test_agglomerate_properties_accepts_integral_float_ids():
-    out = agglomerate_properties(_bare(agglomerate_id=[0.0, 0.0, 1.0]))
+    out = agglomerate_properties(
+        _bare(agglomerate_id=[0.0, 0.0, 1.0]), _bare_contacts()
+    )
     assert out["agglomerate_id"].tolist() == [0, 1]
     assert out["agglomerate_id"].dtype == np.int64
 
@@ -278,7 +318,7 @@ def test_agglomerate_properties_accepts_integral_float_ids():
 )
 def test_agglomerate_properties_rejects_bad_geometry(column, values, message):
     with pytest.raises(ParticleTableError, match=message):
-        agglomerate_properties(_bare(**{column: values}))
+        agglomerate_properties(_bare(**{column: values}), _bare_contacts())
 
 
 @pytest.mark.parametrize(
@@ -291,8 +331,8 @@ def test_particle_properties_rejects_bad_radii(r, message):
 
 
 def test_empty_table_has_every_column_and_dtype():
-    empty = agglomerate_properties(_particles([], [], []))
-    one = agglomerate_properties(_particles([0], [0], [1]))
+    empty = agglomerate_properties(*_found([], [], []))
+    one = agglomerate_properties(*_found([0], [0], [1]))
     assert len(empty) == 0
     pd.testing.assert_series_equal(empty.dtypes, one.dtypes)
     for name in (
@@ -399,8 +439,8 @@ def test_contact_search_gets_image_positions(monkeypatch):
         return _find_contacts(particles)
 
     monkeypatch.setattr(properties, "_find_contacts", spy)
-    table = _particles([0, 14, 500], [0, 0, 300], [10, 4, 5])
-    agglomerate_properties(table)
+    table, contacts = _found([0, 14, 500], [0, 0, 300], [10, 4, 5])
+    agglomerate_properties(table, contacts)
     assert len(seen) == 1
     np.testing.assert_array_equal(seen[0], table[["x", "y"]].to_numpy())
 
@@ -426,7 +466,7 @@ def test_area_matches_a_pixel_count(seed: int):
         rng.uniform(2, 8, 12),
     )
     # circles that overlap share an agglomerate, so areas add up
-    total = agglomerate_properties(_particles(x, y, r))["area"].sum()
+    total = agglomerate_properties(*_found(x, y, r))["area"].sum()
     assert total == pytest.approx(_pixel_area(x, y, r, 0.05), rel=1e-3)
 
 
@@ -477,12 +517,12 @@ def test_feret_max_matches_brute_force(seed: int):
     rng = np.random.default_rng(seed)
     n = 1500
     side = 7 * math.sqrt(n)  # dense: many small, some large agglomerates
-    table = _particles(
+    table, contacts = _found(
         rng.uniform(0, side, n),
         rng.uniform(0, side, n),
         rng.lognormal(np.log(8), 0.35, n) / 2,
     )
-    out = agglomerate_properties(table)
+    out = agglomerate_properties(table, contacts)
     assert out["member_count"].max() > 64, "needs a large agglomerate"
     expected = _brute_feret_max(table)
     assert out["D_feret_max"].tolist() == pytest.approx(expected, rel=1e-12)
@@ -492,23 +532,30 @@ def test_feret_max_matches_brute_force(seed: int):
 FAR = Bounds(-100.5, -100.5, 100.5, 100.5)
 
 
+# The particle column find_agglomerates adds; the others are properties.
+FOUND = ("coordination",)
+
+
 def test_columns_in_spec_order():
-    table = _particles([0], [0], [1])
-    out = agglomerate_properties(table, bounds=FAR)
-    assert list(out.columns) == ["agglomerate_id", *DIMENSIONS]
+    found = _found([0], [0], [1])
+    out = agglomerate_properties(*found, bounds=FAR)
+    columns = [c for c in DIMENSIONS if c not in FOUND]
+    assert list(out.columns) == ["agglomerate_id", *columns]
     # without bounds, the same columns without touches_edge
-    out = agglomerate_properties(table)
+    out = agglomerate_properties(*found)
     assert list(out.columns) == [
         "agglomerate_id",
-        *(c for c in DIMENSIONS if c != "touches_edge"),
+        *(c for c in columns if c != "touches_edge"),
     ]
 
 
 def test_dimensions_cover_exactly_the_property_columns():
-    table = _particles(*ABC)
+    table, contacts = _found(*ABC)
     particle = particle_properties(table, bounds=FAR)
-    added = set(particle.columns) - set(table.columns)
-    agglomerate = set(agglomerate_properties(table, bounds=FAR).columns)
+    added = set(particle.columns) - set(table.columns) | set(FOUND)
+    agglomerate = set(
+        agglomerate_properties(table, contacts, bounds=FAR).columns
+    )
     assert set(DIMENSIONS) == added | (agglomerate - {"agglomerate_id"})
 
 
@@ -535,9 +582,11 @@ def test_to_physical_scales_particle_columns():
 
 
 def test_to_physical_scales_agglomerate_columns_by_dimensions():
-    table = agglomerate_properties(_particles(*ABC), bounds=FAR)
+    table = agglomerate_properties(*_found(*ABC), bounds=FAR)
     out = to_physical(table, 0.5)
     for column, power in DIMENSIONS.items():
+        if column in FOUND:
+            continue
         expected = table[column] * 0.5**power if power else table[column]
         # counts and ratios (power 0) keep their values and dtypes
         pd.testing.assert_series_equal(out[column], expected)
@@ -547,7 +596,7 @@ def test_to_physical_scales_agglomerate_columns_by_dimensions():
 
 
 def test_to_physical_keeps_nan_index_extra_columns_and_input():
-    table = agglomerate_properties(_particles([0, 100], [0, 0], [1, 2]))
+    table = agglomerate_properties(*_found([0, 100], [0, 0], [1, 2]))
     table.index = [7, 3]
     table["note"] = ["a", "b"]
     before = table.copy()
@@ -610,22 +659,23 @@ def test_touches_edge_small_example():
 def test_agglomerate_touches_edge_when_any_member_does():
     # two touching circles, only the left one reaches the edge
     # (9.5 - 10 = -0.5), and a single circle far away
-    table = _particles([9.5, 29.5, 500], [100, 100, 100], [10, 10, 10])
-    out = agglomerate_properties(table, bounds=D7_017)
+    found = _found([9.5, 29.5, 500], [100, 100, 100], [10, 10, 10])
+    out = agglomerate_properties(*found, bounds=D7_017)
     assert out["member_count"].tolist() == [2, 1]
     assert out["touches_edge"].tolist() == [True, False]
 
 
 def test_no_bounds_no_touches_edge_column():
-    table = _particles(*ABC)
+    table, contacts = _found(*ABC)
     assert "touches_edge" not in particle_properties(table).columns
-    assert "touches_edge" not in agglomerate_properties(table).columns
+    out = agglomerate_properties(table, contacts)
+    assert "touches_edge" not in out.columns
 
 
 def test_empty_table_touches_edge_is_bool():
-    empty = _particles([], [], [])
+    empty, contacts = _found([], [], [])
     assert particle_properties(empty, bounds=FAR)["touches_edge"].dtype == bool
-    out = agglomerate_properties(empty, bounds=FAR)
+    out = agglomerate_properties(empty, contacts, bounds=FAR)
     assert out["touches_edge"].dtype == bool
 
 

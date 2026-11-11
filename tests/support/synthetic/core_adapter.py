@@ -54,7 +54,7 @@ def run_core(
             "r": [c.r for c in case.circles],
         }
     )
-    found = find_agglomerates(table)  # rows stay in input order
+    found, contacts = find_agglomerates(table)  # rows in input order
     particles = pd.DataFrame(
         {
             "x": found["x"].to_numpy(),
@@ -65,7 +65,9 @@ def run_core(
         },
         index=pd.Index(keys),
     )
-    agglomerates = agglomerate_properties(found).set_index("agglomerate_id")
+    agglomerates = agglomerate_properties(found, contacts).set_index(
+        "agglomerate_id"
+    )
     members = particles.groupby("agglomerate_id").groups
     agglomerates.insert(
         0, "members", [frozenset(members[i]) for i in agglomerates.index]
@@ -81,7 +83,7 @@ def run_core(
     return Result(
         particles=particles,
         agglomerates=agglomerates,
-        summary=_summary(found, case.name, pixel_size),
+        summary=_summary(found, contacts, case.name, pixel_size),
     )
 
 
@@ -101,14 +103,17 @@ _DIAMETERS = (
 )
 
 
-def _summary(found: pd.DataFrame, image: str, pixel_size: float) -> dict:
+def _summary(
+    found: pd.DataFrame, contacts: pd.DataFrame, image: str, pixel_size: float
+) -> dict:
     """One image's summary, as the application will compute it."""
     images = pd.DataFrame({"image": [image], "fov_area": [np.nan]})
     particles = to_physical(
         particle_properties(found).assign(image=image), pixel_size
     )
     agglomerates = to_physical(
-        agglomerate_properties(found).assign(image=image), pixel_size
+        agglomerate_properties(found, contacts).assign(image=image),
+        pixel_size,
     )
     row = summary(images, particles, agglomerates).iloc[0].to_dict()
     for name in _DIAMETERS:

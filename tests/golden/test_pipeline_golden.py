@@ -8,9 +8,10 @@ Two paths per image, both through ``agglpy.pipeline``:
   (``<name>_fitting.csv``) → ``analyze``.
 
 Pinned in px: the detected circles, which particles are grouped
-together and enclosed, the edge flags and every agglomerate property.
-Compared by content, never by id: particles are sorted by position and
-size, and each agglomerate is labelled by the row of its first member.
+together and enclosed, the edge flags, every agglomerate property and
+the contact pairs. Compared by content, never by id: particles are
+sorted by position and size, each agglomerate is labelled by the row of
+its first member and each contact by the rows of its two particles.
 The snapshots were checked once against agglpy 0.4.0: the same
 circles and agglomerates. Besides renamed and re-defined values, the
 detected radii differ by up to 5e-8 relative: they are the shortest
@@ -28,6 +29,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from agglpy.core.agglomerates import find_agglomerates
 from agglpy.errors import DuplicateParticlesWarning
 from agglpy.io import read_image, read_image_metadata, read_particles
 from agglpy.params import HCTParams, HCTRange, RegionParams
@@ -99,12 +101,31 @@ def _corrected(name: str) -> ImageResult:
         )
 
 
-def _canonical(result: ImageResult) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Particle and agglomerate tables of one result, without ids."""
+def _contacts(result: ImageResult) -> pd.DataFrame:
+    """The result's contact pairs."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DuplicateParticlesWarning)
+        return find_agglomerates(result.particles)[1]
+
+
+def _canonical(
+    result: ImageResult,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Particle, agglomerate and contacts tables of one result, without
+    ids."""
     particles = result.particles.sort_values(
         ["x", "y", "r"], ignore_index=True
     )
     assert not particles.duplicated(["x", "y", "r"]).any()
+    row_of = pd.Series(particles.index, index=particles["id"])
+    pairs = _contacts(result)
+    contacts = pd.DataFrame(
+        {
+            "a": row_of[pairs["id_a"]].to_numpy(),
+            "b": row_of[pairs["id_b"]].to_numpy(),
+            "inside": pairs["inside"].to_numpy(),
+        }
+    ).sort_values(["a", "b"], ignore_index=True)
     # an agglomerate is labelled by the row of its first member
     label = particles.index.to_series().groupby(particles["agglomerate_id"])
     particles["agglomerate"] = label.transform("min")
@@ -117,9 +138,17 @@ def _canonical(result: ImageResult) -> tuple[pd.DataFrame, pd.DataFrame]:
     agglomerates = agglomerates.drop(columns="agglomerate_id")
     agglomerates = agglomerates.sort_values("agglomerate", ignore_index=True)
     particles = particles[
-        ["x", "y", "r", "enclosed", "touches_edge", "agglomerate"]
+        [
+            "x",
+            "y",
+            "r",
+            "enclosed",
+            "coordination",
+            "touches_edge",
+            "agglomerate",
+        ]
     ]
-    return particles, agglomerates
+    return particles, agglomerates, contacts
 
 
 @pytest.mark.parametrize("name", IMAGE_NAMES)
@@ -143,7 +172,7 @@ def test_automatic_circles(dataframe_regression, name: str) -> None:
 def test_automatic_particles(dataframe_regression, name: str) -> None:
     """The same particles are grouped, enclosed and touch the edge."""
     _, _, result = _automatic(name)
-    particles, _ = _canonical(result)
+    particles, _, _ = _canonical(result)
     assert particles["touches_edge"].sum() == COUNTS[name][1]
     assert result.outside_ids == ()
     dataframe_regression.check(
@@ -155,7 +184,7 @@ def test_automatic_particles(dataframe_regression, name: str) -> None:
 def test_automatic_agglomerates(dataframe_regression, name: str) -> None:
     """Each agglomerate keeps its properties (px)."""
     _, _, result = _automatic(name)
-    _, agglomerates = _canonical(result)
+    _, agglomerates, _ = _canonical(result)
     assert len(agglomerates) == COUNTS[name][2]
     assert agglomerates["touches_edge"].sum() == COUNTS[name][3]
     dataframe_regression.check(
@@ -166,10 +195,21 @@ def test_automatic_agglomerates(dataframe_regression, name: str) -> None:
 
 
 @pytest.mark.parametrize("name", IMAGE_NAMES)
+def test_automatic_contacts(dataframe_regression, name: str) -> None:
+    """The same pairs of particles are possible contacts."""
+    _, _, result = _automatic(name)
+    _, agglomerates, contacts = _canonical(result)
+    assert len(contacts) == agglomerates["contact_count"].sum()
+    dataframe_regression.check(
+        contacts, basename=f"{name}_contacts", default_tolerance=EXACT
+    )
+
+
+@pytest.mark.parametrize("name", IMAGE_NAMES)
 def test_corrected_particles(dataframe_regression, name: str) -> None:
     """The corrected set: same grouping, enclosed and edge flags."""
     result = _corrected(name)
-    particles, _ = _canonical(result)
+    particles, _, _ = _canonical(result)
     assert result.outside_ids == ()
     assert particles["touches_edge"].sum() == CORRECTED_EDGE[name]
     dataframe_regression.check(
@@ -182,9 +222,21 @@ def test_corrected_particles(dataframe_regression, name: str) -> None:
 @pytest.mark.parametrize("name", IMAGE_NAMES)
 def test_corrected_agglomerates(dataframe_regression, name: str) -> None:
     """The corrected set: each agglomerate keeps its properties (px)."""
-    _, agglomerates = _canonical(_corrected(name))
+    _, agglomerates, _ = _canonical(_corrected(name))
     dataframe_regression.check(
         agglomerates,
         basename=f"{name}_corrected_agglomerates",
         default_tolerance=FLOAT_TOL,
+    )
+
+
+@pytest.mark.parametrize("name", IMAGE_NAMES)
+def test_corrected_contacts(dataframe_regression, name: str) -> None:
+    """The corrected set: the same possible contacts."""
+    _, agglomerates, contacts = _canonical(_corrected(name))
+    assert len(contacts) == agglomerates["contact_count"].sum()
+    dataframe_regression.check(
+        contacts,
+        basename=f"{name}_corrected_contacts",
+        default_tolerance=EXACT,
     )

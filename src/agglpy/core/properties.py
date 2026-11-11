@@ -2,8 +2,8 @@
 
 ``particle_properties`` adds each particle's size to the particle
 table; ``agglomerate_properties`` builds the agglomerate table, one row
-per ``agglomerate_id``. Both take the table from
-``agglomerates.find_agglomerates`` and never modify it.
+per ``agglomerate_id``. Both take the tables from
+``agglomerates.find_agglomerates`` and never modify them.
 
 Every value describes the circle model: each particle is a sphere
 whose projection is its detected circle. Enclosed particles are members
@@ -26,18 +26,22 @@ import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 
-from agglpy.core.agglomerates import _find_contacts
+from agglpy.core.agglomerates import _check_contacts, _find_contacts
 from agglpy.core.region import Bounds
 from agglpy.errors import ParticleTableError
 from agglpy.params import _positive
 
 # Length exponent of each property column: 0 count, ratio or flag,
 # 1 length (px), 2 area (px²), 3 volume (px³). D, area and volume mean
-# the same for a particle and an agglomerate.
+# the same for a particle and an agglomerate. ``coordination`` is the
+# particle column of find_agglomerates; the rest are in table order.
 DIMENSIONS: MappingProxyType[str, int] = MappingProxyType(
     {
+        "coordination": 0,
         "member_count": 0,
         "enclosed_count": 0,
+        "contact_count": 0,
+        "loop_count": 0,
         "volume": 3,
         "D": 1,
         "surface": 2,
@@ -66,7 +70,7 @@ _GEOMETRY: MappingProxyType[str, int] = MappingProxyType(
     {"x": 1, "y": 1, "r": 1}
 )
 
-_AGGLOMERATE_INPUT = ("x", "y", "r", "agglomerate_id", "enclosed")
+_AGGLOMERATE_INPUT = ("id", "x", "y", "r", "agglomerate_id", "enclosed")
 
 # Agglomerates up to this size get their max Feret diameter from all
 # member pairs at once; larger ones are pruned first.
@@ -120,7 +124,9 @@ def particle_properties(
 
 
 def agglomerate_properties(
-    table: pd.DataFrame, bounds: Bounds | None = None
+    table: pd.DataFrame,
+    contacts: pd.DataFrame,
+    bounds: Bounds | None = None,
 ) -> pd.DataFrame:
     """Measure every agglomerate of one image.
 
@@ -128,6 +134,13 @@ def agglomerate_properties(
     enclosed ones included. Column definitions (px, px², px³):
 
     - ``member_count``, ``enclosed_count``: members, enclosed members.
+    - ``contact_count``: possible contacts between the members (rows
+      of ``contacts``; see ``find_agglomerates``), an upper bound of the
+      true contacts, which are at least ``member_count - 1``.
+    - ``loop_count``: ``contact_count - member_count + 1``, the contacts
+      beyond the ``member_count - 1`` that hold the agglomerate
+      together (the circuit rank of its contact graph); an upper bound;
+      0 for a chain or a branched agglomerate.
     - ``volume``: sum of the member sphere volumes; ``D``: diameter of
       one sphere with that volume (the agglomerate's size).
     - ``surface``: sum of the member sphere surfaces. Spheres touching
@@ -159,7 +172,8 @@ def agglomerate_properties(
 
     Args:
         table: The particle table from ``find_agglomerates``; only
-            ``x, y, r, agglomerate_id, enclosed`` are read.
+            ``id, x, y, r, agglomerate_id, enclosed`` are read.
+        contacts: The contacts table from ``find_agglomerates``.
         bounds: The analysed region (``core.region.region_bounds``);
             None adds no ``touches_edge``.
 
@@ -172,6 +186,7 @@ def agglomerate_properties(
         ParticleTableError: If a needed column is missing; ``x, y, r``
             are not finite numbers or ``r <= 0``; ``agglomerate_id``
             does not hold integers; ``enclosed`` is not True / False.
+        TableError: If ``contacts`` are not pairs of these particles.
     """
     _require(table, _AGGLOMERATE_INPUT)
     # A table fresh from find_agglomerates is clean, but one read back
@@ -188,9 +203,17 @@ def agglomerate_properties(
         _integers(table, "agglomerate_id"), return_inverse=True
     )
     groups = _Groups(codes, len(ids), r)
+    _check_contacts(table, contacts)
+    # Every pair's agglomerate is one of ids (checked above).
+    contact_count = np.bincount(
+        np.searchsorted(
+            ids, contacts["agglomerate_id"].to_numpy(dtype=np.int64)
+        ),
+        minlength=len(ids),
+    ).astype(np.int64)
 
     columns: dict[str, NDArray[np.generic]] = {"agglomerate_id": ids}
-    columns.update(_sizes(groups, r, enclosed))
+    columns.update(_sizes(groups, r, enclosed, contact_count))
     x_com, y_com, rg = _centre_of_mass(groups, x, y, r)
     columns.update(x_com=x_com, y_com=y_com, rg=rg)
     area = _union_area(groups, x, y, r, x_com, y_com)
@@ -283,7 +306,10 @@ class _Groups:
 
 
 def _sizes(
-    groups: _Groups, r: NDArray[np.float64], enclosed: NDArray[np.bool_]
+    groups: _Groups,
+    r: NDArray[np.float64],
+    enclosed: NDArray[np.bool_],
+    contact_count: NDArray[np.int64],
 ) -> dict[str, NDArray[np.generic]]:
     d = 2 * r
     count = groups.count
@@ -320,6 +346,9 @@ def _sizes(
     return {
         "member_count": count,
         "enclosed_count": enclosed_count,
+        "contact_count": contact_count,
+        # contacts beyond the count - 1 that hold the members together
+        "loop_count": contact_count - count + 1,
         "volume": volume,
         "D": _equivalent_diameter(volume),
         "surface": surface,

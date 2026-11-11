@@ -97,7 +97,7 @@ median_r = {"low flow": 6.0, "high flow": 10.0}
 agglomerates = pd.concat(
     [
         agglomerate_properties(
-            find_agglomerates(
+            *find_agglomerates(
                 make_particles(
                     rng.uniform(0, 1000, 150),
                     rng.uniform(0, 1000, 150),

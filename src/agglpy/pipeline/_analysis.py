@@ -113,10 +113,10 @@ def analyze(
         if outside_ids:
             _warn_outside(outside_ids, len(table), bounds)
         table = table[~outside]
-    found = find_agglomerates(table)
+    found, contacts = find_agglomerates(table)
     return ImageResult(
         particles=particle_properties(found, bounds=bounds),
-        agglomerates=agglomerate_properties(found, bounds=bounds),
+        agglomerates=agglomerate_properties(found, contacts, bounds=bounds),
         outside_ids=outside_ids,
         width=None if width is None else int(width),
         height=None if height is None else int(height),

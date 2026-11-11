@@ -19,10 +19,10 @@ VIRIDIS = matplotlib.colormaps["viridis"]
 
 def tables() -> tuple[pd.DataFrame, pd.DataFrame]:
     """A pair crossing at x = 40 (agglomerate 1) and a single particle."""
-    p = find_agglomerates(
+    p, contacts = find_agglomerates(
         make_particles([30, 50, 50], [40, 40, 90], [12, 12, 5])
     )
-    return p, agglomerate_properties(p)
+    return p, agglomerate_properties(p, contacts)
 
 
 def drawn(p, agg, **options) -> tuple[np.ndarray, draw.Drawing]:
@@ -91,12 +91,12 @@ def test_members_of_unselected_agglomerates_are_others():
 
 def test_a_hole_in_a_ring_is_outlined_and_not_filled():
     angle = np.linspace(0, 2 * np.pi, 24, endpoint=False)
-    p = find_agglomerates(
+    p, contacts = find_agglomerates(
         make_particles(
             60 + 40 * np.cos(angle), 60 + 40 * np.sin(angle), np.full(24, 7.0)
         )
     )
-    agg = agglomerate_properties(p)
+    agg = agglomerate_properties(p, contacts)
     fig, ax = draw.figure((120, 120), legend=False)
     draw.agglomerates(
         ax,
