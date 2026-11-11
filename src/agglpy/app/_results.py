@@ -121,6 +121,12 @@ class Results:
         agglomerates: One row per agglomerate, keyed by ``(image,
             agglomerate_id)``. Ids are unique only within an image
             and change with a new detection or correction.
+        contacts: One row per possible contact: ``image``,
+            ``agglomerate_id``, the particle ids ``id_a`` (the larger)
+            and ``id_b``, ``inside`` (``id_b`` lies inside ``id_a``);
+            an agglomerate has ``contact_count`` rows
+            (``agglpy.core.agglomerates.find_agglomerates``). Pairs per
+            image: ``res.contacts.groupby("image").size()``.
     """
 
     def __init__(
@@ -128,6 +134,7 @@ class Results:
         images: pd.DataFrame,
         particles: pd.DataFrame,
         agglomerates: pd.DataFrame,
+        contacts: pd.DataFrame,
         origin: Origin,
     ) -> None:
         """Made by ``Collection.analyze`` and ``subset``; not called
@@ -135,6 +142,7 @@ class Results:
         self.images = images
         self.particles = particles
         self.agglomerates = agglomerates
+        self.contacts = contacts
         self._origin = origin
 
     def __repr__(self) -> str:
@@ -279,9 +287,10 @@ class Results:
     ) -> "Results":
         """A part of the results, with this step kept for the export.
 
-        ``images`` keeps those images with their particles and
-        agglomerates; ``agglomerates`` keeps those agglomerates with
-        their member particles, and every image (an image with nothing
+        ``images`` keeps those images with their particles,
+        agglomerates and contacts; ``agglomerates`` keeps those
+        agglomerates with their member particles and contacts, and every
+        image (an image with nothing
         left counts as zeros). Both: one step, images first. The tables
         of the new results are renumbered from 0; ``self`` stays as it
         is.
@@ -302,10 +311,11 @@ class Results:
         """
         if images is None and agglomerates is None:
             raise ParamsError("subset needs images= or agglomerates=")
-        table, particles, aggls = (
+        table, particles, aggls, contacts = (
             self.images,
             self.particles,
             self.agglomerates,
+            self.contacts,
         )
         keep = None if images is None else self._image_mask(images)
         if agglomerates is not None:
@@ -313,12 +323,19 @@ class Results:
             particles, aggls = select_agglomerates(
                 particles, aggls, agglomerates
             )
+            key = ["image", "agglomerate_id"]
+            contacts = contacts[
+                pd.MultiIndex.from_frame(contacts[key]).isin(
+                    pd.MultiIndex.from_frame(aggls[key])
+                )
+            ]
         if keep is not None:
             if not keep.any():
                 raise ParamsError("no image left")
             table = table[keep]
             particles = particles[particles.image.isin(table.image)]
             aggls = aggls[aggls.image.isin(table.image)]
+            contacts = contacts[contacts.image.isin(table.image)]
         step = {
             "label": label,
             "images": _kept(table, self.images),
@@ -338,6 +355,7 @@ class Results:
             table.reset_index(drop=True),
             particles.reset_index(drop=True),
             aggls.reset_index(drop=True),
+            contacts.reset_index(drop=True),
             origin,
         )
 
@@ -351,7 +369,8 @@ class Results:
         """Write the tables, their units and a record into ``folder``.
 
         Writes ``results.xlsx`` (the sheets ``images``,
-        ``agglomerates``, ``particles``, the extra ``tables``, then
+        ``agglomerates``, ``particles``, ``contacts``, the extra
+        ``tables``, then
         ``units`` and ``info``), ``csv/`` (one CSV per table and
         ``units.csv``) and ``record.yml``: per image the particle set,
         pixel size, region and the detection or correction the numbers
@@ -367,7 +386,7 @@ class Results:
                 path is taken from the current working directory.
             tables: Extra tables made from these results, e.g.
                 ``{"summary": res.summary(by="series")}``; written
-                after the three, without units.
+                after the four, without units.
             overwrite: Replace an earlier export in ``folder``.
 
         Returns:
@@ -375,8 +394,9 @@ class Results:
 
         Raises:
             ParamsError: If an extra table is called ``images``,
-                ``agglomerates`` or ``particles``, or ``folder`` lies in
-                the collection's work folder ``agglpy/``.
+                ``agglomerates``, ``particles`` or ``contacts``, or
+                ``folder`` lies in the collection's work folder
+                ``agglpy/``.
             OutputExistsError: If ``folder`` has an export and
                 ``overwrite`` is False.
             OutputLockedError: If a file to replace is open in another
@@ -384,17 +404,18 @@ class Results:
         """
         folder = export_folder(self._origin.collection, folder, "results")
         extra = dict(tables or {})
-        for name in ("images", "agglomerates", "particles"):
+        written = {
+            "images": self.images,
+            "agglomerates": self.agglomerates,
+            "particles": self.particles,
+            "contacts": self.contacts,
+        }
+        for name in written:
             if name in extra:
                 raise ParamsError(
                     f"tables: {name!r} is a table of the results; give "
                     "the extra table another name"
                 )
-        written = {
-            "images": self.images,
-            "agglomerates": self.agglomerates,
-            "particles": self.particles,
-        }
         origin = self._origin
         record = {
             "analysis": {

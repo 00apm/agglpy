@@ -5,6 +5,7 @@ import warnings
 from collections.abc import Callable
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -205,6 +206,57 @@ def test_subset_refuses(
 
 
 # ---------------------------------------------------------------------
+# contacts
+# ---------------------------------------------------------------------
+
+
+def test_contacts_table(res: Results) -> None:
+    c = res.contacts
+    assert list(c.columns) == [
+        "image",
+        "agglomerate_id",
+        "id_a",
+        "id_b",
+        "inside",
+    ]
+    # D7-017: two separate discs; D7-018: a touching pair and a single
+    # circle; D7-019: blank
+    assert c.image.tolist() == ["D7-018"]
+    assert not c.inside.any()
+    assert c.index.equals(pd.RangeIndex(1))
+
+
+def test_contacts_dtypes_with_a_blank_image(res: Results) -> None:
+    assert res.contacts.dtypes.drop("image").tolist() == [np.int64] * 3 + [
+        bool
+    ]
+    blank = res.subset(images="D7-019")
+    assert len(blank.contacts) == 0
+    assert blank.contacts.dtypes.drop("image").tolist() == [np.int64] * 3 + [
+        bool
+    ]
+
+
+def test_contacts_match_contact_count_through_subset(res: Results) -> None:
+    for r in (
+        res,
+        res.subset(agglomerates=res.agglomerates.member_count >= 2),
+        res.subset(agglomerates=res.agglomerates.member_count < 2),
+        res.subset(images="D7-018"),
+        res.subset(images="D7-017"),
+    ):
+        key = ["image", "agglomerate_id"]
+        rows = r.contacts.groupby(key).size()
+        counts = r.agglomerates.set_index(key).contact_count
+        assert rows.reindex(counts.index, fill_value=0).tolist() == (
+            counts.tolist()
+        )
+        assert r.contacts.index.equals(pd.RangeIndex(len(r.contacts)))
+    assert len(res.subset(images="D7-017").contacts) == 0
+    assert len(res.subset(images="D7-018").contacts) == 1
+
+
+# ---------------------------------------------------------------------
 # export
 # ---------------------------------------------------------------------
 
@@ -221,11 +273,21 @@ def test_export_writes_tables_units_and_record(
         "images",
         "agglomerates",
         "particles",
+        "contacts",
         "summary",
         "units",
         "info",
     ]
     xl.close()
+    contacts = pd.read_csv(out / "csv" / "contacts.csv")
+    assert contacts.columns.tolist() == [
+        "image",
+        "agglomerate_id",
+        "id_a",
+        "id_b",
+        "inside",
+    ]
+    assert contacts.image.tolist() == ["D7-018"]
     rows = pd.read_csv(out / "csv" / "units.csv").values.tolist()
     for row in (
         ["images", "pixel_size", "m"],
@@ -241,7 +303,7 @@ def test_export_writes_tables_units_and_record(
         assert row in rows
     listed = {(table, column) for table, column, _ in rows}
     assert ("agglomerates", "member_count") not in listed  # no dimension
-    assert not any(table == "summary" for table, _ in listed)
+    assert not any(table in ("summary", "contacts") for table, _ in listed)
     rec = _yaml.load(out / "record.yml")
     analysis = rec["analysis"]
     assert analysis["unit"] == "m" and analysis["sheet"] == "images.xlsx"
@@ -265,7 +327,7 @@ def test_export_writes_tables_units_and_record(
 def test_export_extra_table_named_like_a_result(
     res: Results, tmp_path: Path
 ) -> None:
-    for name in ("images", "agglomerates", "particles"):
+    for name in ("images", "agglomerates", "particles", "contacts"):
         with pytest.raises(ParamsError, match=f"{name!r}"):
             res.export(tmp_path / "out", tables={name: res.summary()})
     assert not (tmp_path / "out").exists()

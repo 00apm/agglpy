@@ -29,7 +29,6 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from agglpy.core.agglomerates import find_agglomerates
 from agglpy.errors import DuplicateParticlesWarning
 from agglpy.io import read_image, read_image_metadata, read_particles
 from agglpy.params import HCTParams, HCTRange, RegionParams
@@ -101,13 +100,6 @@ def _corrected(name: str) -> ImageResult:
         )
 
 
-def _contacts(result: ImageResult) -> pd.DataFrame:
-    """The result's contact pairs."""
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", DuplicateParticlesWarning)
-        return find_agglomerates(result.particles)[1]
-
-
 def _canonical(
     result: ImageResult,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -118,7 +110,7 @@ def _canonical(
     )
     assert not particles.duplicated(["x", "y", "r"]).any()
     row_of = pd.Series(particles.index, index=particles["id"])
-    pairs = _contacts(result)
+    pairs = result.contacts
     contacts = pd.DataFrame(
         {
             "a": row_of[pairs["id_a"]].to_numpy(),

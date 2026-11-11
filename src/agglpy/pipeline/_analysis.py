@@ -26,12 +26,14 @@ class ImageResult:
     Attributes:
         particles: The kept particles: ``id, x, y, r``, any extra
             columns of the input, then ``agglomerate_id``,
-            ``enclosed``, ``D``, ``area``,
+            ``enclosed``, ``coordination``, ``D``, ``area``,
             ``volume``, ``surface`` and, with an image size,
             ``touches_edge``.
         agglomerates: One row per agglomerate
             (``core.properties.agglomerate_properties``), with
             ``touches_edge`` when the image size was given.
+        contacts: The possible contacts between the kept particles,
+            by particle id (``core.agglomerates.find_agglomerates``).
         outside_ids: Ids of the particles left out as lying entirely
             outside the analysed region, ascending; empty without an
             image size.
@@ -45,6 +47,7 @@ class ImageResult:
 
     particles: pd.DataFrame
     agglomerates: pd.DataFrame
+    contacts: pd.DataFrame
     outside_ids: tuple[int, ...]
     width: int | None
     height: int | None
@@ -117,6 +120,7 @@ def analyze(
     return ImageResult(
         particles=particle_properties(found, bounds=bounds),
         agglomerates=agglomerate_properties(found, contacts, bounds=bounds),
+        contacts=contacts,
         outside_ids=outside_ids,
         width=None if width is None else int(width),
         height=None if height is None else int(height),

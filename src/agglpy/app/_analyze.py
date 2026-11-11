@@ -73,6 +73,7 @@ def run(
     rows: list[dict[str, object]] = []
     particles: list[pd.DataFrame] = []
     agglomerates: list[pd.DataFrame] = []
+    contacts: list[pd.DataFrame] = []
     records: dict[str, dict[str, object]] = {}
     outdated: list[tuple[str, str]] = []
     seen: dict[type[Warning], list[tuple[str, str]]] = {}
@@ -94,6 +95,10 @@ def run(
                         physical = to_physical(table, p)
                         physical.insert(0, "image", name)
                         tables.append(physical)
+                    # ids only: nothing to convert
+                    pairs = result.contacts.copy()
+                    pairs.insert(0, "image", name)
+                    contacts.append(pairs)
                 except Exception as exc:
                     exc.add_note(f"while analysing image {name}")
                     raise
@@ -148,6 +153,10 @@ def run(
         images,
         pd.concat(particles, ignore_index=True),
         pd.concat(agglomerates, ignore_index=True),
+        # empty frames of blank images must not turn ids into object
+        pd.concat(contacts, ignore_index=True).astype(
+            contacts[0].dtypes.to_dict()
+        ),
         origin,
     )
     summaries = [(cls, summary_text(found)) for cls, found in seen.items()]
