@@ -290,10 +290,9 @@ class Results:
         ``images`` keeps those images with their particles,
         agglomerates and contacts; ``agglomerates`` keeps those
         agglomerates with their member particles and contacts, and every
-        image (an image with nothing
-        left counts as zeros). Both: one step, images first. The tables
-        of the new results are renumbered from 0; ``self`` stays as it
-        is.
+        image (an image with nothing left counts as zeros). Both: one
+        step, images first. The tables of the new results are
+        renumbered from 0; ``self`` stays as it is.
 
         Args:
             images: A True / False Series on ``images``' index, e.g.
@@ -370,13 +369,12 @@ class Results:
 
         Writes ``results.xlsx`` (the sheets ``images``,
         ``agglomerates``, ``particles``, ``contacts``, the extra
-        ``tables``, then
-        ``units`` and ``info``), ``csv/`` (one CSV per table and
-        ``units.csv``) and ``record.yml``: per image the particle set,
-        pixel size, region and the detection or correction the numbers
-        come from, the rows with ``include`` false and the subset
-        steps. Drawings of the same results fit in a folder next to it
-        (``Drawings.export``).
+        ``tables``, then ``units`` and ``info``), ``csv/`` (one CSV per
+        table and ``units.csv``) and ``record.yml``: per image the
+        particle set, pixel size, region and the detection or correction
+        the numbers come from, the rows with ``include`` false and the
+        subset steps. Drawings of the same results fit in a folder next
+        to it (``Drawings.export``).
 
         Args:
             folder: The folder to write into; created if missing. A
