@@ -642,7 +642,7 @@ class Preview:
         Raises
         ------
         ParamsError
-            If ``full_image`` is not True / False.
+            If `full_image` is not True / False.
         """
         fig, ax = self._figure(
             legend=False, background="white", full_image=full_image

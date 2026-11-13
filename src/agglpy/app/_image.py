@@ -105,7 +105,7 @@ class Image:
         Raises
         ------
         ParamsError
-            If ``params`` is not an ``ImageParams`` or
+            If `params` is not an `ImageParams` or
             ``agglpy.yml`` has problems.
         FileNotFoundError
             If the image file is missing.

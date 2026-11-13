@@ -45,10 +45,9 @@ every number inherits them. Two effects of the projection run through all tables
 
 - **Possible contacts.** Overlapping or touching circles may touch in 3D, or lie one behind the other. agglpy
   counts them all as *possible contacts* ([methodology §6](methodology.md#6-connectivity-criterion-and-agglomerate-classification)):
-  contact counts are upper bounds (in simulated agglomerates, about 1.8 × the true ones). Two agglomerates that
-  overlap in the projection are one agglomerate.
-- **Hidden particles.** A particle completely behind a larger one is not in the image (about 9 % of the particles
-  in simulated agglomerates, more on large collectors). Counts and volumes miss them; only the `*_with_hidden`
+  contact counts are upper bounds. Two agglomerates that overlap in the projection are one agglomerate.
+- **Hidden particles.** A particle completely behind a larger one is not in the image (more often behind large
+  collectors). Counts and volumes miss them; only the `*_with_hidden`
   columns correct for them, by a model
   ([methodology §7](methodology.md#7-hidden-primary-particles-enclosed-particles-and-the-with-hidden-values)).
 
@@ -151,7 +150,8 @@ first. Definitions of size and shape: [methodology §8](methodology.md#8-agglome
 
 ## Contacts table
 
-`res.contacts`: one row per possible contact, sorted by `image, agglomerate_id, id_a, id_b`; an agglomerate has
+`res.contacts`: one row per possible contact, images in the order of the results, then sorted by
+`agglomerate_id, id_a, id_b`; an agglomerate has
 `contact_count` rows. No units.
 
 | column | unit | meaning | in 2D |
@@ -392,6 +392,8 @@ res.export("exports/2026-11 series a", tables={"summary": res.summary(by="series
 
 - **Units.** Column names stay as in the tables; the `units` sheet and `csv/units.csv` list `table | column |
   unit` (`m`, `m²`, `m³`; `px` for `width` / `height`). Extra tables get no units.
+- **Table names.** Extra tables are named with letters, digits, `_` and `-`, at most 31 characters (Excel's
+  sheet limit).
 - **Large tables.** A table longer than Excel's 1,048,575 rows is written as CSV only; the record says so.
 - **Index.** A table whose index is not `0 … n-1` (e.g. a `groupby` result) is written with its index as columns.
 - **record.yml**: the agglpy version, export time, versions of the main dependencies and the tables written;

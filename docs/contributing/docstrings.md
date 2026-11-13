@@ -3,7 +3,8 @@
 agglpy's docstrings follow the [numpydoc format](https://numpydoc.readthedocs.io/en/latest/format.html) and
 [PEP 257](https://peps.python.org/pep-0257/), like NumPy, SciPy and pandas. This page lists what we use of them and
 the few rules we add. ruff (`D`, numpy convention) and numpydoc's validator check them in CI; the exact checks are
-in `pyproject.toml`.
+in `pyproject.toml`. Locally: `ruff check src` and `python -X utf8 -m numpydoc lint $(git ls-files 'src/agglpy/*.py')`
+(`-X utf8`: numpydoc reads files in the system encoding, which is not UTF-8 on Windows).
 
 ## Which objects
 
@@ -118,7 +119,7 @@ SEGMENT_TYPES = ("core", "small core", "link", "loop", "dangling end", "no core"
 ## Example
 
 ```python
-def with_structure(self, min_core_members: int = 7) -> "Results":
+def with_structure(self, *, min_core_members: int = 7) -> "Results":
     """Return new results with the structure columns added.
 
     Particles get ``PARTICLE_COLUMNS`` and agglomerates

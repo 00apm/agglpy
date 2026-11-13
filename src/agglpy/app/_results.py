@@ -665,7 +665,9 @@ class Results:
         tables : mapping of str to DataFrame, optional
             Extra tables made from these results, e.g.
             ``{"summary": res.summary(by="series")}``; written
-            after the four, without units.
+            after the four, without units. Names: letters, digits,
+            ``_`` and ``-``, at most 31 characters (Excel's sheet
+            limit).
         overwrite : bool, default False
             Replace an earlier export in `folder`.
 
@@ -681,6 +683,10 @@ class Results:
             ``agglomerates``, ``particles`` or ``contacts``, or
             `folder` lies in the collection's work folder
             ``agglpy/``.
+        TableError
+            If an extra table's name breaks the rule above, is
+            ``info`` or ``units``, or the table is not a DataFrame
+            with plain column names.
         OutputExistsError
             If `folder` has an export and `overwrite` is False.
         OutputLockedError

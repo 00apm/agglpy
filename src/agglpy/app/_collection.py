@@ -245,7 +245,7 @@ class Collection:
         Raises
         ------
         KeyError
-            If ``name`` is not in the sheet.
+            If `name` is not in the sheet.
         """
         sheet = validate(read_grid(self.sheet_path))
         if name not in sheet.names:
