@@ -158,8 +158,8 @@ def apply_rule(
     Raises
     ------
     ParamsError
-        If ``rule`` is not a valid regular expression or
-        a group is named like a reserved column.
+        If ``rule`` is not a valid regular expression or a group is
+        named like a reserved column.
     """
     names = [unicodedata.normalize("NFC", f.path.stem) for f in found]
     if rule is None:

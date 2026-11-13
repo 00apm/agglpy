@@ -49,8 +49,8 @@ class ImageParams:
     preprocess : PreprocessParams
         Image preprocessing before detection.
     hct : HCTParams or None
-        The HCT ranges; None while ``hct.ranges`` is empty
-        (detection needs at least one range).
+        The HCT ranges; None while ``hct.ranges`` is empty (detection
+        needs at least one range).
     """
 
     region: RegionParams
@@ -104,7 +104,7 @@ def merge(
 
 
 def _copy(value: Any) -> Any:
-    """A deep copy as plain dicts and lists."""
+    """Return a deep copy as plain dicts and lists."""
     if isinstance(value, Mapping):
         return {key: _copy(item) for key, item in value.items()}
     if isinstance(value, list | tuple):
@@ -113,7 +113,7 @@ def _copy(value: Any) -> Any:
 
 
 def plain(value: object, path: str) -> Any:
-    """``value`` as plain YAML-ready data: dicts, lists, scalars.
+    """Return ``value`` as YAML-ready data: dicts, lists, scalars.
 
     A params object becomes its full mapping, a tuple a list and a
     NumPy scalar an int, float or bool. Raises ParamsError naming the
@@ -365,7 +365,7 @@ _COMMENT_COLUMN = 32
 
 
 def template() -> str:
-    """The text of a new ``agglpy.yml``: every key at its neutral value.
+    """Return the text of a new ``agglpy.yml``, keys at neutral values.
 
     Built from the params fields, so it cannot drift from them.
     """

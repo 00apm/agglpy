@@ -108,7 +108,10 @@ def _describe(bar: tqdm, name: str) -> Callable[[str], None]:
 def _summaries(
     seen: dict[type[Warning], list[str]], rows: list[dict[str, object]]
 ) -> list[tuple[type[Warning], str]]:
-    """One warning per caught class, then the count of images not done."""
+    """Return the summary warnings of a batch.
+
+    One per caught class, then the count of images not done.
+    """
     found: list[tuple[type[Warning], str]] = [
         (
             cls,
@@ -120,7 +123,7 @@ def _summaries(
     counts = {"skipped": 0, "kept": 0, "error": 0}
     for row in rows:
         outcome = row["outcome"]
-        # up-to-date skips are a normal resume, not something left undone
+        # up-to-date skips are a normal resume, not work left undone
         if outcome in counts and row["message"] != "up to date":
             counts[str(outcome)] += 1
     if any(counts.values()):
@@ -139,7 +142,7 @@ def _one(
     caught: Caught,
     on_step: Callable[[str], None],
 ) -> dict[str, object]:
-    """Decide and, if due, detect one image: its report row."""
+    """Detect one image if due; return its report row."""
     name = entry.image
     if params.hct is None:
         return _row(
@@ -217,7 +220,7 @@ def _detect(
     )
     work.mkdir(parents=True, exist_ok=True)
     csv = work / HCT_CSV
-    # overwrite: a temp file left by a hard stop must not block the write
+    # overwrite: a temp file left by a hard stop must not block it
     replace_file(csv, lambda tmp: write_particles(table, tmp, overwrite=True))
     agglpy, dependencies = versions()
     write_record(
@@ -236,7 +239,10 @@ def _detect(
 
 
 def warn_if_lossy(file: str, path: Path) -> None:
-    """Warn if the image file is a JPEG; ``file`` names it as stored."""
+    """Warn if the image file is a JPEG.
+
+    ``file`` names it as stored in the sheet.
+    """
     with path.open("rb") as fh:
         if fh.read(3) == _JPEG_START:
             warnings.warn(
@@ -260,7 +266,10 @@ def _row(
 
 
 def _error_text(exc: Exception) -> str:
-    """agglpy's messages as they are; others with their class name."""
+    """Return the error text for the report.
+
+    agglpy's messages as they are; others with their class name.
+    """
     if isinstance(exc, AgglpyError):
         return str(exc)
     return f"{type(exc).__name__}: {exc}"

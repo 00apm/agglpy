@@ -57,8 +57,8 @@ def run(
     Raises
     ------
     NotReadyError
-        If no image is included or an included image is
-        not ready; the message lists them all.
+        If no image is included or an included image is not ready;
+        the message lists them all.
     """
     included = [e for e in sheet.entries if e.include]
     if not sheet.entries:
@@ -170,7 +170,7 @@ def run(
 
 
 def summary_text(messages: list[tuple[str, str]]) -> str:
-    """One warning for a class: the images and their messages.
+    """Return one warning text for a class: images and messages.
 
     ``messages`` are ``(image, message)`` in order; the first
     ``_LISTED`` images are listed, then how many more.
@@ -188,7 +188,10 @@ def summary_text(messages: list[tuple[str, str]]) -> str:
 
 
 def _outdated(f: ImageFacts, params: ImageParams) -> str | None:
-    """Why the detection in use no longer matches; None if it does."""
+    """Return why the detection in use no longer matches.
+
+    None if it still does.
+    """
     if f.particle_set != "hct":
         return None  # a correction is the user's final word
     if f.detection == "image changed":
@@ -265,7 +268,10 @@ def _check_ready(sheet: Sheet, facts: list[ImageFacts]) -> None:
 def _one(
     f: ImageFacts, params: ImageParams
 ) -> tuple[ImageResult, dict[str, object]]:
-    """Analyse one ready image: the result in px and its images row."""
+    """Analyse one ready image.
+
+    Return the result in px and its row of the images table.
+    """
     assert f.meta is not None and f.pixel_size is not None
     used = f.used
     assert used is not None and used.particles is not None
@@ -293,7 +299,10 @@ def _one(
 def _images_table(
     sheet: Sheet, included: list[Entry], rows: list[dict[str, object]]
 ) -> pd.DataFrame:
-    """The agglpy columns, then the user columns, then ``note``."""
+    """Return the images table.
+
+    The agglpy columns, then the user columns, then ``note``.
+    """
     table = pd.DataFrame(rows, columns=list(_DTYPES)).astype(_DTYPES)
     # typed over the analysed rows only: an empty cell on an excluded
     # row doesn't turn an int column into float
@@ -311,7 +320,7 @@ def _record(
     row: dict[str, object],
     texts: list[str],
 ) -> dict[str, object]:
-    """The image's entry in the export record, as plain data."""
+    """Return the image's entry in the export record, as plain data."""
     used = f.used
     assert used is not None and used.particles is not None
     return {
@@ -339,7 +348,7 @@ def _record(
 def _made_by(
     record: DetectionRecord | CorrectionRecord | None,
 ) -> dict[str, object] | None:
-    """The key facts of the particle record used; None without one."""
+    """Return the key facts of the particle record used, or None."""
     if isinstance(record, DetectionRecord):
         return {
             "kind": "detection",

@@ -1,9 +1,10 @@
-"""The image sheet: one row per image, ``images.xlsx`` or ``images.csv``.
+"""The image sheet, ``images.xlsx`` or ``images.csv``: a row per image.
 
 ``read_grid`` reads the cells as stored (xlsx values, CSV text);
 ``validate`` checks them and lists every problem by row and column in
 one ``SheetError``. User columns (any column that is not a fixed one)
 are kept as stored; ``typed_user_columns`` gives their typed view.
+See *Collection* (``docs/collection.md``), section *The image sheet*.
 """
 
 import csv
@@ -68,7 +69,7 @@ _NUMERIC_TEXT = re.compile(r"[+-]?(0|[1-9][0-9]*)(\.[0-9]+)?")
 
 
 def find_sheet(folder: Path) -> Path:
-    """The image sheet in ``folder``: ``images.xlsx`` or ``images.csv``.
+    """Return ``folder``'s sheet: ``images.xlsx`` or ``images.csv``.
 
     Raises SheetError when both exist, FileNotFoundError when neither.
     """
@@ -233,7 +234,11 @@ def _read_xlsx(path: Path) -> list[tuple[int, list[object]]]:
 
 
 def _formula_message(path: Path, cells: list[tuple[int, int]]) -> str:
-    """Formula cells as contiguous runs per column, e.g. ``D2:D3, F4``."""
+    """Return the error message naming the formula cells.
+
+    The cells are listed as contiguous runs per column, e.g.
+    ``D2:D3, F4``.
+    """
     runs: list[str] = []
     for column in sorted({c for c, _ in cells}):
         rows = sorted(r for c, r in cells if c == column)
@@ -419,7 +424,7 @@ def _duplicates(
     rows: list[tuple[int, list[object]]],
     index: Mapping[str, int],
 ) -> list[tuple[int, str]]:
-    """Names repeated ignoring case, over every row with a name."""
+    """Return the names repeated ignoring case, over every named row."""
     by_key: dict[str, list[tuple[int, str]]] = {}
     for number, cells in rows:
         value = cells[index["image"]]
@@ -446,7 +451,7 @@ def _duplicates(
 
 
 def _include(value: object) -> bool | None:
-    """True / False, or None when the value is not accepted."""
+    """Return True / False, or None when the value is not accepted."""
     if _empty(value):
         return True
     if isinstance(value, bool):
@@ -489,7 +494,10 @@ def _pixel_size(value: object) -> tuple[float | None, str | None]:
 
 
 def _text(value: object) -> str:
-    """A cell as text: whole floats without ``.0``, bools TRUE / FALSE."""
+    """Return a cell as text.
+
+    Whole floats lose their ``.0``, bools become ``TRUE`` / ``FALSE``.
+    """
     if isinstance(value, bool):
         return "TRUE" if value else "FALSE"
     if isinstance(value, float) and value.is_integer():
@@ -513,7 +521,7 @@ def _raise(path: Path, problems: Sequence[str]) -> None:
 
 
 def typed_user_columns(sheet: Sheet) -> pd.DataFrame:
-    """Column ``image`` and the user columns, typed.
+    """Return column ``image`` and the user columns, typed.
 
     Per column, over its non-empty cells: all bools → boolean; all
     numbers or numeric text without a leading zero → int64 when all are

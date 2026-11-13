@@ -4,7 +4,9 @@ A record sits next to its particle file in ``agglpy/<name>/`` and
 stores the image (hash, size, time, pixel size), the params or the
 imported source, the versions and the warnings of the run. Records are
 read strictly: anything agglpy can't read exactly as it writes it is
-treated as missing, with an ``UnreadableRecordWarning``.
+treated as missing, with an ``UnreadableRecordWarning``. See
+*Collection* (``docs/collection.md``), section *Particle sets:
+detection and correction*.
 """
 
 import hashlib
@@ -137,13 +139,13 @@ _MADE_BY = {
 
 
 def sha256(path: Path) -> str:
-    """The SHA-256 of a file's bytes, as hex."""
+    """Return the SHA-256 of a file's bytes, as hex."""
     with path.open("rb") as fh:
         return hashlib.file_digest(fh, "sha256").hexdigest()
 
 
 def csv_sha256(path: Path) -> str:
-    """The SHA-256 of a particle CSV, the same for LF and CRLF lines.
+    """Return the SHA-256 of a particle CSV, the same for LF and CRLF.
 
     Git on Windows checks text files out with CRLF line endings; the
     particles are the same, so the file still matches its record.
@@ -153,7 +155,7 @@ def csv_sha256(path: Path) -> str:
 
 
 def image_info(stored: str, path: Path) -> ImageInfo:
-    """Hash, size, time and metadata of the image at ``path``.
+    """Return the hash, size, time and metadata of the image ``path``.
 
     ``stored`` is the path as the sheet holds it.
 
@@ -179,7 +181,7 @@ def image_info(stored: str, path: Path) -> ImageInfo:
 
 
 def nanometres(metres: float | None) -> float | None:
-    """A pixel size in m as nm; None stays None.
+    """Return a pixel size in m as nm; None stays None.
 
     Rounded to 12 digits: drops the float noise of the conversion, far
     below any calibration.
@@ -188,7 +190,7 @@ def nanometres(metres: float | None) -> float | None:
 
 
 def missing_image(stored: str) -> ImageInfo:
-    """The image facts of an image that was missing: only the path."""
+    """Return the facts of an image that was missing: only the path."""
     return ImageInfo(stored, None, None, None, None, None, None, None)
 
 
@@ -210,12 +212,12 @@ def same_image(info: ImageInfo, path: Path) -> bool:
 
 
 def now() -> str:
-    """The local date and time, ISO 8601 to the second."""
+    """Return the local date and time, ISO 8601 to the second."""
     return datetime.now().astimezone().isoformat(timespec="seconds")
 
 
 def versions() -> tuple[str | None, dict[str, str | None]]:
-    """agglpy's version and those of its main dependencies."""
+    """Return the versions of agglpy and of its main dependencies."""
     return _version(("agglpy",)), _dependency_versions()
 
 
@@ -225,7 +227,7 @@ def versions() -> tuple[str | None, dict[str, str | None]]:
 
 
 def record_text(record: Record) -> str:
-    """The record as YAML text, with its header comment."""
+    """Return the record as YAML text, with its header comment."""
     data = _yaml.new_mapping()
     data["kind"] = _KINDS[type(record)]
     data["format"] = RECORD_FORMAT

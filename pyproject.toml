@@ -118,22 +118,6 @@ ignore = [
 "src/agglpy/_legacy/**" = ["D"]
 # Transitional, while the docstrings are converted to numpydoc: a module
 # leaves this list when its docstrings follow the standard.
-"src/agglpy/app/__init__.py" = ["D"]
-"src/agglpy/app/_analyze.py" = ["D"]
-"src/agglpy/app/_collection.py" = ["D"]
-"src/agglpy/app/_config.py" = ["D"]
-"src/agglpy/app/_config_file.py" = ["D"]
-"src/agglpy/app/_correction.py" = ["D"]
-"src/agglpy/app/_detect.py" = ["D"]
-"src/agglpy/app/_files.py" = ["D"]
-"src/agglpy/app/_image.py" = ["D"]
-"src/agglpy/app/_records.py" = ["D"]
-"src/agglpy/app/_report.py" = ["D"]
-"src/agglpy/app/_sheet.py" = ["D"]
-"src/agglpy/app/_sheet_writer.py" = ["D"]
-"src/agglpy/app/_sources.py" = ["D"]
-"src/agglpy/app/_status.py" = ["D"]
-"src/agglpy/app/_work.py" = ["D"]
 "src/agglpy/core/__init__.py" = ["D"]
 "src/agglpy/core/_graph.py" = ["D"]
 "src/agglpy/core/_grey_image.py" = ["D"]
@@ -176,22 +160,6 @@ override_RT01 = ['^(The|A|An|Whether) ']
 exclude_files = [
     '.*_legacy',
     # Transitional, like ruff's per-file ignores above.
-    "src/agglpy/app/__init__.py",
-    "src/agglpy/app/_analyze.py",
-    "src/agglpy/app/_collection.py",
-    "src/agglpy/app/_config.py",
-    "src/agglpy/app/_config_file.py",
-    "src/agglpy/app/_correction.py",
-    "src/agglpy/app/_detect.py",
-    "src/agglpy/app/_files.py",
-    "src/agglpy/app/_image.py",
-    "src/agglpy/app/_records.py",
-    "src/agglpy/app/_report.py",
-    "src/agglpy/app/_sheet.py",
-    "src/agglpy/app/_sheet_writer.py",
-    "src/agglpy/app/_sources.py",
-    "src/agglpy/app/_status.py",
-    "src/agglpy/app/_work.py",
     "src/agglpy/core/__init__.py",
     "src/agglpy/core/_graph.py",
     "src/agglpy/core/_grey_image.py",

@@ -70,7 +70,7 @@ class ParticleFile:
 def export_folder(
     collection: Path, folder: PathLike | None, kind: str
 ) -> Path:
-    """The folder an export writes into, resolved.
+    """Return the folder an export writes into, resolved.
 
     None gives ``exports/<kind>`` in the collection; a relative
     ``folder`` is taken from the current working directory.
@@ -78,8 +78,8 @@ def export_folder(
     Raises
     ------
     ParamsError
-        If the folder lies in the work folder
-        ``agglpy/``, which agglpy owns.
+        If the folder lies in the work folder ``agglpy/``, which
+        agglpy owns.
     """
     if folder is None:
         return (collection / EXPORTS_FOLDER / kind).resolve()
@@ -93,14 +93,14 @@ def export_folder(
 
 
 def image_folder(collection: Path, name: str) -> Path:
-    """The work folder of image ``name``: ``agglpy/<name>/``."""
+    """Return the work folder of image ``name``: ``agglpy/<name>/``."""
     return collection / WORK_FOLDER / name
 
 
 def inspect(
     csv: Path, record_path: Path, kind: type[R]
 ) -> ParticleFile | None:
-    """The state of ``csv`` against its record; None without the CSV.
+    """Return the state of ``csv`` against its record; None without it.
 
     The reader's own warnings (duplicates, ImageJ shapes) are dropped:
     they belong to the record of the run that wrote the file.
@@ -137,7 +137,7 @@ def inspect(
 
 
 def particle_set(folder: Path) -> Literal["corrected", "hct"] | None:
-    """The particle set in use, decided by the CSV files alone."""
+    """Return the particle set in use, decided by the CSVs alone."""
     if (folder / CORRECTED_CSV).is_file():
         return "corrected"
     if (folder / HCT_CSV).is_file():
