@@ -118,18 +118,6 @@ ignore = [
 "src/agglpy/_legacy/**" = ["D"]
 # Transitional, while the docstrings are converted to numpydoc: a module
 # leaves this list when its docstrings follow the standard.
-"src/agglpy/core/__init__.py" = ["D"]
-"src/agglpy/core/_graph.py" = ["D"]
-"src/agglpy/core/_grey_image.py" = ["D"]
-"src/agglpy/core/_images.py" = ["D"]
-"src/agglpy/core/agglomerates.py" = ["D"]
-"src/agglpy/core/detect.py" = ["D"]
-"src/agglpy/core/distributions.py" = ["D"]
-"src/agglpy/core/metrics.py" = ["D"]
-"src/agglpy/core/preprocess.py" = ["D"]
-"src/agglpy/core/properties.py" = ["D"]
-"src/agglpy/core/region.py" = ["D"]
-"src/agglpy/core/structure.py" = ["D"]
 
 [tool.ruff.lint.pycodestyle]
 max-doc-length = 72         # PEP 8: 72 for comments and docstrings (W505)
@@ -160,18 +148,6 @@ override_RT01 = ['^(The|A|An|Whether) ']
 exclude_files = [
     '.*_legacy',
     # Transitional, like ruff's per-file ignores above.
-    "src/agglpy/core/__init__.py",
-    "src/agglpy/core/_graph.py",
-    "src/agglpy/core/_grey_image.py",
-    "src/agglpy/core/_images.py",
-    "src/agglpy/core/agglomerates.py",
-    "src/agglpy/core/detect.py",
-    "src/agglpy/core/distributions.py",
-    "src/agglpy/core/metrics.py",
-    "src/agglpy/core/preprocess.py",
-    "src/agglpy/core/properties.py",
-    "src/agglpy/core/region.py",
-    "src/agglpy/core/structure.py",
 ]
 
 [tool.pytest.ini_options]

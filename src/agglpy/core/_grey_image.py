@@ -7,7 +7,7 @@ from agglpy.errors import ImageError
 
 
 def check_grey_image(image: object) -> NDArray[np.uint8]:
-    """Return ``image`` if it is a 2-D ``uint8`` array of >= 1 x 1 px.
+    """Return `image` if it is a 2-D ``uint8`` array of >= 1 x 1 px.
 
     Nothing is converted: scaling a float or 16-bit image is a choice
     that changes what is detected, so it is left to the caller.
@@ -15,7 +15,7 @@ def check_grey_image(image: object) -> NDArray[np.uint8]:
     Raises
     ------
     ImageError
-        For anything else, naming what was given.
+        If `image` is anything else; the message names what was given.
     """
     if not isinstance(image, np.ndarray):
         got = type(image).__name__

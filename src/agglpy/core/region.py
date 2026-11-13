@@ -3,8 +3,10 @@
 The region is needed in two forms half a pixel apart (pixel centres at
 integers, see ``agglpy.tables``): array indices to cut the image, and
 pixel-centre coordinates for ``touches_edge``; its area is the field of
-view. All three come from one ``Bounds``, so they can't disagree.
-``outside_region`` marks the circles that lie entirely outside it.
+view. All three come from one `Bounds`, so they can't disagree.
+
+See *Methodology* (``docs/methodology.md``), section *1. Input image
+preprocessing*.
 """
 
 import math
@@ -28,13 +30,13 @@ class Bounds:
     Attributes
     ----------
     x_min : float
-        Left edge.
+        Left edge, px.
     y_min : float
-        Top edge.
+        Top edge, px.
     x_max : float
-        Right edge.
+        Right edge, px.
     y_max : float
-        Bottom edge.
+        Bottom edge, px.
     """
 
     x_min: float
@@ -44,7 +46,7 @@ class Bounds:
 
     @property
     def area(self) -> float:
-        """Area in px², the field of view of the analysed region."""
+        """The area in px², the field of view of the analysed region."""
         return (self.x_max - self.x_min) * (self.y_max - self.y_min)
 
 
@@ -59,7 +61,7 @@ def region_bounds(region: RegionParams, width: int, height: int) -> Bounds:
     Parameters
     ----------
     region : RegionParams
-        The region params.
+        The region params (``bottom_fraction``).
     width : int
         Image width in px.
     height : int
@@ -74,8 +76,8 @@ def region_bounds(region: RegionParams, width: int, height: int) -> Bounds:
     Raises
     ------
     ParamsError
-        If ``width`` or ``height`` is not an integer >= 1,
-        or the cut leaves no row.
+        If `width` or `height` is not an integer >= 1, or the cut
+        leaves no row.
     """
     for name, value in (("width", width), ("height", height)):
         if _integer(name, value) < 1:
@@ -93,7 +95,7 @@ def region_bounds(region: RegionParams, width: int, height: int) -> Bounds:
 
 
 def region_slices(bounds: Bounds) -> tuple[slice, slice]:
-    """Array slices (rows, columns) that cut the region from the image.
+    """Return the array slices that cut the region from the image.
 
     ``image[rows, cols]`` is a view, not a copy. Coordinates found on
     the cut lie in its own frame; add ``(bounds.x_min + 0.5,
@@ -103,12 +105,14 @@ def region_slices(bounds: Bounds) -> tuple[slice, slice]:
     Parameters
     ----------
     bounds : Bounds
-        A rectangle from ``region_bounds``.
+        A rectangle from `region_bounds`.
 
     Returns
     -------
-    tuple
-        ``(rows, cols)``, e.g. ``(slice(0, 2074), slice(0, 3072))``.
+    rows : slice
+        The rows, e.g. ``slice(0, 2074)``.
+    cols : slice
+        The columns, e.g. ``slice(0, 3072)``.
     """
     rows = slice(round(bounds.y_min + 0.5), round(bounds.y_max + 0.5))
     cols = slice(round(bounds.x_min + 0.5), round(bounds.x_max + 0.5))
@@ -121,30 +125,33 @@ def outside_region(
     """Mark the circles that don't overlap the analysed region at all.
 
     A circle is outside when the distance from its centre to the
-    ``bounds`` rectangle is larger than ``r``. A circle that only
-    touches the rectangle, is cut by an edge or has its centre outside
-    but still reaches in is not outside. The region lies inside the
-    image, so a circle outside the image is outside the region too.
+    `bounds` rectangle is larger than ``r``. A circle that only touches
+    the rectangle, is cut by an edge or has its centre outside but
+    still reaches in is not outside.
 
     Parameters
     ----------
     particles : DataFrame
-        A validated particle table (columns ``x, y, r`` in
-        px); a NaN coordinate, which validation rejects, would
-        count as not outside.
+        A validated particle table with ``x``, ``y``, ``r`` in px.
     bounds : Bounds
-        The analysed rectangle, from ``region_bounds``.
+        The analysed rectangle, from `region_bounds`.
 
     Returns
     -------
-    Series
-        A boolean mask on ``particles.index``: ``particles[~mask]``
-        keeps the circles that overlap the region.
+    Series of bool
+        A mask on ``particles.index``: ``particles[~mask]`` keeps the
+        circles that overlap the region.
 
     Raises
     ------
     ParticleTableError
         If ``x``, ``y`` or ``r`` is missing.
+
+    Notes
+    -----
+    The region lies inside the image, so a circle outside the image is
+    outside the region too. A NaN coordinate, which validation rejects,
+    would count as not outside.
     """
     missing = [c for c in ("x", "y", "r") if c not in particles.columns]
     if missing:

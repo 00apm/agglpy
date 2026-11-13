@@ -1,7 +1,9 @@
 """Structure of agglomerates: segments, branches and longest chains.
 
-``structure_properties`` adds the structure columns to one image's
-particle and agglomerate tables (``docs/agglomerate-structure.md``).
+The structure columns are computed on the contact graph of one image's
+particle and agglomerate tables.
+
+See *Structure of agglomerates* (``docs/agglomerate-structure.md``).
 """
 
 from typing import Literal
@@ -38,6 +40,7 @@ SEGMENT_TYPES = (
     "dangling end",
     "no core",
 )
+"""The values of the ``segment_type`` column."""
 _CORE, _SMALL, _LINK, _LOOP, _DANGLING, _NO_CORE = range(len(SEGMENT_TYPES))
 
 PARTICLE_COLUMNS = (
@@ -49,6 +52,7 @@ PARTICLE_COLUMNS = (
     "dangling_end_depth",
     "dangling_end_length",
 )
+"""The particle columns `structure_properties` adds."""
 AGGLOMERATE_COLUMNS = (
     "longest_chain",
     "longest_chain_length",
@@ -64,6 +68,7 @@ AGGLOMERATE_COLUMNS = (
     "dangling_end_depth_max",
     "dangling_end_length_max",
 )
+"""The agglomerate columns `structure_properties` adds."""
 
 
 def structure_properties(
@@ -73,11 +78,11 @@ def structure_properties(
     *,
     min_core_members: int = 7,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Segments, branches and longest chains of one image's agglomerates.
+    """Compute the segments, branches and longest chains of one image.
 
-    The contacts are the edges of a graph; the base of an agglomerate is
-    its largest member (equal radii: the lower id). Lengths are sums of
-    diameters, in the units of ``r``.
+    The contacts are the edges of a graph; the base
+    of an agglomerate is its largest member (equal radii: the lower
+    id). Lengths are sums of diameters, in the units of ``r``.
 
     Parameters
     ----------
@@ -85,28 +90,39 @@ def structure_properties(
         One image's particle table with ``id``, ``r`` and
         ``agglomerate_id``.
     agglomerates : DataFrame
-        Its agglomerate table: one row per
-        ``agglomerate_id`` of ``particles``, no other.
+        Its agglomerate table: one row per ``agglomerate_id`` of
+        `particles`, no other.
     contacts : DataFrame
-        Its contacts table (``find_agglomerates``).
+        Its contacts table
+        (`agglpy.core.agglomerates.find_agglomerates`).
     min_core_members : int, default 7
-        Particles a group of triangles needs to be a
-        core; an integer of 3 or more.
+        Particles a group of triangles needs to be a core; 3 or more.
 
     Returns
     -------
-    tuple
-        Copies of ``particles`` and ``agglomerates`` with the columns
-        ``PARTICLE_COLUMNS`` and ``AGGLOMERATE_COLUMNS``, replacing any
-        from an earlier run; other columns, row order and index kept.
+    particles : DataFrame
+        A copy of `particles` with the `PARTICLE_COLUMNS`, replacing
+        any from an earlier run; other columns, row order and index
+        kept.
+    agglomerates : DataFrame
+        A copy of `agglomerates` with the `AGGLOMERATE_COLUMNS`, in the
+        same way.
 
     Raises
     ------
     ParamsError
-        If ``min_core_members`` is not an integer >= 3.
+        If `min_core_members` is not an integer >= 3.
     TableError
-        If a column is missing or invalid, or the three
-        tables do not belong together.
+        If a column is missing or invalid, or the three tables do not
+        belong together.
+
+    See Also
+    --------
+    chain_path : The particles of a longest chain or a branch.
+
+    Notes
+    -----
+    See *Structure of agglomerates* (``docs/agglomerate-structure.md``).
     """
     m = _min_core_members(min_core_members)
     _one_image(particles, agglomerates)
@@ -165,14 +181,11 @@ def chain_path(
     to: int | None = None,
     by: Literal["hops", "length"] = "hops",
 ) -> list[int]:
-    """The particles of an agglomerate's longest chain or of a branch.
+    """Return the particles of an agglomerate's longest chain or branch.
 
-    ``to=None`` gives the longest chain, ``to=<tip id>`` the branch from
-    the base to that tip; ``by="length"`` goes by sums of diameters.
-    The path has the hop count or length that ``structure_properties``
+    The path has the hop count or length that `structure_properties`
     stores. Among equal paths: the end pair with the lower ids, then at
-    each step the lower id. A large agglomerate may need one search per
-    member.
+    each step the lower id.
 
     Parameters
     ----------
@@ -180,13 +193,15 @@ def chain_path(
         One image's particle table with ``id``, ``r`` and
         ``agglomerate_id``.
     contacts : DataFrame
-        Its contacts table (``find_agglomerates``).
+        Its contacts table
+        (`agglpy.core.agglomerates.find_agglomerates`).
     agglomerate_id : int
         The agglomerate.
     to : int, optional
-        The particle id of a tip, or None.
+        The particle id of a tip: the branch from the base to that tip;
+        None gives the longest chain.
     by : {"hops", "length"}, default "hops"
-        ``"hops"`` or ``"length"``.
+        Count contacts (``"hops"``) or sum diameters (``"length"``).
 
     Returns
     -------
@@ -196,11 +211,16 @@ def chain_path(
     Raises
     ------
     ParamsError
-        If ``by`` is unknown, the agglomerate does not
-        exist or ``to`` is not one of its tips.
+        If `by` is unknown, the agglomerate does not exist or `to` is
+        not one of its tips.
     TableError
-        If a column is missing or invalid, or the tables do
-        not belong together.
+        If a column is missing or invalid, or the tables do not belong
+        together.
+
+    Notes
+    -----
+    A large agglomerate may need one search per member. See *Structure
+    of agglomerates* (``docs/agglomerate-structure.md``).
     """
     if by not in ("hops", "length"):
         raise ParamsError(f"by must be 'hops' or 'length', got {by!r}")
@@ -234,7 +254,10 @@ def _chain_ends(
     r: NDArray[np.float64],
     hops: bool,
 ) -> tuple[int, int]:
-    """Rows of the longest chain's ends: the lowest ids that reach it."""
+    """Return the rows of the longest chain's ends.
+
+    Of the pairs that reach it, the one with the lowest ids.
+    """
     if g.n == 1:
         return 0, 0
     radius = np.zeros(g.n) if hops else r
@@ -258,7 +281,7 @@ def _branch_ends(
     to: int,
     number: int,
 ) -> tuple[int, int]:
-    """Rows of the base and of the tip ``to``."""
+    """Return the rows of the base and of the tip `to`."""
     agg = np.zeros(g.n, dtype=np.intp)
     tips = _branches(g, ids, r, agg, 1)["tip"]
     at = np.flatnonzero(ids == to)
@@ -305,7 +328,7 @@ def _agglomerate_rows(
     groups: NDArray[np.int64],
     agg: NDArray[np.intp],
 ) -> NDArray[np.intp]:
-    """Position in ``groups`` of each row's ``agglomerate_id``.
+    """Return the position in `groups` of each row's ``agglomerate_id``.
 
     ``member_count``, when present, must match the particles: another
     image's table often has the same ids.
@@ -350,7 +373,10 @@ def _segments(
     agg: NDArray[np.intp],
     m: int,
 ) -> tuple[NDArray[np.intp], NDArray[np.int64]]:
-    """Segment type (index into SEGMENT_TYPES) and segment id per node."""
+    """Return each node's segment type and segment id.
+
+    The type is an index into `SEGMENT_TYPES`.
+    """
     n = g.n
     count = int(agg.max()) + 1 if n else 0
 
@@ -394,7 +420,7 @@ def _hanging(
     is_core: NDArray[np.bool_],
     has_core: NDArray[np.bool_],
 ) -> NDArray[np.bool_]:
-    """Per node: whether it lies in a dangling end (or a tree)."""
+    """Mark the nodes that lie in a dangling end (or a tree)."""
     bridge = _graph.bridges(g)
     piece = _graph.components(g.n, g.a[~bridge], g.b[~bridge])
     pieces = int(piece.max()) + 1 if g.n else 0
@@ -421,7 +447,7 @@ def _hanging(
 def _within(
     g: _graph.Graph, mask: NDArray[np.bool_]
 ) -> tuple[NDArray[np.intp], NDArray[np.intp]]:
-    """The pairs with both ends in ``mask``."""
+    """Return the pairs with both ends in `mask`."""
     both = mask[g.a] & mask[g.b]
     return g.a[both], g.b[both]
 
@@ -433,7 +459,7 @@ def _cores_touched(
     is_core: NDArray[np.bool_],
     core_group: NDArray[np.intp],
 ) -> NDArray[np.int64]:
-    """Per run label: how many different cores its particles touch."""
+    """Count per run label the different cores its particles touch."""
     ends = []
     for x, y in ((g.a, g.b), (g.b, g.a)):
         touch = between[x] & is_core[y]
@@ -445,7 +471,10 @@ def _cores_touched(
 def _bases(
     ids: NDArray[np.int64], r: NDArray[np.float64], agg: NDArray[np.intp]
 ) -> NDArray[np.intp]:
-    """Row of each agglomerate's largest member (equal radii: lower id)."""
+    """Return the row of each agglomerate's largest member.
+
+    Of equal radii, the lower id.
+    """
     order = np.lexsort((ids, -r, agg))
     _, first = np.unique(agg[order], return_index=True)
     return order[first].astype(np.intp)
@@ -458,7 +487,7 @@ def _branches(
     agg: NDArray[np.intp],
     count: int,
 ) -> dict[str, NDArray[np.generic]]:
-    """Branch depth, length and tips, from each agglomerate's base."""
+    """Compute branch depth, length and tips from each base."""
     bases = _bases(ids, r, agg)
     depth = _graph.distances(g.matrix, bases, unweighted=True)
     dist = _graph.distances(_graph.weighted(g, r), bases, unweighted=False)
@@ -483,7 +512,7 @@ def _dangling(
     kind: NDArray[np.intp],
     segment: NDArray[np.int64],
 ) -> dict[str, NDArray[np.generic]]:
-    """Depth and length inside each dangling end; NaN off the ends."""
+    """Compute depth and length inside each dangling end; NaN off it."""
     end = kind == _DANGLING
     depth = np.full(g.n, np.nan)
     length = np.full(g.n, np.nan)
@@ -509,7 +538,7 @@ def _group_max(
     count: int,
     used: NDArray[np.bool_],
 ) -> NDArray[np.float64]:
-    """Per agglomerate: the largest of ``values[used]``; NaN for none."""
+    """Return the max of ``values[used]`` per agglomerate, else NaN."""
     out = np.full(count, -np.inf)
     np.maximum.at(out, agg[used], values[used].astype(np.float64))
     out[np.isneginf(out)] = np.nan
@@ -522,7 +551,7 @@ def _counts(
     agg: NDArray[np.intp],
     count: int,
 ) -> dict[str, NDArray[np.int64]]:
-    """The count columns, one value per agglomerate (``agg`` code)."""
+    """Return the count columns, one value per agglomerate code."""
     types = len(SEGMENT_TYPES)
     members = np.bincount(agg * types + kind, minlength=count * types).reshape(
         count, types

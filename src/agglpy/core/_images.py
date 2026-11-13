@@ -1,21 +1,14 @@
 """The images table and the groups of images that ``by=`` forms.
 
 Every core function that groups takes the images table first, so an
-image without particles or agglomerates keeps its row (D-022). Until
-Phase 3 makes it ``Results.images``, it is a plain DataFrame:
-
-==========  ========  ================================================
-column      dtype     meaning
-==========  ========  ================================================
-image       any       image key: unique, no gaps; the particle and
-                      agglomerate tables refer to it in their own
-                      ``image`` column
-fov_area    float     analysed area of the image (field of view), in
-                      the tables' unit squared; NaN when unknown
-                      (particles-only entries). Read only by the
-                      ``per_area`` metrics of ``summary``
-others      any       group columns for ``by=``
-==========  ========  ================================================
+image without particles or agglomerates keeps its row (zero counts).
+It is a plain DataFrame (``Results.images`` in the application).
+``image``: the image key, unique, no gaps; the particle and agglomerate
+tables refer to it in their own ``image`` column. ``fov_area``: the
+analysed area of the image (field of view) in the tables' unit
+squared, NaN when unknown (particles-only entries); read only by the
+``per_area`` metrics of ``summary``. Any other column: a group column
+for ``by=``.
 """
 
 from collections.abc import Iterable
@@ -44,11 +37,12 @@ class Grouping(NamedTuple):
 
     @property
     def k(self) -> int:
+        """The number of groups."""
         return len(self.labels)
 
 
 def names(value: str | Iterable[str] | None, argument: str) -> list[str]:
-    """Column names given as ``None``, one name or a sequence of names.
+    """Read column names given as None, one name or a sequence of names.
 
     A single string is one name, never a sequence of letters.
     """
@@ -96,9 +90,9 @@ def check_images(images: pd.DataFrame, *, fov_area: bool = False) -> None:
 def group_images(
     images: pd.DataFrame, by: str | Iterable[str] | None
 ) -> Grouping:
-    """Form the groups of images for ``by=`` (call ``check_images`` first).
+    """Form the groups of images for `by` (call `check_images` first).
 
-    ``None`` is one group of all images; ``"image"`` one group per
+    None is one group of all images; ``"image"`` one group per
     image; any images-table column, or a list of them, one group per
     existing combination, sorted. An empty cell forms its own group,
     labelled NaN, sorted last (pandas would drop it).
@@ -108,7 +102,7 @@ def group_images(
     TableError
         If a ``by`` column is not in the images table.
     ParamsError
-        If ``by`` is not column names or repeats one.
+        If `by` is not column names or repeats one.
     """
     columns = names(by, "by")
     repeated = sorted({c for c in columns if columns.count(c) > 1})
@@ -135,7 +129,7 @@ def group_images(
 
 
 def with_labels(labels: pd.DataFrame, out: pd.DataFrame) -> pd.DataFrame:
-    """The ``by`` columns of each row's group, then the output columns.
+    """Put the `by` columns of each row's group before the output.
 
     Raises
     ------
@@ -155,12 +149,12 @@ def with_labels(labels: pd.DataFrame, out: pd.DataFrame) -> pd.DataFrame:
 def image_positions(
     images: pd.DataFrame, table: pd.DataFrame, name: str
 ) -> NDArray[np.intp]:
-    """Row of the images table for each row of ``table``.
+    """Return the row of the images table for each row of `table`.
 
     Raises
     ------
     TableError
-        If ``table`` has no ``image`` column or names an
+        If `table` has no ``image`` column or names an
         image that is not in the images table.
     """
     require(table, ["image"], name)
@@ -184,7 +178,7 @@ def require(table: pd.DataFrame, columns: list[str], name: str) -> None:
 def numbers(
     table: pd.DataFrame, column: str, name: str
 ) -> NDArray[np.float64]:
-    """A numeric column as float64; NaN stays NaN."""
+    """Return a numeric column as float64; NaN stays NaN."""
     try:
         values = pd.to_numeric(table[column], errors="raise")
     except (ValueError, TypeError) as exc:
