@@ -105,7 +105,7 @@ a docstring right after the assignment.
 
 ```python
 SEGMENT_TYPES = ("core", "small core", "link", "loop", "dangling end", "no core")
-"""The values of the ``segment_type`` column, in drawing order."""
+"""The values of the ``segment_type`` column."""
 ```
 
 ## Markup and text
