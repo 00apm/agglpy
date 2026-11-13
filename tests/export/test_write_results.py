@@ -321,7 +321,7 @@ def test_a_locked_file_stops_the_overwrite(tmp_path, monkeypatch):
 
 def test_output_errors_are_os_errors(tmp_path):
     write(tmp_path)
-    with pytest.raises(FileExistsError):
+    with pytest.raises(FileExistsError, match="already holds an export"):
         write(tmp_path)
 
 

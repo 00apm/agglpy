@@ -1,4 +1,4 @@
-"""Render a matplotlib figure the way a user saves it, for pixel checks."""
+"""Render a matplotlib figure as a user saves it, for pixel checks."""
 
 import io
 
@@ -9,7 +9,7 @@ from PIL import Image
 
 
 def render(fig: Figure) -> NDArray[np.uint8]:
-    """The figure saved as PNG and read back: (height, width, 4) RGBA."""
+    """The figure saved as PNG, read back: (height, width, 4) RGBA."""
     buffer = io.BytesIO()
     fig.savefig(buffer, format="png")
     buffer.seek(0)

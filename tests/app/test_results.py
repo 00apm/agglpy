@@ -107,7 +107,9 @@ def test_a_user_column_travels(res: Results, tmp_path: Path) -> None:
 
 
 def test_method_warning_points_at_the_caller(res: Results) -> None:
-    with pytest.warns(MissingImagesWarning) as ws:
+    with pytest.warns(
+        MissingImagesWarning, match="have no row in per_image"
+    ) as ws:
         res.values_across_images(_per_image(res), values="D")
     (w,) = ws
     assert os.path.normcase(w.filename) == os.path.normcase(__file__)
@@ -319,7 +321,7 @@ def test_export_writes_tables_units_and_record(
     assert d18["particle_set"] == "corrected"
     assert rec["excluded"] == [{"image": "D7-020", "note": "out of focus"}]
     assert [s["label"] for s in rec["subset"]] == ["two"]
-    with pytest.raises(OutputExistsError):
+    with pytest.raises(OutputExistsError, match="already holds an export"):
         res.export(out)
     res.export(out, overwrite=True)
     assert _yaml.load(out / "record.yml")["subset"] == []

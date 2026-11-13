@@ -1,4 +1,4 @@
-"""Locations of the test data, independent of where a test file lives."""
+"""Locations of the test data, wherever a test file lives."""
 
 from pathlib import Path
 

@@ -1,4 +1,4 @@
-"""The image sheet: finding, reading, validating, typing user columns."""
+"""Image sheet: finding, reading, validating, typing user columns."""
 
 from datetime import datetime
 from pathlib import Path
@@ -33,7 +33,9 @@ def xlsx(tmp_path: Path):
 
 
 def problems(xlsx, rows: list[list[object]]) -> str:
-    with pytest.raises(SheetError) as e:
+    with pytest.raises(
+        SheetError, match=r"images\.xlsx has \d+ problems?:"
+    ) as e:
         xlsx(rows)
     return str(e.value)
 
@@ -254,7 +256,7 @@ def test_formulas_are_errors(tmp_path: Path) -> None:
     sheet["D3"] = "=F3*2"
     sheet["F4"] = ArrayFormula("F4", "=SUM(A1:A2)")
     book.save(path)
-    with pytest.raises(SheetError) as e:
+    with pytest.raises(SheetError, match="contain formulas") as e:
         read_grid(path)
     assert str(e.value) == (
         "images.xlsx: D2:D3, F4 contain formulas; replace them with values "
@@ -264,7 +266,7 @@ def test_formulas_are_errors(tmp_path: Path) -> None:
 
 def test_two_worksheets(tmp_path: Path) -> None:
     path = write_xlsx(tmp_path / "images.xlsx", [H, row()], sheets=2)
-    with pytest.raises(SheetError) as e:
+    with pytest.raises(SheetError, match="has 2 worksheets") as e:
         read_grid(path)
     assert str(e.value) == (
         "images.xlsx has 2 worksheets (Sheet, Sheet1); keep one"
@@ -274,7 +276,7 @@ def test_two_worksheets(tmp_path: Path) -> None:
 def test_header_problems(tmp_path: Path) -> None:
     rows = [["image", "file", None, 2024, "file"], ["a", "b", "x", 1, "c"]]
     path = write_xlsx(tmp_path / "images.xlsx", rows)
-    with pytest.raises(SheetError) as e:
+    with pytest.raises(SheetError, match="has 3 problems") as e:
         read_grid(path)
     assert str(e.value) == (
         "images.xlsx has 3 problems:\n"

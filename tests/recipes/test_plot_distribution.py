@@ -30,7 +30,7 @@ def test_bars_have_true_widths_and_groups() -> None:
     assert len(widths) == 2 * (len(EDGES) - 1)  # two groups
     np.testing.assert_allclose(widths, table["width"])
     assert ax.get_xscale() == "log"
-    # bar height: the fraction per decade, so areas compare on a log axis
+    # bar height: fraction per decade, so areas compare on a log axis
     heights = [bar.get_height() for bar in ax.patches]
     np.testing.assert_allclose(heights, table["log_density"])
     (twin,) = (a for a in ax.figure.axes if a is not ax)

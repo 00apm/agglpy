@@ -165,7 +165,7 @@ def pair(
 def _near(
     shown: np.ndarray, circle: tuple[float, float, float], colour: list[int]
 ) -> bool:
-    """Whether the outline right of ``circle``'s centre has ``colour``."""
+    """Whether the outline at ``circle``'s right has ``colour``."""
     x, y, r = (round(v) for v in circle)
     ring = shown[y, x + r - 2 : x + r + 3, :3].astype(float)
     return bool(np.abs(ring - colour).sum(axis=1).min() < 100)

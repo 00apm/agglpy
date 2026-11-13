@@ -63,7 +63,10 @@ def test_without_a_size_nothing_is_dropped_or_flagged():
 
 
 def test_with_a_size_the_outside_circle_is_dropped_and_warned():
-    with pytest.warns(ParticlesOutsideRegionWarning) as record:
+    with pytest.warns(
+        ParticlesOutsideRegionWarning,
+        match="1 of 5 particles lie entirely outside",
+    ) as record:
         res = analyze(_table(), **SIZE, region=REGION)
     assert len(record) == 1
     assert str(record[0].message) == (
@@ -101,7 +104,10 @@ def test_contacts_are_pairs_of_kept_particles():
 
 
 def test_the_warning_points_at_the_caller():
-    with pytest.warns(ParticlesOutsideRegionWarning) as record:
+    with pytest.warns(
+        ParticlesOutsideRegionWarning,
+        match="1 of 5 particles lie entirely outside",
+    ) as record:
         analyze(_table(), **SIZE, region=REGION)
     assert os.path.normcase(record[0].filename) == os.path.normcase(__file__)
 
@@ -116,7 +122,10 @@ def test_nothing_outside_gives_no_warning():
 
 
 def test_the_warning_lists_ten_ids_and_counts_the_rest():
-    with pytest.warns(ParticlesOutsideRegionWarning) as record:
+    with pytest.warns(
+        ParticlesOutsideRegionWarning,
+        match="12 of 12 particles lie entirely outside",
+    ) as record:
         analyze(_all_outside(), **SIZE, region=REGION)
     message = str(record[0].message)
     assert "12 of 12 particles" in message
@@ -198,7 +207,9 @@ def test_bad_sizes_raise(kwargs, match):
 
 
 def test_a_bad_table_raises():
-    with pytest.raises(ParticleTableError):
+    with pytest.raises(
+        ParticleTableError, match=r"missing columns: \['id', 'r'\]"
+    ):
         analyze(pd.DataFrame({"x": [1.0], "y": [1.0]}))
 
 
@@ -214,5 +225,8 @@ def test_result_survives_a_pickle_round_trip():
 
 def test_result_is_frozen():
     res = analyze(_table())
-    with pytest.raises(dataclasses.FrozenInstanceError):
+    with pytest.raises(
+        dataclasses.FrozenInstanceError,
+        match="cannot assign to field 'fov_area'",
+    ):
         res.fov_area = 1.0  # type: ignore[misc]

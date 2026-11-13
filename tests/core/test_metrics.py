@@ -1,8 +1,8 @@
 """Population metrics (``agglpy.core.metrics``).
 
-The 1.4 synthetic summary cases (``support.synthetic.cases.SUMMARY``)
-run once per implementation; the unit tests below run the core on
-tables written by hand, with the values worked out in the 2.5 plan.
+The synthetic summary cases (``support.synthetic.cases.SUMMARY``) run
+once per implementation; the unit tests below run the core on tables
+written by hand, with hand-worked values.
 """
 
 import math
@@ -282,7 +282,7 @@ def test_singles_only():
 
 
 def test_particle_size_descriptors():
-    # D = 8 10 20 20 20 40 60 (the composed scene of 1.4)
+    # D = 8 10 20 20 20 40 60 (the composed synthetic scene)
     d = [20, 40, 60, 20, 8, 20, 10]
     images = pd.DataFrame({"image": ["A"], "fov_area": [math.nan]})
     particles = pd.DataFrame({"image": "A", "D": d})
@@ -478,7 +478,7 @@ def test_rows_of_an_unknown_image_raise():
 
 def test_agglomerates_filtered_alone_raise():
     # aggl[aggl.member_count >= 2] keeps the particles of the singles:
-    # N_ppA 22 instead of 6, without a sign (review of 2.5)
+    # N_ppA 22 instead of 6, without a sign
     images, particles, agglomerates = _scene(RA_EXAMPLE)
     multi = agglomerates[agglomerates["member_count"] >= 2]
     with pytest.raises(TableError, match=r"\['B'\].*select_agglomerates"):
@@ -748,7 +748,7 @@ def test_summary_across_images_by_group():
 
 
 def test_images_column_named_like_a_metric_keeps_the_metric():
-    # an images column "Ra" (e.g. a roughness label) is not the metric Ra
+    # an images column "Ra" (e.g. roughness) is not the metric Ra
     images, particles, agglomerates = _scene(RA_EXAMPLE)
     images["Ra"] = ["smooth", "rough"]
     out = summary_across_images(

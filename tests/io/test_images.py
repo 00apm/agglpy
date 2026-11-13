@@ -115,7 +115,7 @@ def test_other_formats(tmp_path: Path, suffix: str) -> None:
 
 
 def test_missing_file_raises_file_not_found(tmp_path: Path) -> None:
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(FileNotFoundError, match=r"missing\.tif"):
         read_image(tmp_path / "missing.tif")
 
 

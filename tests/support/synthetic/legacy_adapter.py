@@ -1,7 +1,7 @@
 """Run synthetic cases through the legacy ImgDataSet code (v0.4 API).
 
 This is the only place in the synthetic tests that knows the legacy
-classes. It is deleted together with them (roadmap 2.9).
+classes. It is deleted together with them.
 
 The case goes in the way real data does: as an agglpy particle CSV
 next to an image file, loaded by ``ImgDataSet(auto_load=True)``. The
@@ -28,13 +28,13 @@ def run_legacy(
     tmp_path: Path,
     pixel_size: float = 1.0,
 ) -> Result:
-    """Run one case through ImgDataSet and convert the outcome to a Result.
+    """Run one case through ImgDataSet; return the outcome as a Result.
 
     Args:
         case: The synthetic case.
         tmp_path: A fresh directory; a dataset folder is created inside.
-        pixel_size: Metres per pixel given to ImgDataSet. The legacy code
-            scales coordinates by it before grouping.
+        pixel_size: Metres per pixel given to ImgDataSet. The legacy
+            code scales coordinates by it before grouping.
     """
     ds_dir = tmp_path / case.name
     ds_dir.mkdir()
@@ -196,7 +196,7 @@ def _clear_shared_search_list() -> None:
     """Empty the visited-ID list the legacy search keeps between calls.
 
     ``ImgDataSet._find_intersecting_family`` collects visited IDs in a
-    mutable default argument (D-015). A search that stops halfway (e.g.
+    mutable default argument. A search that stops halfway (e.g.
     on RecursionError) leaves its IDs there, and the next detection in
     the same process starts with them: it crashes or merges unrelated
     particles. All tests run in one process, so every run starts and

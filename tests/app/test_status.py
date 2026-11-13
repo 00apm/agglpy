@@ -164,7 +164,10 @@ def test_unreadable_record_warns_and_reads_as_no_record(
 ) -> None:
     particles_col.detect(progress=False)
     record_path(particles_col).write_text("format: [", encoding="utf-8")
-    with pytest.warns(UnreadableRecordWarning) as ws:
+    with pytest.warns(
+        UnreadableRecordWarning,
+        match=r"particles_hct_record\.yml in D7-017/ unreadable",
+    ) as ws:
         r = row(particles_col)
     assert r["detection"] == "no record"
     (w,) = [w for w in ws if w.category is UnreadableRecordWarning]
@@ -231,7 +234,7 @@ def test_missing_image(tmp_path: Path) -> None:
     write_zeiss(tmp_path / "images" / "a.tif", 64, 48, raw=1e-9)
     col = Collection.create(tmp_path / "col", images=tmp_path / "images")
     col.set_params(None, hct=HCT)
-    with pytest.warns(NoParticlesWarning):
+    with pytest.warns(NoParticlesWarning, match="NoParticlesWarning in a"):
         col.detect(progress=False)
     (tmp_path / "images" / "a.tif").unlink()
     r = row(col, "a")
@@ -292,7 +295,9 @@ def test_warnings_column_from_the_set_in_use(
             "ranges": [{"d_min": 12, "d_max": 44}, {"d_min": 20, "d_max": 40}]
         },
     )
-    with pytest.warns(DuplicateParticlesWarning):
+    with pytest.warns(
+        DuplicateParticlesWarning, match="DuplicateParticlesWarning in D7-017"
+    ):
         particles_col.detect(progress=False)
     assert (
         particles_col.status()["warnings"].tolist()
@@ -307,7 +312,9 @@ def test_leftover_folder_warns_with_hint(particles_col: Collection) -> None:
     sheet = particles_col.read_sheet()
     sheet.loc[0, "image"] = "D7-017a"
     particles_col.write_sheet(sheet)
-    with pytest.warns(LeftoverFoldersWarning) as ws:
+    with pytest.warns(
+        LeftoverFoldersWarning, match="has folders for images not in images"
+    ) as ws:
         table = particles_col.status()
     (w,) = [w for w in ws if w.category is LeftoverFoldersWarning]
     assert str(w.message) == (

@@ -154,7 +154,9 @@ def test_create_name_clash_writes_nothing(tmp_path: Path, raw: Path) -> None:
     raw2 = tmp_path / "raw2"
     raw2.mkdir()
     (raw2 / "d7-017.png").touch()
-    with pytest.raises(SheetError) as e:
+    with pytest.raises(
+        SheetError, match="both give the image name 'D7-017'"
+    ) as e:
         Collection.create(tmp_path / "col", images=[raw, raw2])
     message = str(e.value)
     assert "../raw/D7-017.tif and ../raw2/d7-017.png" in message
@@ -197,7 +199,7 @@ def test_create_rollback_keeps_what_was_there(
     folder.mkdir()
     (folder / "notes.txt").write_text("mine")
     monkeypatch.setattr(collection_module, "replace_file", _fail)
-    with pytest.raises(OSError):
+    with pytest.raises(OSError, match="disk full"):
         Collection.create(folder, images=raw)
     assert sorted(p.name for p in folder.iterdir()) == ["notes.txt"]
 
@@ -213,7 +215,7 @@ def test_create_rolls_back_when_work_folder_fails(
         (path.parent / "agglpy").write_text("in the way")
 
     monkeypatch.setattr(collection_module, "new_sheet", new_sheet)
-    with pytest.raises(FileExistsError):
+    with pytest.raises(FileExistsError, match=r"col[\\/]+agglpy"):
         Collection.create(tmp_path / "col", images=raw)
     assert sorted(p.name for p in (tmp_path / "col").iterdir()) == ["agglpy"]
 

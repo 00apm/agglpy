@@ -1,9 +1,8 @@
-"""Grouping of primary particles into agglomerates, and enclosed particles.
+"""Grouping primary particles into agglomerates; enclosed particles.
 
 Synthetic cases from ``support.synthetic.cases`` with hand-worked
 answers, run once per implementation in
-``support.synthetic.adapters.ADAPTERS``. Today that is the legacy code;
-Phase 2 adds the new core and the same cases become the unit tests of
+``support.synthetic.adapters.ADAPTERS``: the legacy code and
 ``agglpy.core.agglomerates``.
 """
 
@@ -110,8 +109,8 @@ def test_enclosed(
 def test_result_does_not_depend_on_order_or_position(
     adapter: str, case: Case, transform: Transform, tmp_path: Path
 ):
-    """Input order, position (incl. negative coordinates, i.e. outside
-    the image), mirroring and swapped axes must not change the result."""
+    # Input order, position (incl. negative coordinates, i.e. outside
+    # the image), mirroring and swapped axes must not change the result.
     skip_unless_supported(adapter, "grouping")
     skip_unless_supported(adapter, "enclosed")
     result = ADAPTERS[adapter](transform(case), tmp_path)
@@ -151,7 +150,7 @@ def _pairs(contacts: _Contacts) -> set[tuple[int, int]]:
 
 
 def _brute_force_pairs(table: pd.DataFrame) -> set[tuple[int, int]]:
-    """Touching pairs from checking every pair, oriented as _Contacts."""
+    """Touching pairs by checking every pair, oriented as _Contacts."""
     xy = table[["x", "y"]].to_numpy()
     r = table["r"].to_numpy()
     ids = table["id"].to_numpy()
@@ -226,7 +225,7 @@ def test_contacts_match_brute_force_on_half_pixel_grid():
 
 def test_tangent_pair_far_from_origin_is_found():
     # d == 2 * r exactly, but the KD-tree's own rounding drops the pair
-    # without _SEARCH_MARGIN (found by the 2.3 review).
+    # without _SEARCH_MARGIN.
     r = 49.4347672837589
     table = _table(
         [-54676.54776590472, -54661.01603785207],
@@ -399,11 +398,11 @@ def test_find_agglomerates_warns_once_about_duplicates():
 
 
 def test_find_agglomerates_rejects_a_broken_table():
-    with pytest.raises(ParticleTableError):
+    with pytest.raises(ParticleTableError, match=r"missing columns: \['r'\]"):
         find_agglomerates(pd.DataFrame({"id": [1], "x": [0.0], "y": [0.0]}))
 
 
-# --- Possible contacts -------------------------------------------------
+# --- Possible contacts ------------------------------------------------
 
 
 def _possible(x, y, r) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -697,8 +696,8 @@ def test_select_agglomerates_keeps_their_particles():
     # image B's agglomerate 1 is another agglomerate: its particles go
     assert p.index.tolist() == [1, 2, 3, 4, 5]
     row = summary(images, p, a, metrics="counts").iloc[0]
-    # the 3- and 2-member agglomerates: N_ppA 5, n_ppA 2.5 (filtering the
-    # agglomerate table alone would keep the single: 6 and 3.0)
+    # the 3- and 2-member agglomerates: N_ppA 5, n_ppA 2.5 (filtering
+    # the agglomerate table alone would keep the single: 6 and 3.0)
     assert row["N_ppA"] == 5
     assert summary(images, p, a, metrics="ratios")["n_ppA"].iloc[0] == 2.5
 

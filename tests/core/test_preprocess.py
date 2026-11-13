@@ -30,7 +30,7 @@ ALL_STEPS = PreprocessParams(
 
 
 def _noisy(seed: int = 0) -> np.ndarray:
-    """A dark image with a background gradient, bright discs and noise."""
+    """Dark image with a background gradient, bright discs and noise."""
     rng = np.random.default_rng(seed)
     values = 20 + 60 * COLS / (W - 1) + 120 * DISCS + rng.normal(0, 8, (H, W))
     return np.clip(np.rint(values), 0, 255).astype(np.uint8)
@@ -75,8 +75,8 @@ def test_order_is_median_rolling_ball_clahe():
         ClaheParams(clip_limit=2.0, tile_grid=(4, 4)),
     )
     assert np.array_equal(preprocess(image, ALL_STEPS), expected)
-    # the legacy order (median, CLAHE, rolling ball) gives another image,
-    # so this test tells the orders apart
+    # the legacy order (median, CLAHE, rolling ball) gives another
+    # image, so this test tells the orders apart
     legacy = _subtract_background(
         _clahe(_median_blur(image, 3), ClaheParams(2.0, (4, 4))),
         RollingBallParams(radius=15),

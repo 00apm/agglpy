@@ -68,7 +68,7 @@ def test_one_scale_over_the_drawn_images(res: Results) -> None:
     assert list(d) == ["D7-017", "D7-018", "D7-019"]
     assert "D7-020" not in d and len(d) == 3
     assert repr(d) == "Drawings(3 images: D7-017, D7-018, D7-019)"
-    with pytest.raises(KeyError):
+    with pytest.raises(KeyError, match="D7-020"):
         d["D7-020"]
     # a new figure on each access, none held
     assert d["D7-018"] is not d["D7-018"]

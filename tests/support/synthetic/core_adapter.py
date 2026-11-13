@@ -1,7 +1,7 @@
 """Run synthetic cases through the new core (``agglpy.core``).
 
 The core works in px, so a case goes in as it is. The library has no
-classification (D-042): agglomerate types come from the recipe in
+classification: agglomerate types come from the recipe in
 ``examples/agglomerate_types.py``. The summary is computed the way the
 application will: tables converted to physical units with the pixel
 size, then ``summary``; its diameters are converted back to px for the
@@ -28,7 +28,7 @@ from .cases import Case
 from .result import Result
 
 # Importing the recipe also runs its small example cells (percent
-# format, D-045): a few circles, no output.
+# format): a few circles, no output.
 from examples.agglomerate_types import agglomerate_types
 
 
@@ -37,7 +37,7 @@ def run_core(
     tmp_path: Path,
     pixel_size: float = 1.0,
 ) -> Result:
-    """Run one case through the core and convert the outcome to a Result.
+    """Run one case through the core; return the outcome as a Result.
 
     Args:
         case: The synthetic case.
@@ -73,9 +73,10 @@ def run_core(
         0, "members", [frozenset(members[i]) for i in agglomerates.index]
     )
     agglomerates["type"] = agglomerate_types(agglomerates, case.threshold)
-    # Particle types as agglpy 0.4 gave them (tests only): in a collector
-    # agglomerate the largest member is the collector and the others
-    # are attached to it; otherwise a particle has its agglomerate's type.
+    # Particle types as agglpy 0.4 gave them (tests only): in a
+    # collector agglomerate the largest member is the collector and the
+    # others are attached to it; otherwise a particle has its
+    # agglomerate's type.
     particle_type = particles["agglomerate_id"].map(agglomerates["type"])
     largest = particles.groupby("agglomerate_id")["r"].transform("max")
     attached = (particle_type == "collector") & (particles["r"] < largest)
@@ -122,7 +123,7 @@ def _summary(
 
 
 def core_size_classes(start: float, end: float, **kwargs) -> np.ndarray:
-    """``size_classes`` as it is (the 1.4 checks use its vocabulary)."""
+    """``size_classes`` as it is (the cases use its vocabulary)."""
     return size_classes(start, end, **kwargs)
 
 
@@ -130,8 +131,8 @@ def core_distribution(values: list[float], edges: np.ndarray) -> pd.DataFrame:
     """Number distribution of the values, as one image."""
     images = pd.DataFrame({"image": ["case"]})
     table = pd.DataFrame({"image": "case", "value": values})
-    # The 1.4 case leaves a value out on purpose; the warning is checked
-    # in the unit tests.
+    # The synthetic case leaves a value out on purpose; the warning is
+    # checked in the unit tests.
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", ValuesNotCountedWarning)
         return distribution(images, table, "value", edges)

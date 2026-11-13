@@ -1,4 +1,4 @@
-"""Label columns (text, category, bool): one colour per label, a legend."""
+"""Label columns (text, category, bool): one colour each, a legend."""
 
 import matplotlib
 import numpy as np
@@ -150,7 +150,7 @@ def test_legend_from_colours():
 
 
 def _inside(fig, key) -> bool:
-    """The legend's box in file px lies within the figure (after render)."""
+    """Legend box in file px lies within the figure (after render)."""
     box = key.get_window_extent()
     width, height = fig.get_size_inches() * fig.dpi
     return box.x0 >= 0 and box.y0 >= 0 and box.x1 <= width and box.y1 <= height

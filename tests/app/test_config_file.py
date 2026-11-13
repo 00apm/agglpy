@@ -61,7 +61,7 @@ def test_missing_sections_are_empty(cfg, text: str) -> None:
 
 
 def test_unknown_top_level_key(cfg) -> None:
-    with pytest.raises(ParamsError) as e:
+    with pytest.raises(ParamsError, match="default: unknown key") as e:
         cfg("default: {}\n")
     assert str(e.value) == (
         "agglpy.yml has 1 problem:\n"
@@ -70,7 +70,7 @@ def test_unknown_top_level_key(cfg) -> None:
 
 
 def test_shape_problems_are_reported_at_once(cfg) -> None:
-    with pytest.raises(ParamsError) as e:
+    with pytest.raises(ParamsError, match="defaults: must be a mapping") as e:
         cfg("defaults: 3\nimages:\n  A: [1]\n  B: {}\n")
     assert str(e.value) == (
         "agglpy.yml has 2 problems:\n"
@@ -90,7 +90,7 @@ def test_problems_report_layout(cfg) -> None:
         "rolling_ball: {radius: 50",
         "median_blr: 3\n    rolling_ball: {radius: 50",
     )
-    with pytest.raises(ParamsError) as e:
+    with pytest.raises(ParamsError, match="median_blr: unknown key") as e:
         cfg(text).check(IMAGES)
     assert str(e.value) == (
         "agglpy.yml has 2 problems:\n"
@@ -105,7 +105,9 @@ def test_params_of_an_image_raise_with_the_same_layout(cfg) -> None:
     text = YML.replace("rolling_ball: {radius: 30}", "rolling_ball: 30")
     c = cfg(text)
     assert c.params("D7-021").preprocess.rolling_ball is None
-    with pytest.raises(ParamsError) as e:
+    with pytest.raises(
+        ParamsError, match="rolling_ball: must be a mapping or null"
+    ) as e:
         c.params("D7-019")
     assert str(e.value) == (
         "agglpy.yml has 1 problem:\n"
@@ -118,7 +120,7 @@ def test_default_problem_is_listed_once(cfg) -> None:
     text = "defaults:\n  preprocess:\n    rolling_ball: {radius: -1}\n"
     text += "images:\n  A:\n    preprocess:\n"
     text += "      rolling_ball: {light_background: true}\n"
-    with pytest.raises(ParamsError) as e:
+    with pytest.raises(ParamsError, match="radius must be > 0") as e:
         cfg(text).check(["A", "B", "C"])
     message = str(e.value)
     assert message.startswith("agglpy.yml has 1 problem:\n")
@@ -129,7 +131,9 @@ def test_problem_from_image_mixed_with_default(cfg) -> None:
     text = "defaults:\n  preprocess:\n    rolling_ball: {radius: 50}\n"
     text += "images:\n  X:\n    preprocess:\n"
     text += "      rolling_ball: {light_background: 'yes'}\n"
-    with pytest.raises(ParamsError) as e:
+    with pytest.raises(
+        ParamsError, match="light_background must be True or False"
+    ) as e:
         cfg(text).check(["X"])
     message = str(e.value)
     assert message.startswith("agglpy.yml has 1 problem:\n")
@@ -138,7 +142,9 @@ def test_problem_from_image_mixed_with_default(cfg) -> None:
 
 def test_entry_for_unknown_image(cfg) -> None:
     c = cfg("images:\n  d7-019: {}\n  D7-091: {}\n")
-    with pytest.raises(ParamsError) as e:
+    with pytest.raises(
+        ParamsError, match="no image of that name in the sheet"
+    ) as e:
         c.check(["D7-019"])
     assert str(e.value) == (
         "agglpy.yml has 2 problems:\n"
@@ -149,7 +155,7 @@ def test_entry_for_unknown_image(cfg) -> None:
 
 
 def test_unquoted_numeric_image_key_is_a_problem(cfg) -> None:
-    with pytest.raises(ParamsError) as e:
+    with pytest.raises(ParamsError, match="key 7 is not text") as e:
         cfg("images:\n  007: {}\n")
     assert (
         "images: key 7 is not text; quote image names in agglpy.yml, "

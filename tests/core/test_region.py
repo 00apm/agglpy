@@ -26,7 +26,7 @@ def test_small_example():
 
 
 def test_d7_017_numbers():
-    # 3072 x 2304 Zeiss image, the usual 0.1: 0.9 * 2304 = 2073.6 -> 2074
+    # 3072 x 2304 Zeiss image, usual 0.1: 0.9 * 2304 = 2073.6 -> 2074
     bounds = region_bounds(RegionParams(bottom_fraction=0.1), 3072, 2304)
     assert bounds == Bounds(-0.5, -0.5, 3071.5, 2073.5)
     assert bounds.area == 6_371_328
@@ -97,7 +97,9 @@ def test_size_from_numpy_integers():
 
 
 def test_bounds_are_frozen():
-    with pytest.raises(dataclasses.FrozenInstanceError):
+    with pytest.raises(
+        dataclasses.FrozenInstanceError, match="cannot assign to field 'x_min'"
+    ):
         Bounds(0, 0, 1, 1).x_min = 2  # type: ignore[misc]
 
 

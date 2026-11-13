@@ -73,7 +73,7 @@ def branch_statistics(
 def dangling_end_statistics(
     particles: pd.DataFrame, min_depth: int = 2
 ) -> pd.DataFrame:
-    """Mean and median dangling-end depth and length, per agglomerate."""
+    """Mean and median dangling-end depth and length per agglomerate."""
     rows = particles[particles["segment_type"] == "dangling end"]
     ends = rows.groupby([*KEY, "segment_id"]).agg(
         depth=("dangling_end_depth", "max"),
@@ -106,7 +106,7 @@ def dangling_end_statistics(
 def volume_share_beyond(
     particles: pd.DataFrame, min_depth: int = 2
 ) -> pd.Series:
-    """Volume at ``branch_depth >= min_depth`` / total, per agglomerate."""
+    """Per agglomerate: volume at depth >= ``min_depth`` / total."""
     beyond = particles["volume"].where(
         particles["branch_depth"] >= min_depth, 0
     )

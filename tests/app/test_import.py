@@ -59,7 +59,9 @@ def test_count_kept_tolerances() -> None:
 
 def test_count_kept_counts_each_detected_circle_once() -> None:
     det = make_particles(x=[10], y=[10], r=[5])
-    with pytest.warns(DuplicateParticlesWarning):
+    with pytest.warns(
+        DuplicateParticlesWarning, match="1 pairs of near-identical circles"
+    ):
         cor = make_particles(x=[10, 10.5], y=[10, 10], r=[5, 5])
     assert count_kept(det, cor) == 1
 
@@ -163,7 +165,9 @@ def test_correction_from_scratch_warns(
     particles_col.detect(progress=False)
     source = tmp_path / "mine.csv"
     source.write_text("id,x,y,r\n1,10.5,10.5,5.0\n", encoding="utf-8")
-    with pytest.warns(UserWarning) as ws:
+    with pytest.warns(
+        UserWarning, match="keeps only 0 of 2 detected circles"
+    ) as ws:
         particles_col.import_particles("D7-017", source)
     (w,) = [w for w in ws if "keeps only" in str(w.message)]
     assert str(w.message) == (
@@ -186,11 +190,11 @@ def test_unknown_name(particles_col: Collection, fiji_csv: Path) -> None:
 def test_bad_source_propagates(
     particles_col: Collection, tmp_path: Path
 ) -> None:
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(FileNotFoundError, match=r"missing\.csv"):
         particles_col.import_particles("D7-017", tmp_path / "missing.csv")
     bad = tmp_path / "bad.csv"
     bad.write_text("a,b\n1,2\n", encoding="utf-8")
-    with pytest.raises(FileFormatError):
+    with pytest.raises(FileFormatError, match="not a particle file"):
         particles_col.import_particles("D7-017", bad)
     assert not work(particles_col, "D7-017").exists()
 
@@ -200,7 +204,9 @@ def test_non_circular_rois_warning_reaches_the_caller(
 ) -> None:
     with fiji_csv.open("a", encoding="utf-8") as fh:
         fh.write("3,2,roi-2,Rectangle,none,5,5,10,20\n")
-    with pytest.warns(NonCircularParticlesWarning) as ws:
+    with pytest.warns(
+        NonCircularParticlesWarning, match="non-circular ROIs dropped"
+    ) as ws:
         rep = particles_col.import_particles("D7-017", fiji_csv)
     (w,) = [w for w in ws if w.category is NonCircularParticlesWarning]
     assert os.path.normcase(w.filename) == os.path.normcase(__file__)
@@ -250,7 +256,10 @@ def test_replaced_record_keeps_only_its_own_warnings(
 ) -> None:
     particles_col.import_particles("D7-017", fiji_csv)
     corrected_record(particles_col).write_text("format: [", encoding="utf-8")
-    with pytest.warns(UnreadableRecordWarning):
+    with pytest.warns(
+        UnreadableRecordWarning,
+        match=r"particles_corrected_record\.yml in D7-017/ unreadable",
+    ):
         particles_col.import_particles("D7-017", fiji_csv, force=True)
     rec = read_record(corrected_record(particles_col), CorrectionRecord)
     assert rec is not None
