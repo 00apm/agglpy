@@ -231,12 +231,13 @@ def _bounded_diameter(
 
 # Two path lengths are equal when they differ by less than this
 # fraction: sums of floats in another order differ in the last bits.
+# Relative only, so a tie does not depend on the unit (px or m).
 _TIE = 1e-12
 
 
 def equal(x: NDArray[np.float64] | float, y: float) -> NDArray[np.bool_]:
     """Whether ``x`` equals ``y`` up to ``_TIE`` (relative)."""
-    return np.asarray(np.abs(x - y) <= _TIE * max(abs(y), 1.0))
+    return np.asarray(np.abs(x - y) <= _TIE * abs(y))
 
 
 def path(

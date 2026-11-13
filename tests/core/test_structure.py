@@ -247,6 +247,19 @@ def test_empty_tables_give_every_column():
             lambda p, a, c: (p.iloc[:-1], a, c),
             "not in the particle table",
         ),
+        # another image's agglomerate table with the same ids
+        (
+            lambda p, a, c: (p, a.assign(member_count=4), c),
+            "member_count",
+        ),
+        (
+            lambda p, a, c: (p.assign(image=["a"] * 5 + ["b"] * 5), a, c),
+            "one image",
+        ),
+        (
+            lambda p, a, c: (p.assign(image="a"), a.assign(image="b"), c),
+            "image",
+        ),
     ],
 )
 def test_mismatched_tables_refused(tables, message):
@@ -508,6 +521,16 @@ def test_chain_path_hand_cases():
         1,
         2,
     ]
+
+
+@pytest.mark.parametrize("scale", [1.0, 1e-8])
+def test_chain_path_ties_do_not_depend_on_the_unit(scale):
+    # Lengths 6 and 6.00002 (x scale) are not a tie, in px or in m.
+    particles, _, contacts = graph_tables(
+        [(0, 1), (0, 2), (1, 3), (2, 3)], [1.0, 1.0, 1.0 + 1e-5, 1.0]
+    )
+    particles["r"] *= scale
+    assert chain_path(particles, contacts, 0, by="length") == [1, 0, 2]
 
 
 def test_chain_path_of_a_single_particle():

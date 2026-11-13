@@ -99,6 +99,7 @@ def structure_properties(
             tables do not belong together.
     """
     m = _min_core_members(min_core_members)
+    _one_image(particles, agglomerates)
     _require(particles, ("id", "r", "agglomerate_id"))
     pairs = _check_contacts(particles, contacts)
     r = _radii(particles)
@@ -106,7 +107,7 @@ def structure_properties(
     groups, inverse = np.unique(labels, return_inverse=True)
     agg = inverse.reshape(-1).astype(np.intp)
     count = len(groups)
-    rows = _agglomerate_rows(agglomerates, groups)
+    rows = _agglomerate_rows(agglomerates, groups, agg)
     at = _contact_rows(pairs.ids, pairs.id_a, pairs.id_b)
     g = _graph.graph(len(pairs.ids), at.larger, at.smaller)
     kind, segment = _segments(g, pairs.ids, agg, m)
@@ -183,6 +184,7 @@ def chain_path(
     if by not in ("hops", "length"):
         raise ParamsError(f"by must be 'hops' or 'length', got {by!r}")
     number = _integer("agglomerate_id", agglomerate_id)
+    _one_image(particles)
     _require(particles, ("id", "r", "agglomerate_id"))
     pairs = _check_contacts(particles, contacts)
     labels = _whole(particles, "agglomerate_id", "particles")
@@ -255,10 +257,38 @@ def _min_core_members(value: object) -> int:
     return m
 
 
+def _one_image(
+    particles: pd.DataFrame, agglomerates: pd.DataFrame | None = None
+) -> None:
+    """Refuse tables of several images, or of two different images."""
+    tables = [("particles", particles), ("agglomerates", agglomerates)]
+    seen = {
+        name: set(table["image"].unique())
+        for name, table in tables
+        if table is not None and "image" in table.columns
+    }
+    if any(len(images) > 1 for images in seen.values()):
+        raise TableError(
+            "rows of several images: the structure is computed on one "
+            "image's tables (res.with_structure() does every image)"
+        )
+    if len(seen) == 2 and len(seen["particles"] | seen["agglomerates"]) > 1:
+        raise TableError(
+            "particles and agglomerates: the column 'image' differs; give "
+            "the agglomerate table of these particles"
+        )
+
+
 def _agglomerate_rows(
-    agglomerates: pd.DataFrame, groups: NDArray[np.int64]
+    agglomerates: pd.DataFrame,
+    groups: NDArray[np.int64],
+    agg: NDArray[np.intp],
 ) -> NDArray[np.intp]:
-    """Position in ``groups`` of each row's ``agglomerate_id``."""
+    """Position in ``groups`` of each row's ``agglomerate_id``.
+
+    ``member_count``, when present, must match the particles: another
+    image's table often has the same ids.
+    """
     if "agglomerate_id" not in agglomerates.columns:
         raise TableError("agglomerates: missing columns ['agglomerate_id']")
     ids = _whole(agglomerates, "agglomerate_id", "agglomerates")
@@ -280,7 +310,17 @@ def _agglomerate_rows(
             f"agglomerates: no row for agglomerates {_some(missing)}; "
             "give the agglomerate table of these particles"
         )
-    return np.searchsorted(groups, ids).astype(np.intp)
+    rows = np.searchsorted(groups, ids).astype(np.intp)
+    if "member_count" in agglomerates.columns:
+        members = _whole(agglomerates, "member_count", "agglomerates")
+        wrong = members != np.bincount(agg, minlength=len(groups))[rows]
+        if wrong.any():
+            raise TableError(
+                "agglomerates: member_count does not match the particles "
+                f"of agglomerates {_some(ids[wrong])}; give the "
+                "agglomerate table of these particles"
+            )
+    return rows
 
 
 def _segments(
