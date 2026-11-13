@@ -28,7 +28,10 @@ ENDPOINT_DEFAULT_LOGGER_CONFIG: dict[str, Any] = {
             "format": "%(levelname)s: %(message)s",
         },
         "detailed": {
-            "format": "(%(asctime)s) [%(levelname)s|%(name)s|%(module)s]: %(message)s",
+            "format": (
+                "(%(asctime)s) [%(levelname)s|%(name)s|%(module)s]: "
+                "%(message)s"
+            ),
             "datefmt": "%Y-%m-%d %H:%M:%S",
         },
     },

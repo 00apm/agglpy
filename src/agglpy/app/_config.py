@@ -351,7 +351,9 @@ COMMENTS: dict[str, str] = {
     ),
     "preprocess.median_blur": "odd kernel size in px, e.g. 3; null = off",
     "preprocess.rolling_ball": "e.g. {radius: 50}; null = off",
-    "preprocess.clahe": "e.g. {clip_limit: 2.0, tile_grid: [8, 8]}; null = off",
+    "preprocess.clahe": (
+        "e.g. {clip_limit: 2.0, tile_grid: [8, 8]}; null = off"
+    ),
     "hct.ranges": "required before detection, e.g.\n- {d_min: 8, d_max: 30}",
 }
 

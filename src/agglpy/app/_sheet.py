@@ -486,7 +486,10 @@ def _pixel_size(value: object) -> tuple[float | None, str | None]:
         return None, f"{value!r} is not a number{hint}"
     low, high = _PIXEL_SIZE_RANGE
     if not low <= number <= high:
-        text = f"{number:g} is outside {low:g} to {high:g} nm; the column is in nm"
+        text = (
+            f"{number:g} is outside {low:g} to {high:g} nm; "
+            "the column is in nm"
+        )
         if 0 < number < low:
             text += f" ({number:g} m = {number * 1e9:g} nm)"
         return None, text
