@@ -1,3 +1,10 @@
+"""The agglpy logger and a logging setup for notebooks.
+
+`logger` (``"agglpy"``) has only a ``NullHandler``, so agglpy writes no
+log output until the application configures logging;
+`setup_notebook_logger` does that for a notebook session.
+"""
+
 import copy
 import logging.config
 import warnings
@@ -6,8 +13,8 @@ from typing import Any
 
 import yaml
 
-# Create a default logger for the package (API)
 logger: logging.Logger = logging.getLogger("agglpy")
+"""The package logger, silent until logging is configured."""
 logger.addHandler(logging.NullHandler())
 
 
@@ -62,18 +69,26 @@ def setup_notebook_logger(
     log_cfg_path: Path = Path("./.agglpy/log/logger_config.yml"),
     log_path: Path = Path("./.agglpy/log/agglpy.log"),
 ) -> None:
-    """
-    Setup a logger for the jupyter notebook environment.
+    """Configure logging for a Jupyter notebook session.
 
-    It checks if the logger config yaml file exists at log_cfg_path.
-    If not, it creates the file with a default configuration and applies it.
+    Applies the logging config file at `log_cfg_path`. When the file
+    does not exist, writes the default config there first: warnings to
+    stderr, everything from DEBUG on to a rotating log file.
 
     Parameters
     ----------
-    log_cfg_path (Path): Path to the logger config yaml file.
-    logs_path (Path): Path where the log file should be created.
-    """
+    log_cfg_path : Path, default "./.agglpy/log/logger_config.yml"
+        The logging config YAML (``logging.config.dictConfig`` schema).
+    log_path : Path, default "./.agglpy/log/agglpy.log"
+        The log file named in a newly written config; a folder gets
+        ``agglpy.log`` inside it.
 
+    Warns
+    -----
+    UserWarning
+        If the config file cannot be read or applied; logging is
+        then not configured.
+    """
     config: dict[str, Any]
     if log_cfg_path.exists():
         with open(log_cfg_path, encoding="utf-8") as file:

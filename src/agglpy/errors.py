@@ -1,8 +1,24 @@
+"""Errors and warnings of agglpy.
+
+The errors agglpy raises on purpose subclass `AgglpyError`, most also a
+built-in exception (``ValueError``, ``FileExistsError`` ...), so a
+handler for the built-in one catches them too; the warnings subclass
+``UserWarning``. The classes before `AgglpyError` serve the legacy API.
+"""
+
 from typing import List
 
 
 class MultipleFilesFoundError(Exception):
-    """Raised when multiple files with the specified name are found."""
+    """Several files are found where one with the name is expected.
+
+    Parameters
+    ----------
+    matches : list of str
+        The files found.
+    filename : str, default ""
+        The name searched for; ``""`` leaves it out of the message.
+    """
 
     def __init__(
         self,
@@ -18,96 +34,85 @@ class MultipleFilesFoundError(Exception):
 
 
 class SettingsStructureError(Exception):
-    """Raised when settings dict does no match defined schema"""
+    """A legacy settings dict does not match the settings schema."""
 
     pass
 
 
 class DirectoryStructureError(Exception):
-    """Raised when directory structure for Agglomerate analysis is incorrect"""
+    """A legacy working directory does not have the required layout."""
 
     pass
 
 
 class ParticleCsvStructureError(Exception):
-    """
-    Raised when the structure of primary particle data .csv structure
-    is not recognized
-    """
+    """A primary particle CSV file has a structure not recognised."""
 
     pass
 
 
 class ImgDataSetBufferError(Exception):
-    """
-    Raised when the Primary Particle source buffer is not properly configured
-    """
+    """The primary particle source buffer is not configured properly."""
 
     pass
 
 
 class ImgDataSetStructureError(Exception):
-    """
-    Raised when the structure of ImgDataSet object is not correct.
-    """
+    """The structure of an ``ImgDataSet`` object is not correct."""
 
     pass
 
 
 class ImgDataSetStateError(Exception):
-    """
-    Raised when the state of ImgDataSet object is not correct for current operation.
-    """
+    """An ``ImgDataSet`` is not in the state an operation needs."""
 
     pass
 
 
 class AgglomerateStructureError(Exception):
-    """
-    Raised when the structure of Agglomerate object is not correct.
-    """
+    """The structure of an ``Agglomerate`` object is not correct."""
 
     pass
 
 
-# --- New code (Phase 2). Legacy exceptions above are deleted in 2.9. ---
+# --- New code; the legacy exceptions above go with the legacy API. ---
 
 
 class AgglpyError(Exception):
-    """Base class of every error the new agglpy code raises on purpose."""
+    """Base class of the errors agglpy raises on purpose."""
 
 
 class ParamsError(AgglpyError, ValueError):
-    """Raised when a parameter value is invalid."""
+    """A parameter value is invalid."""
 
 
 class TableError(AgglpyError, ValueError):
-    """Raised when a table lacks what a function needs from it."""
+    """A table lacks what a function needs from it."""
 
 
 class ParticleTableError(TableError):
-    """Raised when a particle table does not match its schema."""
+    """A particle table does not match its schema."""
 
 
 class ImageError(AgglpyError, ValueError):
-    """Raised when an image array is not what a function needs.
+    """An image array is not what a function needs.
 
     Preprocessing and detection take a 2-D ``uint8`` grey image, as
-    ``agglpy.io.read_image`` returns it; other arrays are not converted,
+    `agglpy.io.read_image` returns it; other arrays are not converted,
     since scaling a float or 16-bit image is a choice that changes what
     is detected.
     """
 
 
 class SheetError(AgglpyError, ValueError):
-    """Raised when the image sheet of a collection has invalid content.
+    """The image sheet of a collection has invalid content.
 
     The message lists every problem by row and column.
     """
 
 
 class OutputExistsError(AgglpyError, FileExistsError):
-    """Raised when a folder already holds an export and overwrite is off.
+    """A folder already holds an export and overwrite is off.
 
     The message names the files of the earlier export; nothing is
     written.
@@ -115,7 +120,7 @@ class OutputExistsError(AgglpyError, FileExistsError):
 
 
 class OutputLockedError(AgglpyError, PermissionError):
-    """Raised when a file agglpy writes can't be replaced.
+    """A file agglpy writes can't be replaced.
 
     Usually the file is open in another program (on Windows, Excel
     locks an open workbook). The message names the file; nothing is
@@ -124,11 +129,11 @@ class OutputLockedError(AgglpyError, PermissionError):
 
 
 class DuplicateParticlesWarning(UserWarning):
-    """Warns about near-identical circles: a detection mistake."""
+    """Near-identical circles are found: a detection mistake."""
 
 
 class NoParticlesWarning(UserWarning):
-    """Warns that a detection found no particles at all.
+    """A detection finds no particles at all.
 
     The result is still a valid, empty particle table; the message
     states the image size and its range of pixel values.
@@ -136,7 +141,7 @@ class NoParticlesWarning(UserWarning):
 
 
 class ValuesNotCountedWarning(UserWarning):
-    """Warns that a distribution left values out of its classes.
+    """A distribution leaves values out of its classes.
 
     The values lie outside the size classes or are NaN; the fractions
     refer to the counted values only.
@@ -144,21 +149,21 @@ class ValuesNotCountedWarning(UserWarning):
 
 
 class MissingImagesWarning(UserWarning):
-    """Warns that images of the images table have no per-image value."""
+    """Images of the images table have no per-image value."""
 
 
 class FileFormatError(AgglpyError, ValueError):
-    """Raised when a file exists but its content can't be read.
+    """A file exists but its content can't be read.
 
     No or an ambiguous particle-file format, missing columns, values
-    that break the particle table schema (the ``ParticleTableError`` is
+    that break the particle table schema (the `ParticleTableError` is
     chained as the cause), an image OpenCV can't decode, an unreadable
     TIFF header. The message names the file.
     """
 
 
 class PixelSizeWarning(UserWarning):
-    """Warns that the pixel size read from a file may be wrong.
+    """The pixel size read from a file may be wrong.
 
     The Zeiss text field and the raw value differ by more than 1 %, or
     the pixels are not square (x and y differ by more than 1 %).
@@ -166,7 +171,7 @@ class PixelSizeWarning(UserWarning):
 
 
 class NonCircularParticlesWarning(UserWarning):
-    """Warns that a reader approximated or dropped non-circular shapes.
+    """A reader approximates or drops non-circular shapes.
 
     Near-circular ovals were read as circles, or shapes that are not
     circles were left out.
@@ -174,63 +179,63 @@ class NonCircularParticlesWarning(UserWarning):
 
 
 class ParticlesOutsideRegionWarning(UserWarning):
-    """Warns that particles outside the analysed region were left out.
+    """Particles outside the analysed region are left out.
 
     Each of them lies entirely outside the region.
     """
 
 
 class UnmatchedPathsWarning(UserWarning):
-    """Warns that image paths did not match the filename rule.
+    """Image paths do not match the filename rule.
 
     Their columns were left empty.
     """
 
 
 class UnreadableRecordWarning(UserWarning):
-    """Warns that a particle record could not be read.
+    """A particle record cannot be read.
 
     agglpy treats it as missing.
     """
 
 
 class LossyImageWarning(UserWarning):
-    """Warns that an image is JPEG-compressed.
+    """An image is JPEG-compressed.
 
     Compression artefacts can shift detected edges.
     """
 
 
 class IncompleteRunWarning(UserWarning):
-    """Warns that a batch left images not done.
+    """A batch leaves images not done.
 
     The returned table says which and why.
     """
 
 
 class LeftoverFoldersWarning(UserWarning):
-    """Warns that agglpy/ holds folders of images the sheet no longer lists.
+    """``agglpy/`` holds folders of images the sheet no longer lists.
 
     They are never moved or deleted.
     """
 
 
 class NoParticleSetError(AgglpyError, FileNotFoundError):
-    """Raised when an image has no particles yet.
+    """An image has no particles yet.
 
     Neither a detection nor an imported correction.
     """
 
 
 class NotReadyError(AgglpyError, ValueError):
-    """Raised when images of a collection are not ready for a step.
+    """Images of a collection are not ready for a step.
 
     The message lists every image and how to fix it.
     """
 
 
 class OutdatedParticlesWarning(UserWarning):
-    """Warns that particles from an outdated detection were used.
+    """Particles from an outdated detection are used.
 
     The detection was made with other params or another image file.
     """

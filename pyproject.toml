@@ -118,8 +118,6 @@ ignore = [
 "src/agglpy/_legacy/**" = ["D"]
 # Transitional, while the docstrings are converted to numpydoc: a module
 # leaves this list when its docstrings follow the standard.
-"src/agglpy/__init__.py" = ["D"]
-"src/agglpy/_yaml.py" = ["D"]
 "src/agglpy/app/__init__.py" = ["D"]
 "src/agglpy/app/_analyze.py" = ["D"]
 "src/agglpy/app/_collection.py" = ["D"]
@@ -150,13 +148,6 @@ ignore = [
 "src/agglpy/core/properties.py" = ["D"]
 "src/agglpy/core/region.py" = ["D"]
 "src/agglpy/core/structure.py" = ["D"]
-"src/agglpy/errors.py" = ["D"]
-"src/agglpy/logger.py" = ["D"]
-"src/agglpy/params.py" = ["D"]
-"src/agglpy/pipeline/__init__.py" = ["D"]
-"src/agglpy/pipeline/_analysis.py" = ["D"]
-"src/agglpy/pipeline/_detection.py" = ["D"]
-"src/agglpy/tables.py" = ["D"]
 
 [tool.ruff.lint.pycodestyle]
 max-doc-length = 72         # PEP 8: 72 for comments and docstrings (W505)
@@ -187,8 +178,6 @@ override_RT01 = ['^(The|A|An|Whether) ']
 exclude_files = [
     '.*_legacy',
     # Transitional, like ruff's per-file ignores above.
-    "src/agglpy/__init__.py",
-    "src/agglpy/_yaml.py",
     "src/agglpy/app/__init__.py",
     "src/agglpy/app/_analyze.py",
     "src/agglpy/app/_collection.py",
@@ -219,13 +208,6 @@ exclude_files = [
     "src/agglpy/core/properties.py",
     "src/agglpy/core/region.py",
     "src/agglpy/core/structure.py",
-    "src/agglpy/errors.py",
-    "src/agglpy/logger.py",
-    "src/agglpy/params.py",
-    "src/agglpy/pipeline/__init__.py",
-    "src/agglpy/pipeline/_analysis.py",
-    "src/agglpy/pipeline/_detection.py",
-    "src/agglpy/tables.py",
 ]
 
 [tool.pytest.ini_options]

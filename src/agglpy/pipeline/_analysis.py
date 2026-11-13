@@ -1,4 +1,4 @@
-"""Analysis of one image's particle table: ``analyze``, ``ImageResult``."""
+"""Analysis of one image's particle table."""
 
 import warnings
 from dataclasses import dataclass
@@ -17,7 +17,7 @@ _MAX_LISTED = 10
 
 @dataclass(frozen=True, eq=False)
 class ImageResult:
-    """What ``analyze`` found on one image, in px.
+    """Result of `analyze` on one image, in px.
 
     Plain data: no reference to the image, so it pickles and can be
     sent to another process. No equality: compare the tables
@@ -26,22 +26,20 @@ class ImageResult:
     Attributes
     ----------
     particles : DataFrame
-        The kept particles: ``id, x, y, r``, any extra
-        columns of the input, then ``agglomerate_id``,
-        ``enclosed``, ``coordination``, ``D``, ``area``,
-        ``volume``, ``surface`` and, with an image size,
-        ``touches_edge``.
+        The kept particles: ``id, x, y, r``, any extra columns of the
+        input, then ``agglomerate_id``, ``enclosed``,
+        ``coordination``, ``D``, ``area``, ``volume``, ``surface``
+        and, with an image size, ``touches_edge``.
     agglomerates : DataFrame
         One row per agglomerate
-        (``core.properties.agglomerate_properties``), with
+        (`agglpy.core.properties.agglomerate_properties`), with
         ``touches_edge`` when the image size was given.
     contacts : DataFrame
-        The possible contacts between the kept particles,
-        by particle id (``core.agglomerates.find_agglomerates``).
+        The possible contacts between the kept particles, by particle
+        id (`agglpy.core.agglomerates.find_agglomerates`).
     outside_ids : tuple of int
-        Ids of the particles left out as lying entirely
-        outside the analysed region, ascending; empty without an
-        image size.
+        Ids of the particles left out as lying entirely outside the
+        analysed region, ascending; empty without an image size.
     width : int or None
         Image width in px, or None.
     height : int or None
@@ -51,8 +49,8 @@ class ImageResult:
     bounds : Bounds or None
         The analysed rectangle, or None without an image size.
     fov_area : float or None
-        Area of the analysed region (field of view) in px²,
-        or None without an image size.
+        Area of the analysed region (field of view) in px², or None
+        without an image size.
     """
 
     particles: pd.DataFrame
@@ -85,14 +83,14 @@ def analyze(
     Parameters
     ----------
     particles : DataFrame
-        A particle table in px; not modified.
+        A particle table (``id, x, y, r`` in px); not modified.
     width : int, optional
         Image width in px; give both sizes or neither.
     height : int, optional
         Image height in px.
     region : RegionParams, default RegionParams()
-        The analysed region; needs the image size unless it is
-        the whole image.
+        The analysed region; needs the image size unless it is the
+        whole image.
 
     Returns
     -------
@@ -102,9 +100,9 @@ def analyze(
     Raises
     ------
     ParamsError
-        If only one size is given, a size is not an
-        integer >= 1, ``region`` cuts the image without a size, or
-        the cut leaves no row.
+        If only one size is given, a size is not an integer >= 1,
+        `region` cuts the image without a size, or the cut leaves no
+        row.
     ParticleTableError
         If the table breaks the schema.
 
@@ -113,8 +111,9 @@ def analyze(
     ParticlesOutsideRegionWarning
         If circles were left out.
     DuplicateParticlesWarning
-        About duplicate enclosed particles
-        (see ``core.agglomerates.find_agglomerates``).
+        If an enclosed particle and the one enclosing it are
+        near-identical (see
+        `agglpy.core.agglomerates.find_agglomerates`).
     """
     if (width is None) != (height is None):
         raise ParamsError("give both width and height, or neither")

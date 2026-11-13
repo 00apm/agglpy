@@ -108,7 +108,7 @@ def dumps(data: Any) -> str:
 
 
 def new_mapping() -> MutableMapping[str, Any]:
-    """An empty mapping that can carry comments."""
+    """Return an empty mapping that can carry comments."""
     return CommentedMap()
 
 
@@ -222,7 +222,7 @@ def _is_block(value: Any) -> bool:
 
 
 def _end_slot(container: Any, key: Any) -> tuple[list[Any], int]:
-    """The comment slot after the last line of ``container[key]``."""
+    """Return the comment slot after ``container[key]``'s last line."""
     value = container[key]
     if _is_block(value):
         last = (
@@ -237,7 +237,7 @@ def _end_slot(container: Any, key: Any) -> tuple[list[Any], int]:
             value.ca.comment = [None, None]
         return value.ca.comment, 0
     slots = container.ca.items.setdefault(key, [None, None, None, None])
-    # A mapping keeps the end-of-line comment in slot 2, a sequence in 0.
+    # A mapping keeps the end-of-line comment in slot 2, a list in 0.
     return slots, 2 if isinstance(container, CommentedMap) else 0
 
 
@@ -248,7 +248,7 @@ def _end_token(container: Any, key: Any) -> CommentToken | None:
 
 
 def _kept_after(token: CommentToken | None) -> str:
-    """The comment lines after the key's own end-of-line comment."""
+    """Return the lines after the key's own end-of-line comment."""
     if token is None:
         return ""
     first, _, rest = token.value.partition("\n")
@@ -276,8 +276,11 @@ def _take_after(container: Any, key: Any) -> str:
 
 
 def _take_end(value: Any) -> str:
-    """Detach the comment lines the YAML library keeps after a block
-    (``ca.end``, e.g. after a list ending in ``- {d_min: 5}``)."""
+    """Detach the comment lines the YAML library keeps after a block.
+
+    They sit on ``ca.end``, e.g. after a list ending in
+    ``- {d_min: 5}``.
+    """
     if not _is_block(value):
         return ""
     last = next(reversed(value)) if isinstance(value, CommentedMap) else -1
@@ -302,7 +305,7 @@ def _drop_shared(container: Any, key: Any, token: CommentToken) -> None:
 
 
 def _render(token: CommentToken) -> str:
-    """A comment token as full lines of text."""
+    """Return a comment token as full lines of text."""
     text: str = token.value
     if text.startswith("\n"):
         return text[1:]

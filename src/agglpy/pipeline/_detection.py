@@ -55,14 +55,12 @@ def detect_particles(
     Cuts the region from the image, preprocesses it, runs one HCT pass
     per range and moves the circles back into the raw image's
     coordinates, so the table lines up with the image a person opens.
-    Runs ``cut_region``, ``preprocess_stages``, one ``hct_pass`` per
-    range and ``particles_from_passes``.
 
     Parameters
     ----------
     image : ndarray
         The raw 2-D ``uint8`` grey image (as from
-        ``agglpy.io.read_image``); not modified.
+        `agglpy.io.read_image`); not modified.
     region : RegionParams, default RegionParams()
         The analysed region.
     preprocess : PreprocessParams, default PreprocessParams()
@@ -70,9 +68,9 @@ def detect_particles(
     hct : HCTParams
         The HCT ranges.
     on_step : callable, optional
-        Called with the name of each step as it starts:
-        ``"median"``, ``"rolling ball"``, ``"clahe"`` (those
-        configured), then ``"hct"``; for a progress display.
+        Called with the name of each step as it starts: ``"median"``,
+        ``"rolling ball"``, ``"clahe"`` (those configured), then
+        ``"hct"``; for a progress display.
 
     Returns
     -------
@@ -83,8 +81,7 @@ def detect_particles(
     Raises
     ------
     ImageError
-        If ``image`` is not a 2-D ``uint8`` array of at
-        least 1 x 1 px.
+        If `image` is not a 2-D ``uint8`` array of at least 1 x 1 px.
     ParamsError
         If the region leaves no row.
 
@@ -93,8 +90,13 @@ def detect_particles(
     NoParticlesWarning
         If nothing is found.
     DuplicateParticlesWarning
-        If two ranges found the same
-        particle.
+        If two ranges found the same particle.
+
+    Notes
+    -----
+    Runs `cut_region`, `preprocess_stages`, one `hct_pass` per range
+    and `particles_from_passes`, the steps a tuning preview reruns, so
+    both give the same circles.
     """
     bounds, cut = cut_region(image, region)
     report = on_step or (lambda step: None)
@@ -118,7 +120,7 @@ class Stage:
     value : object
         The field's value the step ran with.
     image : ndarray
-        The image after the step (read-only).
+        The image after the step (read-only), ``uint8``.
     """
 
     field: str
@@ -130,7 +132,7 @@ class Stage:
 def cut_region(
     image: NDArray[np.uint8], region: RegionParams
 ) -> tuple[Bounds, NDArray[np.uint8]]:
-    """The analysed region's bounds and the region cut (a view)."""
+    """Return the analysed region's bounds and the cut (a view)."""
     # checked first, so a colour image fails here, not on its shape
     height, width = check_grey_image(image).shape
     bounds = region_bounds(region, width, height)
@@ -139,7 +141,7 @@ def cut_region(
 
 
 def configured_steps(preprocess: PreprocessParams) -> list[tuple[str, Any]]:
-    """The steps switched on, in run order: ``(field, value)``."""
+    """Return the configured steps in run order: ``(field, value)``."""
     return [
         (field.name, value)
         for field in dataclasses.fields(preprocess)
@@ -150,7 +152,7 @@ def configured_steps(preprocess: PreprocessParams) -> list[tuple[str, Any]]:
 def matching_stages(
     stages: Sequence[Stage], preprocess: PreprocessParams
 ) -> int:
-    """How many leading ``stages`` ran with the steps of ``preprocess``.
+    """Count the leading `stages` that ran with `preprocess`'s steps.
 
     Those can be reused on the same cut: equal field and value from the
     first step on; the first difference ends the match.
@@ -212,13 +214,13 @@ def particles_from_passes(
     passes: Sequence[NDArray[np.float32]],
     bounds: Bounds,
 ) -> pd.DataFrame:
-    """The particle table of HCT passes, in the raw image's frame.
+    """Return the HCT passes' particle table, in the raw image's frame.
 
     Parameters
     ----------
     image : ndarray
-        The preprocessed region the passes ran on (its size and
-        values go into the no-circles warning).
+        The preprocessed region the passes ran on (its size and values
+        go into the no-circles warning).
     passes : sequence of ndarray
         One ``hct_pass`` result per range, in range order.
     bounds : Bounds
@@ -229,8 +231,7 @@ def particles_from_passes(
     NoParticlesWarning
         If no pass found a circle.
     DuplicateParticlesWarning
-        If two ranges found the same
-        particle.
+        If two ranges found the same particle.
     """
     found = _table(image, passes)
     # zero for a bottom cut; kept so a top or left cut stays right
