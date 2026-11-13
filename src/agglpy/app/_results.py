@@ -177,7 +177,7 @@ class Results:
     ) -> pd.DataFrame:
         """Compute the built-in metrics of each group of images, pooled.
 
-        `agglpy.core.metrics.summary` on these tables.
+        As `agglpy.core.metrics.summary` on these tables.
 
         Parameters
         ----------
@@ -226,7 +226,7 @@ class Results:
     ) -> pd.DataFrame:
         """Compute the metrics per image, then mean ± CI over images.
 
-        `agglpy.core.metrics.summary_across_images` on these tables.
+        As `agglpy.core.metrics.summary_across_images` on these tables.
         Each image weighs equally.
 
         Parameters
@@ -281,7 +281,7 @@ class Results:
     ) -> pd.DataFrame:
         """Compute mean, std, n and a confidence interval over images.
 
-        `agglpy.core.metrics.values_across_images` with `images`.
+        As `agglpy.core.metrics.values_across_images` with `images`.
         Each image weighs equally.
 
         Parameters
@@ -348,7 +348,7 @@ class Results:
     ) -> pd.DataFrame:
         """Compute the distribution of a column over size classes.
 
-        `agglpy.core.distributions.distribution` on `images` and one
+        As `agglpy.core.distributions.distribution` on `images` and one
         of the tables.
 
         Parameters
@@ -419,7 +419,7 @@ class Results:
     ) -> pd.DataFrame:
         """Compute each class's fraction per image, then mean ± CI.
 
-        `agglpy.core.distributions.distribution_across_images` on
+        As `agglpy.core.distributions.distribution_across_images` on
         `images` and one of the tables. An image without counted
         values is left out of the means and of ``n``.
 
