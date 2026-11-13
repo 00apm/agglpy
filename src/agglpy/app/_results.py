@@ -175,7 +175,7 @@ class Results:
 
         As ``agglpy.core.metrics.summary`` on these tables.
         """
-        self._check_structure(metrics)
+        metrics = self._check_structure(metrics)
         return self._core(
             _metrics.summary,
             self.images,
@@ -197,7 +197,7 @@ class Results:
         As ``agglpy.core.metrics.summary_across_images`` on these
         tables.
         """
-        self._check_structure(metrics)
+        metrics = self._check_structure(metrics)
         return self._core(
             _metrics.summary_across_images,
             self.images,
@@ -415,10 +415,10 @@ class Results:
             },
         )
         return Results(
-            self.images,
+            self.images.copy(),
             _in_order(particles, self.particles),
             _in_order(aggls, self.agglomerates),
-            self.contacts,
+            self.contacts.copy(),
             origin,
         )
 
@@ -722,10 +722,13 @@ class Results:
             raise ParamsError(f"no image {name!r} in the collection")
         return self.images.image.isin(names)
 
-    def _check_structure(self, metrics: str | Iterable[str] | None) -> None:
-        """Refuse the family structure on results without its columns."""
+    def _check_structure(
+        self, metrics: str | Iterable[str] | None
+    ) -> list[str] | None:
+        """The family names, read once; refuse the family structure on
+        results without its columns."""
         if metrics is None:
-            return
+            return None
         chosen = [metrics] if isinstance(metrics, str) else list(metrics)
         present = set(PARTICLE_COLUMNS) <= set(self.particles.columns) and set(
             AGGLOMERATE_COLUMNS
@@ -735,6 +738,7 @@ class Results:
                 "metrics 'structure' needs the structure columns: call "
                 "res.with_structure() first"
             )
+        return chosen
 
     def _table(self, name: str) -> pd.DataFrame:
         if name not in _TABLES:

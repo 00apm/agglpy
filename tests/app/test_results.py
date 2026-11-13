@@ -400,7 +400,10 @@ def test_with_structure_columns(res: Results) -> None:
     assert pair.longest_chain_length == pytest.approx(members.D.sum())
     # the rows stay where they were
     assert s.particles[["image", "id"]].equals(res.particles[["image", "id"]])
-    assert s.images is res.images and s.contacts is res.contacts
+    # own frames: a column added to the new results stays there
+    s.images["group"] = 1
+    s.contacts["checked"] = True
+    assert "group" not in res.images and "checked" not in res.contacts
 
 
 def test_structure_dtypes_with_a_blank_image(res: Results) -> None:
@@ -484,6 +487,9 @@ def test_structure_summary_needs_the_columns(res: Results, call: str) -> None:
         getattr(res, call)(metrics=["counts", "structure"])
     assert "N_cores" not in res.summary().columns
     assert "N_cores" in res.with_structure().summary().columns
+    # metrics may be any iterable, read once
+    once = getattr(res, call)(metrics=iter(["counts"]))
+    pd.testing.assert_frame_equal(once, getattr(res, call)(metrics=["counts"]))
 
 
 def test_draw_by_segment_type(res: Results) -> None:
