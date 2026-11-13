@@ -1,9 +1,10 @@
 """Particle detection with the Hough Circle Transform (OpenCV).
 
-``detect_hct`` finds circles on a preprocessed grey image and returns
+`detect_hct` finds circles on a preprocessed grey image and returns
 them as a particle table in that image's frame. It knows nothing of the
 analysed region or of preprocessing: the caller cuts the region, runs
-``preprocess`` and adds the region's offset to the coordinates.
+`agglpy.core.preprocess.preprocess` and adds the region's offset to the
+coordinates.
 """
 
 import warnings
@@ -27,31 +28,45 @@ from agglpy.tables import (
 def detect_hct(image: NDArray[np.uint8], params: HCTParams) -> pd.DataFrame:
     """Detect circular particles, one HCT pass per range.
 
-    Each ``HCTRange`` is one ``cv2.HoughCircles`` call (see its
-    docstring for how the fields map to OpenCV's arguments). The passes
-    are independent: a particle found by two ranges, typically at the
-    boundary between them, appears twice and is reported with a
-    ``DuplicateParticlesWarning``; nothing is removed.
+    Each `agglpy.params.HCTRange` is one ``cv2.HoughCircles`` call (see
+    its docstring for how the fields map to OpenCV's arguments). The
+    passes are independent: a particle found by two ranges, typically
+    at the boundary between them, appears twice; nothing is removed.
 
-    OpenCV finds only circles whose centre lies inside the image; a
-    partly visible particle with its centre outside comes from manual
-    correction.
+    Parameters
+    ----------
+    image : ndarray
+        A 2-D ``uint8`` grey image, usually preprocessed.
+    params : HCTParams
+        The HCT ranges, run in the given order.
 
-    Args:
-        image: A 2-D ``uint8`` grey image, usually preprocessed.
-        params: The HCT ranges, run in the given order.
-
-    Returns:
+    Returns
+    -------
+    DataFrame
         A particle table ``id, x, y, r`` in px, in the frame of
         ``image``: ids ``1..n``, rows range by range, strongest circle
         first within a range. Values are OpenCV's float32 results as
         their shortest decimals (``r`` 29.4, not 29.399999618530273).
-        An empty table when nothing is found, with one
-        ``NoParticlesWarning``.
+        An empty table when nothing is found.
 
-    Raises:
-        ImageError: If ``image`` is not a 2-D ``uint8`` array of at
-            least 1 x 1 px.
+    Raises
+    ------
+    ImageError
+        If `image` is not a 2-D ``uint8`` array of at least 1 x 1 px.
+
+    Warns
+    -----
+    NoParticlesWarning
+        If no circle is found.
+    DuplicateParticlesWarning
+        If circles are near-identical (`agglpy.tables.find_duplicates`),
+        e.g. one particle found by two ranges.
+
+    Notes
+    -----
+    OpenCV finds only circles whose centre lies inside the image; a
+    partly visible particle with its centre outside comes from manual
+    correction.
     """
     image = check_grey_image(image)
     return _table(image, [_hough(image, r) for r in params.ranges])
@@ -60,25 +75,34 @@ def detect_hct(image: NDArray[np.uint8], params: HCTParams) -> pd.DataFrame:
 def hct_edges(
     image: NDArray[np.uint8], hct_range: HCTRange
 ) -> NDArray[np.uint8]:
-    """The edge image ``cv2.HoughCircles`` builds for one HCT pass.
+    """Return the edges ``cv2.HoughCircles`` builds for one HCT pass.
 
+    A circle can only be found on these edges.
+
+    Parameters
+    ----------
+    image : ndarray
+        A 2-D ``uint8`` grey image, usually preprocessed.
+    hct_range : HCTRange
+        The pass; only ``canny_threshold`` is used.
+
+    Returns
+    -------
+    ndarray
+        A ``uint8`` image of the shape of `image`: 255 on an edge, 0
+        elsewhere.
+
+    Raises
+    ------
+    ImageError
+        If `image` is not a 2-D ``uint8`` array of at least 1 x 1 px.
+
+    Notes
+    -----
     The same arithmetic as OpenCV's ``HOUGH_GRADIENT`` (``dp=1``): 3 x 3
     Sobel derivatives (``CV_16S``, ``BORDER_REPLICATE``), then Canny on
     them with ``high = round(canny_threshold)`` (OpenCV's ``cvRound``,
-    half to even), ``low = max(1, high // 2)`` and the L1 gradient. A
-    circle can only be found on these edges.
-
-    Args:
-        image: A 2-D ``uint8`` grey image, usually preprocessed.
-        hct_range: The pass; only ``canny_threshold`` is used.
-
-    Returns:
-        A ``uint8`` image of the shape of ``image``: 255 on an edge,
-        0 elsewhere.
-
-    Raises:
-        ImageError: If ``image`` is not a 2-D ``uint8`` array of at
-            least 1 x 1 px.
+    half to even), ``low = max(1, high // 2)`` and the L1 gradient.
     """
     image = check_grey_image(image)
     dx, dy = (
@@ -95,7 +119,9 @@ def hct_edges(
 def _table(
     image: NDArray[np.uint8], passes: Sequence[NDArray[np.float32]]
 ) -> pd.DataFrame:
-    """The particle table of ``detect_hct`` from its passes, in order.
+    """Build the particle table of `detect_hct` from its passes.
+
+    Rows pass by pass, in order.
 
     Also warns as ``detect_hct`` does, pointing at its caller.
     """
@@ -134,7 +160,7 @@ def _table(
 
 
 def _hough(image: NDArray[np.uint8], hct: HCTRange) -> NDArray[np.float32]:
-    """One HoughCircles pass: an (n, 3) array of x, y, r (float32)."""
+    """Run one HoughCircles pass: (n, 3) array of x, y, r (float32)."""
     found = cv2.HoughCircles(
         image,
         method=cv2.HOUGH_GRADIENT,

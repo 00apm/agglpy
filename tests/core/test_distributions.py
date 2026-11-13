@@ -1,9 +1,8 @@
 """Size classes and distributions (``agglpy.core.distributions``).
 
-The 1.4 checks call the functions of each implementation directly
-(``STATS``) with the core's vocabulary; the unit tests below run the
-core on tables written by hand, with the values worked out in the 2.5
-plan.
+The synthetic checks call the functions of each implementation
+directly (``STATS``) with the core's vocabulary; the unit tests below
+run the core on tables written by hand, with hand-worked values.
 """
 
 import math
@@ -31,7 +30,7 @@ RTOL = 1e-12
 
 
 def _check_case(name: str) -> Case:
-    """Placeholder Case so these checks can use the known-failure list."""
+    """Empty Case so these checks can use the known-failure list."""
     return make_case(name, [], groups=[])
 
 
@@ -85,8 +84,8 @@ def test_size_classes_cases(
     kwargs: dict,
     expected: list[float],
 ):
-    """Edges run from start to end inclusive: ``count`` classes, or one
-    per step (for log classes the factor between edges)."""
+    # Edges run from start to end inclusive: `count` classes, or one
+    # per step (for log classes the factor between edges).
     skip_unless_supported(adapter, "size_classes")
     expect_known_failure(request, adapter, "size_classes", _check_case(name))
     edges = STATS[adapter].size_classes(*ends, **kwargs)
@@ -96,15 +95,17 @@ def test_size_classes_cases(
 
 def test_log_size_classes_need_a_positive_start(adapter: str):
     skip_unless_supported(adapter, "size_classes")
-    with pytest.raises(ValueError):
+    with pytest.raises(
+        ValueError, match=r"start > 0|Start and end must be positive"
+    ):
         STATS[adapter].size_classes(0, 1e-5, count=2, scale="log")
 
 
 def test_distribution_case(request: pytest.FixtureRequest, adapter: str):
-    """Right-closed classes ``(a, b]``: a value on an edge belongs to
-    the class it closes; the outer edge is included, so 0 counts.
-    Values outside the classes are not counted, and the fractions refer
-    to the counted values only (8 here, not 9)."""
+    # Right-closed classes (a, b]: a value on an edge belongs to the
+    # class it closes; the outer edge is included, so 0 counts. Values
+    # outside the classes are not counted, and the fractions refer to
+    # the counted values only (8 here, not 9).
     skip_unless_supported(adapter, "distribution")
     expect_known_failure(
         request, adapter, "distribution", _check_case("edges_and_range")
@@ -218,7 +219,9 @@ def test_values_not_counted_warn_per_group():
     table = pd.DataFrame(
         {"image": ["A", "A", "B", "B"], "v": [5, 45, -1, np.nan]}
     )
-    with pytest.warns(ValuesNotCountedWarning) as record:
+    with pytest.warns(
+        ValuesNotCountedWarning, match="values not counted"
+    ) as record:
         out = distribution(images, table, "v", EDGES, by="condition")
     message = str(record[0].message)
     assert "x: 1 outside, 0 NaN" in message

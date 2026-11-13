@@ -1,10 +1,10 @@
 """Parameters of the computations, as frozen dataclasses.
 
-Each class holds only values that control a computation (D-021). They
-are validated when created (including by ``dataclasses.replace``),
+Each class holds only values that control a computation. They are
+validated when created (including by ``dataclasses.replace``),
 immutable, comparable with ``==`` and hashable, so they are safe to
 share between threads and to compare with a recorded run. Defaults are
-neutral; a user's usual settings come from the Phase 3 config.
+neutral; a collection's usual settings come from its ``agglpy.yml``.
 """
 
 import math
@@ -40,6 +40,7 @@ def _integer(name: str, value: object) -> int:
 
 
 def _positive(name: str, value: object) -> float:
+    """Return ``value`` as a float > 0, checked as by `_number`."""
     number = _number(name, value)
     if number <= 0:
         raise ParamsError(f"{name} must be > 0, got {value!r}")
@@ -57,7 +58,7 @@ def _flag(name: str, value: object) -> bool:
 
 
 def _sequence(name: str, value: object) -> tuple[object, ...]:
-    """Return ``value`` as a tuple; text and non-iterables are rejected."""
+    """Return ``value`` as a tuple, rejecting text and non-iterables."""
     if isinstance(value, str) or not isinstance(value, Iterable):
         raise ParamsError(f"{name} must be a sequence, got {value!r}")
     return tuple(value)
@@ -76,30 +77,42 @@ def _set(obj: object, name: str, value: object) -> None:
 class HCTRange:
     """One Hough Circle Transform pass over a range of diameters (px).
 
-    The values go to ``cv2.HoughCircles`` (``HOUGH_GRADIENT``, ``dp=1``)
-    as ``minRadius = floor(d_min / 2)`` and ``maxRadius = ceil(d_max /
-    2)`` (rounded outward, so the search covers every diameter from
-    ``d_min`` to ``d_max``; an odd ``d_max`` may also find a circle
-    1 px larger), ``minDist = min_dist_ratio * d_max /
-    2``, ``param1 = canny_threshold``, ``param2 =
-    accumulator_threshold``.
+    Attributes
+    ----------
+    d_min : int
+        Smallest circle diameter searched, in px; 1 or more.
+    d_max : int
+        Largest circle diameter searched, in px; above `d_min`.
+    min_dist_ratio : float, default 0.4
+        Minimum distance between detected centres, as a fraction of
+        the range's largest radius (``d_max / 2``); > 0. OpenCV keeps
+        the stronger of two centres closer than that, so a wide range
+        can lose real overlapping small particles (r 30-120 and 0.4:
+        two r 30 particles 40 px apart, 40 < 48); narrow the range
+        then.
+    canny_threshold : float, default 200.0
+        Upper threshold of the Canny edge detector inside OpenCV's
+        HoughCircles (``param1``); > 0. OpenCV rounds it to an
+        integer; the lower threshold is half of that, rounded down
+        (`agglpy.core.detect.hct_edges` shows the edges).
+    accumulator_threshold : float, default 15.0
+        Votes a centre needs (``param2``), > 0, rounded to an integer
+        by OpenCV; lower values find more circles, and more false
+        ones.
 
-    Attributes:
-        d_min: Smallest circle diameter searched, in px.
-        d_max: Largest circle diameter searched, in px.
-        min_dist_ratio: Minimum distance between detected centres, as a
-            fraction of the range's largest radius (``d_max / 2``).
-            OpenCV keeps the stronger of two centres closer than that,
-            so a wide range can lose real overlapping small particles
-            (r 30-120 and 0.4: two r 30 particles 40 px apart, 40 < 48);
-            narrow the range then.
-        canny_threshold: Upper threshold of the Canny edge detector
-            inside OpenCV's HoughCircles (``param1``). OpenCV rounds it
-            to an integer; the lower threshold is half of that, rounded
-            down (``core.detect.hct_edges`` shows the edges).
-        accumulator_threshold: Votes a centre needs (``param2``),
-            rounded to an integer by OpenCV; lower values find more
-            circles, and more false ones.
+    Raises
+    ------
+    ParamsError
+        If a value is not a number of the kind and range above.
+
+    Notes
+    -----
+    The values go to ``cv2.HoughCircles`` (``HOUGH_GRADIENT``,
+    ``dp=1``) as ``minRadius = floor(d_min / 2)`` and ``maxRadius =
+    ceil(d_max / 2)`` (rounded outward, so the search covers every
+    diameter from `d_min` to `d_max`; an odd `d_max` may also find a
+    circle 1 px larger), ``minDist = min_dist_ratio * d_max / 2``,
+    ``param1 = canny_threshold``, ``param2 = accumulator_threshold``.
     """
 
     d_min: int
@@ -109,6 +122,7 @@ class HCTRange:
     accumulator_threshold: float = 15.0
 
     def __post_init__(self) -> None:
+        """Validate the fields and store them normalised."""
         d_min = _integer("d_min", self.d_min)
         d_max = _integer("d_max", self.d_max)
         if not 1 <= d_min < d_max:
@@ -129,13 +143,22 @@ class HCTRange:
 class HCTParams:
     """All HCT ranges for one image, run one after another.
 
-    Attributes:
-        ranges: The passes, at least one. A list is stored as a tuple.
+    Attributes
+    ----------
+    ranges : tuple of HCTRange
+        The passes, at least one. A list is stored as a tuple.
+
+    Raises
+    ------
+    ParamsError
+        If `ranges` is empty, not a sequence or holds anything but
+        `HCTRange` objects.
     """
 
     ranges: tuple[HCTRange, ...]
 
     def __post_init__(self) -> None:
+        """Validate the fields and store them normalised."""
         ranges = _sequence("ranges", self.ranges)
         if not ranges:
             raise ParamsError("HCTParams needs at least one HCTRange")
@@ -151,15 +174,24 @@ class HCTParams:
 class ClaheParams:
     """Contrast Limited Adaptive Histogram Equalization (OpenCV).
 
-    Attributes:
-        clip_limit: Contrast limit, > 0.
-        tile_grid: Number of tiles (columns, rows), each >= 1.
+    Attributes
+    ----------
+    clip_limit : float
+        Contrast limit, > 0.
+    tile_grid : tuple of (int, int)
+        Number of tiles (columns, rows), each >= 1.
+
+    Raises
+    ------
+    ParamsError
+        If a value is not a number of the kind and range above.
     """
 
     clip_limit: float
     tile_grid: tuple[int, int]
 
     def __post_init__(self) -> None:
+        """Validate the fields and store them normalised."""
         _set(self, "clip_limit", _positive("clip_limit", self.clip_limit))
         values = _sequence("tile_grid", self.tile_grid)
         if len(values) != 2:
@@ -177,19 +209,28 @@ class RollingBallParams:
     The ball is scikit-image's exact one, so values may differ slightly
     from Fiji's.
 
-    Attributes:
-        radius: Ball radius in px, > 0. Larger than the largest particle
-            for a pure background estimate; a smaller ball also goes
-            inside large particles and raises the contrast within them.
-            The time grows with radius² (about 50 s at 50 px on a
-            3072 x 2074 image).
-        light_background: True if the particles are darker than the
-            background: the image is inverted, its background
-            subtracted and the result inverted back, so the polarity
-            stays.
-        presmooth: Estimate the background on a 3x3 mean-blurred copy,
-            less sensitive to noise; the background is subtracted from
-            the unblurred image.
+    Attributes
+    ----------
+    radius : float
+        Ball radius in px, > 0. Larger than the largest particle for a
+        pure background estimate; a smaller ball also goes inside
+        large particles and raises the contrast within them. The time
+        grows with radius² (about 50 s at 50 px on a 3072 x 2074
+        image).
+    light_background : bool, default False
+        True if the particles are darker than the background: the
+        image is inverted, its background subtracted and the result
+        inverted back, so the polarity stays.
+    presmooth : bool, default True
+        Estimate the background on a 3x3 mean-blurred copy, less
+        sensitive to noise; the background is subtracted from the
+        unblurred image.
+
+    Raises
+    ------
+    ParamsError
+        If `radius` is not a number > 0, or a flag is not True or
+        False.
     """
 
     radius: float
@@ -197,6 +238,7 @@ class RollingBallParams:
     presmooth: bool = True
 
     def __post_init__(self) -> None:
+        """Validate the fields and store them normalised."""
         _set(self, "radius", _positive("radius", self.radius))
         for name in ("light_background", "presmooth"):
             _set(self, name, _flag(name, getattr(self, name)))
@@ -206,16 +248,24 @@ class RollingBallParams:
 class RegionParams:
     """The part of an image that is analysed.
 
-    Attributes:
-        bottom_fraction: Fraction of the image height cut off at the
-            bottom (the SEM data bar), 0 <= bottom_fraction < 1. The
-            rows kept are ``(1 - bottom_fraction) * height`` rounded
-            to the nearest whole row, a half up.
+    Attributes
+    ----------
+    bottom_fraction : float, default 0.0
+        Fraction of the image height cut off at the bottom (the SEM
+        data bar), 0 <= `bottom_fraction` < 1. The rows kept are
+        ``(1 - bottom_fraction) * height`` rounded to the nearest
+        whole row, a half up.
+
+    Raises
+    ------
+    ParamsError
+        If `bottom_fraction` is not a number in that range.
     """
 
     bottom_fraction: float = 0.0
 
     def __post_init__(self) -> None:
+        """Validate the fields and store them normalised."""
         fraction = _number("bottom_fraction", self.bottom_fraction)
         if not 0.0 <= fraction < 1.0:
             raise ParamsError(f"need 0 <= bottom_fraction < 1, got {fraction}")
@@ -224,14 +274,25 @@ class RegionParams:
 
 @dataclass(frozen=True)
 class PreprocessParams:
-    """Image preprocessing before detection. Defaults change nothing.
+    """Image preprocessing before detection.
 
-    The steps run in the order of the fields; ``None`` skips a step.
+    The steps run in the order of the fields; None skips a step, so the
+    defaults change nothing.
 
-    Attributes:
-        median_blur: Odd kernel size >= 3, or None for no blur.
-        rolling_ball: Background subtraction settings, or None.
-        clahe: CLAHE settings, or None.
+    Attributes
+    ----------
+    median_blur : int, optional
+        Odd kernel size >= 3, or None for no blur.
+    rolling_ball : RollingBallParams, optional
+        Background subtraction settings, or None.
+    clahe : ClaheParams, optional
+        CLAHE settings, or None.
+
+    Raises
+    ------
+    ParamsError
+        If `median_blur` is not an odd integer >= 3, or a step's
+        settings are not of the class above.
     """
 
     median_blur: int | None = None
@@ -239,6 +300,7 @@ class PreprocessParams:
     clahe: ClaheParams | None = None
 
     def __post_init__(self) -> None:
+        """Validate the fields and store them normalised."""
         if self.median_blur is not None:
             kernel = _integer("median_blur", self.median_blur)
             if kernel < 3 or kernel % 2 == 0:

@@ -33,19 +33,28 @@ def test_hct_range_old_names_are_gone(old: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "kwargs",
+    ("kwargs", "match"),
     [
-        {"d_min": 0, "d_max": 10},
-        {"d_min": 10, "d_max": 10},
-        {"d_min": 20, "d_max": 10},
-        {"d_min": 5.5, "d_max": 10},
-        {"d_min": 5, "d_max": 10, "min_dist_ratio": 0},
-        {"d_min": 5, "d_max": 10, "canny_threshold": -1},
-        {"d_min": 5, "d_max": 10, "accumulator_threshold": float("nan")},
+        ({"d_min": 0, "d_max": 10}, "need 1 <= d_min < d_max"),
+        ({"d_min": 10, "d_max": 10}, "need 1 <= d_min < d_max"),
+        ({"d_min": 20, "d_max": 10}, "need 1 <= d_min < d_max"),
+        ({"d_min": 5.5, "d_max": 10}, "d_min must be an integer"),
+        (
+            {"d_min": 5, "d_max": 10, "min_dist_ratio": 0},
+            "min_dist_ratio must be > 0",
+        ),
+        (
+            {"d_min": 5, "d_max": 10, "canny_threshold": -1},
+            "canny_threshold must be > 0",
+        ),
+        (
+            {"d_min": 5, "d_max": 10, "accumulator_threshold": float("nan")},
+            "accumulator_threshold must be finite",
+        ),
     ],
 )
-def test_invalid_hct_range_is_rejected(kwargs: dict) -> None:
-    with pytest.raises(ParamsError):
+def test_invalid_hct_range_is_rejected(kwargs: dict, match: str) -> None:
+    with pytest.raises(ParamsError, match=match):
         HCTRange(**kwargs)
 
 
@@ -83,7 +92,10 @@ def test_hct_params_accept_only_ranges() -> None:
 
 def test_params_are_immutable_and_changed_by_replace() -> None:
     r = HCTRange(5, 25)
-    with pytest.raises(dataclasses.FrozenInstanceError):
+    with pytest.raises(
+        dataclasses.FrozenInstanceError,
+        match="cannot assign to field 'accumulator_threshold'",
+    ):
         r.accumulator_threshold = 20  # type: ignore[misc]
     changed = dataclasses.replace(r, accumulator_threshold=20)
     assert changed.accumulator_threshold == 20
@@ -91,7 +103,7 @@ def test_params_are_immutable_and_changed_by_replace() -> None:
 
 
 def test_replace_validates_too() -> None:
-    with pytest.raises(ParamsError):
+    with pytest.raises(ParamsError, match="need 1 <= d_min < d_max"):
         dataclasses.replace(HCTRange(5, 25), d_max=1)
 
 
@@ -114,7 +126,7 @@ def test_preprocess_fields_are_in_step_order() -> None:
     ],
 )
 def test_invalid_preprocess_is_rejected(kwargs: dict) -> None:
-    with pytest.raises(ParamsError):
+    with pytest.raises(ParamsError, match="median_blur must be odd"):
         PreprocessParams(**kwargs)
 
 
@@ -143,15 +155,15 @@ def test_clahe_tile_grid_list_becomes_tuple() -> None:
 
 
 @pytest.mark.parametrize(
-    "kwargs",
+    ("kwargs", "match"),
     [
-        {"clip_limit": 0, "tile_grid": (8, 8)},
-        {"clip_limit": 2.0, "tile_grid": (8,)},
-        {"clip_limit": 2.0, "tile_grid": (0, 8)},
+        ({"clip_limit": 0, "tile_grid": (8, 8)}, "clip_limit must be > 0"),
+        ({"clip_limit": 2.0, "tile_grid": (8,)}, "tile_grid needs 2 values"),
+        ({"clip_limit": 2.0, "tile_grid": (0, 8)}, "tile_grid values must be"),
     ],
 )
-def test_invalid_clahe_is_rejected(kwargs: dict) -> None:
-    with pytest.raises(ParamsError):
+def test_invalid_clahe_is_rejected(kwargs: dict, match: str) -> None:
+    with pytest.raises(ParamsError, match=match):
         ClaheParams(**kwargs)
 
 
@@ -163,12 +175,12 @@ def test_rolling_ball_defaults_suit_a_dark_background() -> None:
 
 
 def test_rolling_ball_needs_positive_radius() -> None:
-    with pytest.raises(ParamsError):
+    with pytest.raises(ParamsError, match="radius must be > 0"):
         RollingBallParams(radius=0)
 
 
 def test_asdict_gives_a_plain_record() -> None:
-    # The Phase 3 detection record stores params this way (D-021).
+    # The detection record stores params this way.
     record = dataclasses.asdict(HCTParams(ranges=(HCTRange(5, 25),)))
     assert record == {
         "ranges": (
@@ -185,7 +197,7 @@ def test_asdict_gives_a_plain_record() -> None:
 
 def test_values_are_stored_as_plain_python_types() -> None:
     # Values taken from a DataFrame are NumPy scalars; the record
-    # (asdict, D-021) must still be plain data that YAML can write.
+    # (asdict) must still be plain data that YAML can write.
     hct = HCTRange(
         np.int64(5),
         np.int64(25),

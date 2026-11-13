@@ -42,11 +42,15 @@ __all__ = [
 class ImageParams:
     """The params of one image.
 
-    Attributes:
-        region: The analysed part of the image.
-        preprocess: Image preprocessing before detection.
-        hct: The HCT ranges; None while ``hct.ranges`` is empty
-            (detection needs at least one range).
+    Attributes
+    ----------
+    region : RegionParams
+        The analysed part of the image.
+    preprocess : PreprocessParams
+        Image preprocessing before detection.
+    hct : HCTParams or None
+        The HCT ranges; None while ``hct.ranges`` is empty (detection
+        needs at least one range).
     """
 
     region: RegionParams
@@ -68,9 +72,12 @@ _SECTION_CLASSES: dict[str, type] = {
 class Problem(NamedTuple):
     """One problem in a params mapping.
 
-    Attributes:
-        path: Where, like ``"hct.ranges[0]"``; ``""`` for the root.
-        message: What is wrong.
+    Attributes
+    ----------
+    path : str
+        Where, like ``"hct.ranges[0]"``; ``""`` for the root.
+    message : str
+        What is wrong.
     """
 
     path: str
@@ -97,7 +104,7 @@ def merge(
 
 
 def _copy(value: Any) -> Any:
-    """A deep copy as plain dicts and lists."""
+    """Return a deep copy as plain dicts and lists."""
     if isinstance(value, Mapping):
         return {key: _copy(item) for key, item in value.items()}
     if isinstance(value, list | tuple):
@@ -106,7 +113,7 @@ def _copy(value: Any) -> Any:
 
 
 def plain(value: object, path: str) -> Any:
-    """``value`` as plain YAML-ready data: dicts, lists, scalars.
+    """Return ``value`` as YAML-ready data: dicts, lists, scalars.
 
     A params object becomes its full mapping, a tuple a list and a
     NumPy scalar an int, float or bool. Raises ParamsError naming the
@@ -344,7 +351,9 @@ COMMENTS: dict[str, str] = {
     ),
     "preprocess.median_blur": "odd kernel size in px, e.g. 3; null = off",
     "preprocess.rolling_ball": "e.g. {radius: 50}; null = off",
-    "preprocess.clahe": "e.g. {clip_limit: 2.0, tile_grid: [8, 8]}; null = off",
+    "preprocess.clahe": (
+        "e.g. {clip_limit: 2.0, tile_grid: [8, 8]}; null = off"
+    ),
     "hct.ranges": "required before detection, e.g.\n- {d_min: 8, d_max: 30}",
 }
 
@@ -358,7 +367,7 @@ _COMMENT_COLUMN = 32
 
 
 def template() -> str:
-    """The text of a new ``agglpy.yml``: every key at its neutral value.
+    """Return the text of a new ``agglpy.yml``, keys at neutral values.
 
     Built from the params fields, so it cannot drift from them.
     """

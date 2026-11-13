@@ -40,7 +40,7 @@ IMAGES_DIR = DATA_DIR / "input" / "multiple_image" / "images"
 IMAGE_NAMES = ["D7-017", "D7-019"]
 REGION = RegionParams(bottom_fraction=0.1)
 
-# The settings of the v0.4 golden run (tests/data/golden/D7/settings.yml)
+# Settings of the v0.4 golden run (tests/data/golden/D7/settings.yml)
 RANGES = {
     "D7-017": (
         HCTRange(3, 60, canny_threshold=220, accumulator_threshold=13),
@@ -145,7 +145,7 @@ def _canonical(
 
 @pytest.mark.parametrize("name", IMAGE_NAMES)
 def test_automatic_circles(dataframe_regression, name: str) -> None:
-    """Detection finds the same circles (px)."""
+    # Detection finds the same circles (px).
     circles, record, _ = _automatic(name)
     # two pairs per image at the boundary between the ranges (r ~ 30)
     assert [w.category for w in record] == [DuplicateParticlesWarning]
@@ -162,7 +162,7 @@ def test_automatic_circles(dataframe_regression, name: str) -> None:
 
 @pytest.mark.parametrize("name", IMAGE_NAMES)
 def test_automatic_particles(dataframe_regression, name: str) -> None:
-    """The same particles are grouped, enclosed and touch the edge."""
+    # The same particles are grouped, enclosed and touch the edge.
     _, _, result = _automatic(name)
     particles, _, _ = _canonical(result)
     assert particles["touches_edge"].sum() == COUNTS[name][1]
@@ -174,7 +174,7 @@ def test_automatic_particles(dataframe_regression, name: str) -> None:
 
 @pytest.mark.parametrize("name", IMAGE_NAMES)
 def test_automatic_agglomerates(dataframe_regression, name: str) -> None:
-    """Each agglomerate keeps its properties (px)."""
+    # Each agglomerate keeps its properties (px).
     _, _, result = _automatic(name)
     _, agglomerates, _ = _canonical(result)
     assert len(agglomerates) == COUNTS[name][2]
@@ -188,7 +188,7 @@ def test_automatic_agglomerates(dataframe_regression, name: str) -> None:
 
 @pytest.mark.parametrize("name", IMAGE_NAMES)
 def test_automatic_contacts(dataframe_regression, name: str) -> None:
-    """The same pairs of particles are possible contacts."""
+    # The same pairs of particles are possible contacts.
     _, _, result = _automatic(name)
     _, agglomerates, contacts = _canonical(result)
     assert len(contacts) == agglomerates["contact_count"].sum()
@@ -199,7 +199,7 @@ def test_automatic_contacts(dataframe_regression, name: str) -> None:
 
 @pytest.mark.parametrize("name", IMAGE_NAMES)
 def test_corrected_particles(dataframe_regression, name: str) -> None:
-    """The corrected set: same grouping, enclosed and edge flags."""
+    # The corrected set: same grouping, enclosed and edge flags.
     result = _corrected(name)
     particles, _, _ = _canonical(result)
     assert result.outside_ids == ()
@@ -213,7 +213,7 @@ def test_corrected_particles(dataframe_regression, name: str) -> None:
 
 @pytest.mark.parametrize("name", IMAGE_NAMES)
 def test_corrected_agglomerates(dataframe_regression, name: str) -> None:
-    """The corrected set: each agglomerate keeps its properties (px)."""
+    # The corrected set: each agglomerate keeps its properties (px).
     _, agglomerates, _ = _canonical(_corrected(name))
     dataframe_regression.check(
         agglomerates,
@@ -224,7 +224,7 @@ def test_corrected_agglomerates(dataframe_regression, name: str) -> None:
 
 @pytest.mark.parametrize("name", IMAGE_NAMES)
 def test_corrected_contacts(dataframe_regression, name: str) -> None:
-    """The corrected set: the same possible contacts."""
+    # The corrected set: the same possible contacts.
     _, agglomerates, contacts = _canonical(_corrected(name))
     assert len(contacts) == agglomerates["contact_count"].sum()
     dataframe_regression.check(

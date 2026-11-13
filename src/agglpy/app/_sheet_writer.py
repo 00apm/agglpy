@@ -158,8 +158,10 @@ def _write_xlsx(path: Path, header: list[str], rows: list[list[Any]]) -> None:
 
 
 def _remove_table_column(sheet: Worksheet, column: int) -> None:
-    """Shrink the Excel tables and the filter over a deleted column
-    (openpyxl does not; Excel would report the file as damaged)."""
+    """Shrink the Excel tables and the filter over a deleted column.
+
+    openpyxl does not; Excel would report the file as damaged.
+    """
     for table in sheet.tables.values():
         min_col, _, max_col, _ = range_boundaries(table.ref)
         if min_col is not None and min_col <= column <= (max_col or 0):
@@ -188,8 +190,10 @@ def _without_column(ref: str, column: int) -> str:
 
 
 def _resize_ranges(sheet: Worksheet, last: int) -> None:
-    """Let Excel tables and the filter that start at the header end at
-    the last data row (openpyxl does not move them)."""
+    """Make the tables and filter that start at row 1 end at ``last``.
+
+    ``last`` is the last data row; openpyxl does not move them.
+    """
     last = max(last, 2)  # an Excel table needs one data row
     for table in sheet.tables.values():
         table.ref = _resized(table.ref, last)
@@ -264,7 +268,7 @@ def _key(value: object) -> str:
 
 
 def _plain(value: object) -> Any:
-    """A cell value from pandas / NumPy as a plain Python value."""
+    """Return a pandas / NumPy cell value as a plain Python value."""
     if value is None or value is pd.NA or value is pd.NaT:
         return None
     if isinstance(value, pd.Timestamp):
@@ -307,7 +311,10 @@ def _as_number(value: object) -> float | None:
 
 
 def _text(value: object) -> str:
-    """A value as CSV text: whole floats without ``.0``, bools true/false."""
+    """Return a value as CSV text.
+
+    Whole floats lose their ``.0``, bools become ``true`` / ``false``.
+    """
     value = _plain(value)
     if value is None:
         return ""

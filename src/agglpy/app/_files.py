@@ -17,8 +17,10 @@ def replace_file(path: Path, write: Callable[[Path], object]) -> None:
     one rename: a failed write or a file locked by another program
     (Excel locks an open workbook) leaves the original as it was.
 
-    Raises:
-        OutputLockedError: If ``path`` can't be replaced.
+    Raises
+    ------
+    OutputLockedError
+        If ``path`` can't be replaced.
     """
     tmp = path.with_name(f".{path.name}.agglpy-tmp")
     try:

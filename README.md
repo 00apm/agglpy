@@ -8,8 +8,8 @@
 # agglpy: particle and agglomerate detection
 
 > **Status: under development.** `v0.4.0` is the last release of the original API (`Manager` + `settings.yml`).
-> Version 0.5 is a redesign and will break that API. The documentation is incomplete and will be written as the new
-> interface stabilises.
+> Version 0.5 (branch `develop`) is a redesign and breaks that API; its documentation starts at
+> [Getting started](docs/getting-started.md).
 
 **agglpy** is a tool for primary particle and agglomerate detection on digital microscopic (SEM/TEM) images.
 It combines several digital image processing and particle classification algorithms (including image filtering, edge/shape detection, and Hough transform, DFS and Union-Find) to describe the structure of each individual agglomerate.
@@ -29,12 +29,14 @@ See [docs/methodology.md](docs/methodology.md) for the full description of the m
 
 ## Documentation
 
-See [docs/index.md](docs/index.md).
+[Getting started](docs/getting-started.md) walks from images to exported results; all pages are listed in
+[docs/index.md](docs/index.md).
 
 
 ## Installation
 
-Not yet on PyPI or conda-forge (planned). To use the legacy version `v0.4.0`:
+Not yet on PyPI or conda-forge (planned). Version 0.5 installs from `develop`: see
+[Getting started](docs/getting-started.md#install). To use the legacy version `v0.4.0`:
 
 ```
 pip install git+https://github.com/00apm/agglpy@v0.4.0

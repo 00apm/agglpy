@@ -207,7 +207,9 @@ def test_persons_file_is_kept_then_replaced_with_force(
 
 def test_zero_particles_is_a_result(particles_col: Collection) -> None:
     write_blank_image(image(particles_col, "D7-017"))
-    with pytest.warns(NoParticlesWarning):
+    with pytest.warns(
+        NoParticlesWarning, match="NoParticlesWarning in D7-017"
+    ):
         rep = particles_col.detect(progress=False)
     assert rep["outcome"][0] == "detected"
     assert rep["particle_count"][0] == 0
@@ -400,7 +402,9 @@ def test_duplicates_go_into_the_record_and_are_reemitted_once(
 ) -> None:
     # two overlapping ranges find the same discs
     particles_col.set_params(None, hct=TWO_RANGES)
-    with pytest.warns(DuplicateParticlesWarning) as ws:
+    with pytest.warns(
+        DuplicateParticlesWarning, match="DuplicateParticlesWarning in D7-017"
+    ) as ws:
         rep = particles_col.detect(progress=False)
     dup = [w for w in ws if w.category is DuplicateParticlesWarning]
     assert len(dup) == 1
@@ -449,7 +453,9 @@ def test_jpeg_recognised_by_bytes_not_suffix(tmp_path: Path) -> None:
     )
     col = Collection.create(tmp_path / "col", images=folder)
     col.set_params(None, hct=HCT)
-    with pytest.warns(LossyImageWarning) as ws:
+    with pytest.warns(
+        LossyImageWarning, match="LossyImageWarning in D7-017"
+    ) as ws:
         rep = col.detect(progress=False)
     lossy = [w for w in ws if w.category is LossyImageWarning]
     assert [str(w.message) for w in lossy] == [
@@ -462,7 +468,7 @@ def test_jpeg_recognised_by_bytes_not_suffix(tmp_path: Path) -> None:
 def test_incomplete_run_warns_with_counts(particles_col: Collection) -> None:
     image(particles_col, "D7-018").unlink()
     particles_col.set_params("D7-019", hct={"ranges": []})
-    with pytest.warns(IncompleteRunWarning) as ws:
+    with pytest.warns(IncompleteRunWarning, match="1 skipped, 1 error") as ws:
         particles_col.detect(progress=False)
     (w,) = [w for w in ws if w.category is IncompleteRunWarning]
     assert str(w.message) == "1 skipped, 1 error; see the returned table"
@@ -564,7 +570,9 @@ def test_error_traceback_goes_to_the_log(
 
     monkeypatch.setattr(detect_module, "detect_particles", boom)
     caplog.set_level(logging.INFO, logger="agglpy")
-    with pytest.warns(IncompleteRunWarning):
+    with pytest.warns(
+        IncompleteRunWarning, match="^1 error; see the returned table"
+    ):
         particles_col.detect("D7-017", progress=False)
     errors = [r for r in caplog.records if r.exc_info]
     assert len(errors) == 1
@@ -579,7 +587,10 @@ def test_warnings_as_errors_raise_after_the_batch(
     particles_col.set_params(None, hct=TWO_RANGES)
     with warnings.catch_warnings():
         warnings.simplefilter("error")
-        with pytest.raises(DuplicateParticlesWarning):
+        with pytest.raises(
+            DuplicateParticlesWarning,
+            match="DuplicateParticlesWarning in D7-017",
+        ):
             particles_col.detect(progress=False)
     for name in NAMES:
         assert csv(particles_col, name).is_file()

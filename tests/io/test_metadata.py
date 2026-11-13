@@ -1,8 +1,8 @@
 """agglpy.io.read_image_metadata: size and pixel size from the tags.
 
 Real Zeiss files from tests/data, and tiny synthetic TIFFs carrying
-only the tag entries a reader uses, with values copied from the real
-files of item 2.2 Findings (support.tiffs).
+only the tag entries a reader uses, with values copied from real
+files (support.tiffs).
 """
 
 import dataclasses
@@ -39,7 +39,10 @@ def _no_unexpected_warnings():
 def test_metadata_is_a_frozen_dataclass() -> None:
     meta = read_image_metadata(D7_017)
     assert isinstance(meta, ImageMetadata)
-    with pytest.raises(dataclasses.FrozenInstanceError):
+    with pytest.raises(
+        dataclasses.FrozenInstanceError,
+        match="cannot assign to field 'pixel_size'",
+    ):
         meta.pixel_size = 1.0  # type: ignore[misc]
 
 
@@ -132,7 +135,7 @@ def test_png_has_a_size_and_no_pixel_size(tmp_path: Path) -> None:
 
 
 def test_missing_file_raises_file_not_found(tmp_path: Path) -> None:
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(FileNotFoundError, match=r"missing\.tif"):
         read_image_metadata(tmp_path / "missing.tif")
 
 
@@ -216,7 +219,7 @@ def test_imagej_non_square_pixels_warn(tmp_path: Path) -> None:
 
 
 def test_first_reader_wins(tmp_path: Path) -> None:
-    # Zeiss before Thermo/FEI before ImageJ (D-050)
+    # Zeiss before Thermo/FEI before ImageJ: the first hit wins
     path = tmp_path / "both.tif"
     zeiss = b"0\r\n0\r\n0\r\n1e-06\r\n"
     fei = b"[Scan]\r\nPixelWidth=2e-06\r\n"
@@ -253,7 +256,10 @@ def test_pixel_size_warning_points_at_the_caller(
         )
     else:
         path = write_fei(tmp_path / "f.tif", 16, 8, 3.3724e-06, 3.5e-06)
-    with pytest.warns(PixelSizeWarning) as record:
+    with pytest.warns(
+        PixelSizeWarning,
+        match=r"differ by more than 1 %|pixels are not square",
+    ) as record:
         read_image_metadata(path)
     assert os.path.normcase(record[0].filename) == os.path.normcase(__file__)
 

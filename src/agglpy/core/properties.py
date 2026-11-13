@@ -1,23 +1,12 @@
 """Properties of particles and agglomerates, in px.
 
-``particle_properties`` adds each particle's size to the particle
-table; ``agglomerate_properties`` builds the agglomerate table, one row
-per ``agglomerate_id``. Both take the tables from
-``agglomerates.find_agglomerates`` and never modify them.
-
 Every value describes the circle model: each particle is a sphere
 whose projection is its detected circle. Enclosed particles are members
 everywhere: they count in every sum, count and statistic; only the
-``*_with_hidden`` values count them a second time
-(``docs/methodology.md``, section 7).
+``*_with_hidden`` values count them a second time.
 
-With the analysed region's ``Bounds`` (``agglpy.core.region``), both
-add ``touches_edge``: whether a particle, or any member of an
-agglomerate, reaches the region's edge, so it may be cut off.
-
-``DIMENSIONS`` gives the length exponent of every property column;
-``to_physical`` uses it for the one conversion from px to physical
-units.
+See *Methodology* (``docs/methodology.md``), section *8. Agglomerate
+size and shape*.
 """
 
 from types import MappingProxyType
@@ -35,12 +24,10 @@ from agglpy.core.region import Bounds
 from agglpy.errors import ParticleTableError
 from agglpy.params import _positive
 
-# Length exponent of each property column: 0 count, ratio or flag,
-# 1 length (px), 2 area (px²), 3 volume (px³). D, area and volume mean
-# the same for a particle and an agglomerate. ``coordination`` is the
-# particle column of find_agglomerates; then the columns of this module
-# in table order; last those of ``structure.structure_properties``
-# (particle columns, then agglomerate columns).
+# D, area and volume mean the same for a particle and an agglomerate.
+# Order: coordination (the particle column of find_agglomerates), then
+# the columns of this module in table order, last those of
+# structure.structure_properties (particle, then agglomerate columns).
 DIMENSIONS: MappingProxyType[str, int] = MappingProxyType(
     {
         "coordination": 0,
@@ -89,6 +76,11 @@ DIMENSIONS: MappingProxyType[str, int] = MappingProxyType(
         "dangling_end_length_max": 1,
     }
 )
+"""The length exponent of each property column.
+
+0 count, ratio or flag, 1 length (px), 2 area (px²), 3 volume (px³);
+`to_physical` converts by it.
+"""
 
 # The particle table's own geometry, converted like the properties.
 _GEOMETRY: MappingProxyType[str, int] = MappingProxyType(
@@ -115,24 +107,31 @@ def particle_properties(
     Adds ``D = 2r`` (px), ``area = πr²`` (px², the circle),
     ``volume = (4/3)πr³`` (px³, the sphere) and ``surface = πD²``
     (px², the sphere's surface, not the projected ``area``). With
-    ``bounds``, also ``touches_edge``: True when the circle reaches the
+    `bounds`, also ``touches_edge``: True when the circle reaches the
     edge, ``x - r <= x_min`` or ``x + r >= x_max`` (same for y); a
     circle exactly at the edge may already be cut off.
 
-    Args:
-        table: A particle table with at least the column ``r``, and
-            ``x, y`` when ``bounds`` is given.
-        bounds: The analysed region (``core.region.region_bounds``);
-            None adds no ``touches_edge`` (no image, e.g. imported
-            particles).
+    Parameters
+    ----------
+    table : DataFrame
+        Particle table with ``r`` in px, and ``x``, ``y`` when
+        `bounds` is given.
+    bounds : Bounds, optional
+        The analysed region (`agglpy.core.region.region_bounds`);
+        None adds no ``touches_edge`` (no image, e.g. imported
+        particles).
 
-    Returns:
+    Returns
+    -------
+    DataFrame
         A copy with the new columns, replacing any from an earlier
         run; every other column, the row order and the index are kept.
 
-    Raises:
-        ParticleTableError: If a needed column is missing, not numeric,
-            not finite, or ``r`` is not > 0.
+    Raises
+    ------
+    ParticleTableError
+        If a needed column is missing, not numeric or not finite, or
+        ``r`` is not > 0.
     """
     _require(table, ("r",) if bounds is None else ("x", "y", "r"))
     r = _radii(table)
@@ -156,63 +155,46 @@ def agglomerate_properties(
     """Measure every agglomerate of one image.
 
     Members are all particles with the same ``agglomerate_id``,
-    enclosed ones included. Column definitions (px, px², px³):
+    enclosed ones included. The columns (px, px², px³): counts
+    (members, enclosed members, possible contacts, loops), sizes
+    (``volume``, ``D``, ``surface``, member diameters), the
+    ``*_with_hidden`` values, centre of mass and ``rg``, projected
+    ``area`` and ``D_pa``, Feret diameters, and with `bounds`
+    ``touches_edge``.
 
-    - ``member_count``, ``enclosed_count``: members, enclosed members.
-    - ``contact_count``: possible contacts between the members (rows
-      of ``contacts``; see ``find_agglomerates``), an upper bound of the
-      true contacts, which are at least ``member_count - 1``.
-    - ``loop_count``: ``contact_count - member_count + 1``, the contacts
-      beyond the ``member_count - 1`` that hold the agglomerate
-      together (the circuit rank of its contact graph); an upper bound;
-      0 for a chain or a branched agglomerate.
-    - ``volume``: sum of the member sphere volumes; ``D``: diameter of
-      one sphere with that volume (the agglomerate's size).
-    - ``surface``: sum of the member sphere surfaces. Spheres touching
-      in one point lose no surface (the model of ``volume``), so for
-      sintered or fused particles this is an upper bound.
-    - ``D_mean``, ``D_std``: mean and sample std (n - 1) of the member
-      diameters; ``D_std`` is NaN for one member.
-    - ``D_largest``: largest member diameter; ``size_ratio``: second
-      largest / largest member diameter, NaN for one member.
-    - ``volume_with_hidden``, ``D_with_hidden``,
-      ``member_count_with_hidden``, ``surface_with_hidden``: enclosed
-      members counted twice, for the particles hidden on the far side
-      (methodology, section 7).
-    - ``x_com``, ``y_com``: volume-weighted centre of mass.
-    - ``rg``: radius of gyration of the member spheres with their
-      heights unknown, so a lower bound of the 3D value; exact for one
-      sphere (D-040).
-    - ``area``: projected area, the exact area of the union of the
-      member circles (overlaps counted once), not the sum of member
-      areas; ``D_pa``: diameter of the circle with that area.
-    - ``D_feret_x``, ``D_feret_y``: Feret diameter along the image x
-      and y axis; ``D_feret_max``: largest Feret diameter.
-    - ``touches_edge`` (only with ``bounds``): True when any member
-      reaches the region's edge (see ``particle_properties``); the
-      agglomerate may be larger than what is seen.
+    Parameters
+    ----------
+    table : DataFrame
+        The particle table of one image from `find_agglomerates`, in
+        px; only ``id, x, y, r, agglomerate_id, enclosed`` are read.
+    contacts : DataFrame
+        The contacts table from `find_agglomerates` for these
+        particles, all of it (``inside`` is not read).
+    bounds : Bounds, optional
+        The analysed region (`agglpy.core.region.region_bounds`);
+        None adds no ``touches_edge``.
 
-    ``area`` and the Feret diameters describe the circle model, not the
-    agglomerate's outline on the image.
-
-    Args:
-        table: The particle table from ``find_agglomerates``; only
-            ``id, x, y, r, agglomerate_id, enclosed`` are read.
-        contacts: The contacts table from ``find_agglomerates`` for
-            these particles, all of it (``inside`` is not read).
-        bounds: The analysed region (``core.region.region_bounds``);
-            None adds no ``touches_edge``.
-
-    Returns:
+    Returns
+    -------
+    DataFrame
         A new table, one row per agglomerate sorted by
         ``agglomerate_id`` (first column), with a fresh ``RangeIndex``.
         An empty particle table gives an empty table with every column.
 
-    Raises:
-        ParticleTableError: If a needed column is missing; ``x, y, r``
-            are not finite numbers or ``r <= 0``; ``agglomerate_id``
-            does not hold integers; ``enclosed`` is not True / False.
-        TableError: If ``contacts`` are not pairs of these particles.
+    Raises
+    ------
+    ParticleTableError
+        If a needed column is missing, ``x, y, r`` are not finite
+        numbers or ``r <= 0``, ``agglomerate_id`` does not hold
+        integers, or ``enclosed`` is not True / False.
+    TableError
+        If `contacts` are not pairs of these particles.
+
+    Notes
+    -----
+    ``area`` and the Feret diameters describe the circle model, not the
+    agglomerate's outline on the image. See *Results*
+    (``docs/results.md``), section *Agglomerate table*.
     """
     _require(table, _AGGLOMERATE_INPUT)
     # A table fresh from find_agglomerates is clean, but one read back
@@ -257,30 +239,40 @@ def agglomerate_properties(
 
 
 def to_physical(table: pd.DataFrame, pixel_size: float) -> pd.DataFrame:
-    """Convert a particle or agglomerate table from px to physical units.
+    """Convert a particle or agglomerate table to physical units.
 
-    Each built-in column in the table is multiplied by ``pixel_size``
-    to the power of its dimension: ``x, y, r`` and the lengths of
-    ``DIMENSIONS`` by p, areas by p², volumes by p³. Counts, ratios and
+    Each built-in column in the table is multiplied by `pixel_size` to
+    the power of its dimension: ``x, y, r`` and the lengths of
+    `DIMENSIONS` by p, areas by p², volumes by p³. Counts, ratios and
     every other column are left as they are.
 
-    Convert each image with its own pixel size before stacking the
-    tables of several images: metrics and distributions assume one
-    unit for all rows.
+    Parameters
+    ----------
+    table : DataFrame
+        The particle table or the agglomerate table of one image, in
+        px.
+    pixel_size : float
+        The length of one pixel in the unit wanted, e.g. 2.5e-9 for m
+        when one pixel is 2.5 nm.
 
-    Args:
-        table: The particle table or the agglomerate table of one
-            image, in px.
-        pixel_size: The length of one pixel in the unit wanted, e.g.
-            2.5e-9 for m when one pixel is 2.5 nm.
-
-    Returns:
+    Returns
+    -------
+    DataFrame
         A converted copy; columns, rows and index are kept. Converting
         a table twice scales it twice.
 
-    Raises:
-        ParamsError: If ``pixel_size`` is not a finite number > 0.
-        ParticleTableError: If a column to convert is not numeric.
+    Raises
+    ------
+    ParamsError
+        If `pixel_size` is not a finite number > 0.
+    ParticleTableError
+        If a column to convert is not numeric.
+
+    Notes
+    -----
+    Convert each image with its own pixel size before stacking the
+    tables of several images: metrics and distributions assume one
+    unit for all rows.
     """
     p = _positive("pixel_size", pixel_size)
     out = table.copy()
@@ -292,7 +284,7 @@ def to_physical(table: pd.DataFrame, pixel_size: float) -> pd.DataFrame:
 
 
 class _Groups:
-    """Members of each agglomerate as positions 0 … k-1 (``codes``).
+    """Members of each agglomerate as positions 0 … k-1 (`codes`).
 
     Computed once, shared by every property, so no property loops over
     agglomerates in Python: a per-agglomerate value is an array of
@@ -349,7 +341,7 @@ def _sizes(
     surface = groups.sum(shell)
     surface_hidden = surface + groups.sum(np.where(enclosed, shell, 0.0))
 
-    # Two passes (mean, then deviations): equal diameters give exactly 0.
+    # Mean first, then deviations: equal diameters give exactly 0.
     d_mean = groups.sum(d) / count
     deviation = d - d_mean[groups.codes]
     variance = np.full(groups.k, np.nan)
@@ -393,7 +385,7 @@ def _centre_of_mass(
     y: NDArray[np.float64],
     r: NDArray[np.float64],
 ) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
-    # Mass ∝ volume ∝ r³ (D-040).
+    # Mass ∝ volume ∝ r³: members weighted by volume.
     mass = r**3
     total = groups.sum(mass)
     x_com = groups.sum(mass * x) / total
@@ -415,10 +407,10 @@ def _union_area(
     y_com: NDArray[np.float64],
     pairs: _Contacts,
 ) -> NDArray[np.float64]:
-    """Exact area of the union of each agglomerate's member circles.
+    """Compute the exact area of each agglomerate's union of circles.
 
     Green's theorem: the area is ½∮(x dy - y dx) along the union's
-    boundary, which is made of the outline arcs (``_outline_arcs``).
+    boundary, which is made of the outline arcs (`_outline_arcs`).
     """
     circle, a, b = _outline_arcs(x, y, r, pairs)
     # Centres relative to the agglomerate's centre of mass keep the
@@ -444,12 +436,12 @@ def _outline_arcs(
     r: NDArray[np.float64],
     pairs: _Contacts,
 ) -> tuple[NDArray[np.intp], NDArray[np.float64], NDArray[np.float64]]:
-    """Arcs of each circle's outline outside every other member circle.
+    """Find the arcs of each circle's outline outside the other members.
 
     Together they are the boundary of each agglomerate's union of
     circles, the edge of a hole inside a ring of particles included.
-    Only the circles of ``pairs`` (the contacts of
-    ``find_agglomerates``, as row positions) cover each other. A pair
+    Only the circles of `pairs` (the contacts of `find_agglomerates`,
+    as row positions) cover each other. A pair
     left out as impossible (C inside B inside X) changes nothing: B
     covers all of C.
 
@@ -525,9 +517,9 @@ def _covered_arcs(
     r: NDArray[np.float64],
     pairs: _Contacts,
 ) -> tuple[NDArray[np.intp], NDArray[np.float64], NDArray[np.float64]]:
-    """Arcs of each circle's outline covered by the other circle of a
-    pair (``larger`` the circle that may hold the other).
+    """Find the arcs of each circle's outline covered by its partner.
 
+    ``larger`` is the circle of a pair that may hold the other.
     Returns (circle, start, end) with ``0 <= start <= end <= 2π``; an
     arc across angle 0 is split in two.
     """
@@ -575,9 +567,10 @@ def _feret_max(
     y: NDArray[np.float64],
     r: NDArray[np.float64],
 ) -> NDArray[np.float64]:
-    """Largest Feret diameter: max of ``d_ij + r_i + r_j`` over pairs.
+    """Return the largest Feret diameter of each agglomerate.
 
-    The pair ``i = j`` is included (``2r``). Small agglomerates take all
+    The max of ``d_ij + r_i + r_j`` over member pairs; the pair
+    ``i = j`` is included (``2r``). Small agglomerates take all
     pairs at once, grouped by size; large ones are pruned first.
     """
     out = np.zeros(groups.k)
@@ -629,7 +622,10 @@ def _pruned_feret_max(
 def _pair_max(
     x: NDArray[np.float64], y: NDArray[np.float64], r: NDArray[np.float64]
 ) -> float:
-    """Max of ``d_ij + r_i + r_j`` over all pairs, in chunks of rows."""
+    """Return the max of ``d_ij + r_i + r_j`` over all pairs.
+
+    Computed in chunks of rows.
+    """
     best = 0.0
     step = max(1, _CHUNK // len(x))
     for i in range(0, len(x), step):
@@ -643,7 +639,7 @@ def _pair_max(
 def _pair_max_rows(
     x: NDArray[np.float64], y: NDArray[np.float64], r: NDArray[np.float64]
 ) -> NDArray[np.float64]:
-    """``_pair_max`` for each row of (agglomerates, members) arrays."""
+    """Apply `_pair_max` to each row of (agglomerates, members) data."""
     dx = x[:, :, None] - x[:, None, :]
     dy = y[:, :, None] - y[:, None, :]
     span = np.sqrt(dx * dx + dy * dy) + r[:, :, None] + r[:, None, :]

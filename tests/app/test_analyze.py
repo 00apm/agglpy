@@ -108,7 +108,9 @@ def test_not_ready_lists_every_image_and_computes_nothing(
     for csv in ("particles_hct.csv", "particles_corrected.csv"):
         (work(analysis_col, "D7-018") / csv).unlink()
     image_file(analysis_col, "D7-019").unlink()
-    with pytest.raises(NotReadyError) as info:
+    with pytest.raises(
+        NotReadyError, match="3 of 3 images are not ready"
+    ) as info:
         analysis_col.analyze(progress=False)
     lines = str(info.value).splitlines()
     stored = analysis_col.read_sheet().loc[2, "file"]
@@ -137,7 +139,9 @@ def test_unreadable_files_are_not_ready(analysis_col: Collection) -> None:
     )
     with warnings.catch_warnings(record=True) as seen:
         warnings.simplefilter("always")
-        with pytest.raises(NotReadyError) as info:
+        with pytest.raises(
+            NotReadyError, match="2 of 3 images are not ready"
+        ) as info:
             analysis_col.analyze(progress=False)
     # "particles_corrected.csv does not read" is in the error already
     assert seen == []
@@ -212,7 +216,9 @@ def test_outside_region_warned_once_at_the_callers_line(
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         analysis_col.import_particles("D7-018", source)
-    with pytest.warns(UserWarning) as ws:
+    with pytest.warns(
+        UserWarning, match=r"outside the analysed region|outdated detection"
+    ) as ws:
         res = analysis_col.analyze(progress=False)
     outside = [w for w in ws if w.category is ParticlesOutsideRegionWarning]
     assert len(outside) == 1
@@ -241,7 +247,7 @@ def test_outdated_detection_warns_first_and_still_returns(
     analysis_col.set_params(
         "D7-018", hct={"ranges": [{"d_min": 10, "d_max": 40}]}
     )
-    with pytest.warns(UserWarning) as ws:
+    with pytest.warns(UserWarning, match="outdated detection") as ws:
         res = analysis_col.analyze(progress=False)
     assert ws[0].category is OutdatedParticlesWarning
     assert os.path.normcase(ws[0].filename) == os.path.normcase(__file__)
@@ -258,7 +264,9 @@ def test_outdated_detection_warns_first_and_still_returns(
 
 def test_switched_off_detection_reason(analysis_col: Collection) -> None:
     analysis_col.set_params("D7-017", hct={"ranges": []})
-    with pytest.warns(OutdatedParticlesWarning) as ws:
+    with pytest.warns(
+        OutdatedParticlesWarning, match="detection was switched off"
+    ) as ws:
         analysis_col.analyze(progress=False)
     assert str(ws[0].message).startswith(
         "1 image was analysed with particles from an outdated detection:\n"
@@ -278,7 +286,7 @@ def test_pixel_size_warning_only_when_the_metadata_decides(
         raw=1e-9,
         image_pixel_size=(6.0, "nm"),
     )
-    with pytest.warns(PixelSizeWarning) as ws:
+    with pytest.warns(PixelSizeWarning, match="Zeiss pixel size") as ws:
         res = analysis_col.analyze(progress=False)
     (w,) = [w for w in ws if w.category is PixelSizeWarning]
     assert str(w.message).startswith("1 image (each message")

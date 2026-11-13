@@ -1,4 +1,4 @@
-"""agglpy.draw.agglomerates: one filled shape and outline per agglomerate."""
+"""draw.agglomerates: one filled shape and outline per agglomerate."""
 
 import matplotlib
 import numpy as np

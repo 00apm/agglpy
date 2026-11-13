@@ -1,17 +1,12 @@
 """Population metrics: pooled per group of images, or across images.
 
-``summary`` pools every image of a group: counts are summed, ratios
-come from the summed counts (never means of per-image ratios) and size
-descriptors from the pooled rows. ``summary_across_images`` computes
-the same metrics per image, then their mean ± confidence interval over
-the images of each group (``values_across_images``, which also takes
-the user's own per-image values).
-
 The functions are unit-agnostic: they assume one common unit for all
 rows. Pooling px tables of images with different pixel sizes gives
-wrong sizes; convert each image with ``properties.to_physical`` first.
-All metrics use the visible values only, never the ``*_with_hidden``
-properties (D-046).
+wrong sizes; convert each image with
+`agglpy.core.properties.to_physical` first. All metrics use the visible
+values only, never the ``*_with_hidden`` properties.
+
+See *Results* (``docs/results.md``), section *Metrics*.
 """
 
 import warnings
@@ -117,85 +112,67 @@ def summary(
     *,
     metrics: str | Iterable[str] | None = None,
 ) -> pd.DataFrame:
-    """Built-in metrics of each group of images, pooled.
+    """Compute the built-in metrics of each group of images, pooled.
 
-    Families (``metrics=``; default all) and their columns:
+    Counts are summed over the images of a group, ratios come from the
+    summed counts (never means of per-image ratios) and size
+    descriptors from the pooled rows.
 
-    - ``counts``: ``N_primary`` (primary particles), ``N_aerosol``
-      (aerosol particles: agglomerates and single particles), ``N_pp1``
-      (single particles), ``N_ppA = N_primary - N_pp1`` (particles in
-      agglomerates), ``N_aggl = N_aerosol - N_pp1`` (agglomerates of
-      two or more particles), ``N_merges = N_primary - N_aerosol``
-      (merges that joined the primary particles into the aerosol
-      particles: the sum of ``member_count - 1``, the rank of the
-      contact graph).
-    - ``ratios``, from the pooled counts: ``Ra = N_aggl / N_primary``,
-      the agglomeration ratio of Gotoh et al. (1996), equal to theirs
-      when no particle is lost or added; it is not monotonic (0 ... 0.5,
-      it falls when agglomerates merge); ``agglomerated_fraction =
-      1 - N_pp1 / N_primary``, the number fraction of primary particles
-      bound in agglomerates (ER in agglpy <= 0.4); ``merge_ratio =
-      N_merges / (N_primary - 1) = (N_primary - N_aerosol) /
-      (N_primary - 1)``, the degree of agglomeration: 0 when all are
-      single, 1 when all form one agglomerate, growing with every merge
-      (NaN below 2 particles); exactly, ``agglomerated_fraction =
-      merge_ratio * (N_primary - 1) / N_primary + Ra``; ``n_ppA = N_ppA
-      / N_aggl``; ``n_ppP = N_primary / N_aerosol``.
-    - ``contacts``, from the agglomerates' ``contact_count``:
-      ``N_contacts`` (its sum), ``N_loops = N_contacts - N_merges`` (the
-      circuit rank: contacts beyond those that hold the agglomerates
-      together), ``coordination_mean = 2 * N_contacts / N_primary``
-      (each contact has two ends). Possible contacts, so upper bounds
-      (``agglomerates.find_agglomerates``).
-    - ``structure``, from the columns of ``structure.structure_properties``
-      (``res.with_structure()``): ``N_cores``, ``N_small_cores``,
-      ``N_links``, ``N_dangling_ends`` and the number fraction of the
-      primary particles in each segment type (``core_fraction`` …
-      ``no_core_fraction``, adding up to 1). Without ``metrics=``, only
-      when the tables have these columns.
-    - ``per_area``, over the summed ``fov_area``: ``coverage`` (summed
-      agglomerate ``area`` / FoV area: the covered surface fraction;
-      agglomerates never overlap, so this is the exact union of all
-      circles) and ``N_primary_per_area``, ``N_aerosol_per_area``,
-      ``N_aggl_per_area``. Circles crossing the image border count in
-      full, so these are biased high for large agglomerates on small
-      images.
-    - ``particle_size``: mean, sample std, D10, D50, D90 (number-based,
-      linear interpolation) and Sauter mean diameter ``ΣD³ / ΣD²`` of
-      the particle ``D``.
-    - ``aerosol_size``: mean, std, D10, D50, D90 of the agglomerate
-      ``D`` over all aerosol particles (single particles included).
-    - ``member_count``: std and 10/50/90 % quantiles of
-      ``member_count`` over all aerosol particles (the mean is
-      ``n_ppP``).
+    Parameters
+    ----------
+    images : DataFrame
+        Images table with ``image`` (unique) and, for ``per_area``,
+        ``fov_area`` in the tables' unit squared; other columns can
+        form groups.
+    particles : DataFrame
+        Particle table with ``image``; ``D`` for ``particle_size``,
+        ``segment_type`` for ``structure``.
+    agglomerates : DataFrame
+        Agglomerate table with ``image`` and ``member_count``; ``D``
+        for ``aerosol_size``, ``area`` for ``per_area``,
+        ``contact_count`` for ``contacts``, the structure counts for
+        ``structure``.
+    by : str or list of str, optional
+        None (all images, one row), ``"image"``, an images-table column
+        or a list of them: one row per existing combination; an empty
+        cell is its own group.
+    metrics : str or list of str, optional
+        Families, in this column order: ``"counts"``, ``"ratios"``,
+        ``"contacts"``, ``"structure"``, ``"per_area"``,
+        ``"particle_size"``, ``"aerosol_size"``, ``"member_count"``.
+        None gives all, ``"structure"`` only when the tables have its
+        columns (`agglpy.core.structure.structure_properties`).
 
-    No particles give zero counts and NaN ratios and sizes; particles
-    without agglomerates give ``n_ppA`` NaN and ``Ra`` 0. Divisions
-    follow numpy (0 / 0 is NaN).
-
-    Args:
-        images: The images table (``agglpy.core._images``).
-        particles: Particle table with ``image``, ``D``.
-        agglomerates: Agglomerate table with ``image``,
-            ``member_count``, ``D``, ``area``, ``contact_count``.
-        by: ``None`` (all images, one row), ``"image"``, an images-table
-            column or a list of them (one row per existing
-            combination; an empty cell is its own group). A ``by``
-            column must not share a name with an output column.
-        metrics: Family names; narrows the table.
-
-    Returns:
-        One row per group: the ``by`` columns, ``n_images`` (blank
+    Returns
+    -------
+    DataFrame
+        One row per group: the `by` columns, ``n_images`` (blank
         images included), then the metrics.
 
-    Raises:
-        TableError: If a table lacks a column or names an unknown image,
-            or the particle and agglomerate tables do not match: in each
-            image, the agglomerates' ``member_count`` must add up to the
-            particle rows (filter both with
-            ``agglomerates.select_agglomerates``), or a ``by`` column
-            has the name of an output column.
-        ParamsError: If a family name is unknown.
+    Raises
+    ------
+    TableError
+        If a table lacks a column or names an unknown image, if the
+        particle and agglomerate tables do not match (in each image the
+        agglomerates' ``member_count`` must add up to the particle
+        rows; filter both with
+        `agglpy.core.agglomerates.select_agglomerates`), or if a `by`
+        column has the name of an output column.
+    ParamsError
+        If a family name is unknown, or `by` is not column names or
+        repeats one.
+
+    See Also
+    --------
+    summary_across_images : The same metrics per image, then their
+        mean over the images.
+
+    Notes
+    -----
+    No particles give zero counts and NaN ratios and sizes; particles
+    without agglomerates give ``n_ppA`` NaN and ``Ra`` 0. Divisions
+    follow numpy (0 / 0 is NaN). See *Results* (``docs/results.md``),
+    section *Metrics*.
     """
     families = _families(metrics, particles, agglomerates)
     check_images(images, fov_area="per_area" in families)
@@ -238,7 +215,7 @@ def summary(
     columns: dict[str, NDArray[np.generic]] = {
         "n_images": np.bincount(groups.codes, minlength=k)
     }
-    # 0 / 0 -> NaN is intended (an image without particles, D-022).
+    # 0 / 0 -> NaN is intended (an image without particles).
     with np.errstate(divide="ignore", invalid="ignore"):
         if "counts" in families:
             columns.update(counts)
@@ -282,19 +259,44 @@ def summary_across_images(
     metrics: str | Iterable[str] | None = None,
     confidence: float = 0.95,
 ) -> pd.DataFrame:
-    """The built-in metrics per image, then mean ± CI over the images.
+    """Compute each metric per image, then its mean ± CI over images.
 
-    ``summary(..., by="image")``, then ``values_across_images`` over
-    the groups of ``by``. Each image weighs equally: this describes the
-    typical image, not the pooled population (``summary``).
+    ``summary(..., by="image")``, then `values_across_images` over the
+    groups of `by`. Each image weighs equally: this describes the
+    typical image, not the pooled population (`summary`).
 
-    Args:
-        images, particles, agglomerates, by, metrics: As ``summary``.
-        confidence: Level of the confidence interval.
+    Parameters
+    ----------
+    images : DataFrame
+        As in `summary`.
+    particles : DataFrame
+        As in `summary`.
+    agglomerates : DataFrame
+        As in `summary`.
+    by : str or list of str, optional
+        As in `summary`.
+    metrics : str or list of str, optional
+        As in `summary`.
+    confidence : float, default 0.95
+        Level of the confidence interval, between 0 and 1.
 
-    Returns:
-        A long table: the ``by`` columns, ``metric``, ``mean``, ``std``,
+    Returns
+    -------
+    DataFrame
+        A long table: the `by` columns, ``metric``, ``mean``, ``std``,
         ``n``, ``ci_low``, ``ci_high``; one row per group and metric.
+
+    Raises
+    ------
+    TableError
+        If a table is invalid, as in `summary`.
+    ParamsError
+        If a family name, `by` or `confidence` is invalid.
+
+    See Also
+    --------
+    summary : The pooled metrics.
+    values_across_images : The same for any per-image values.
     """
     per_image = summary(
         images, particles, agglomerates, by="image", metrics=metrics
@@ -314,47 +316,62 @@ def values_across_images(
     values: str | Iterable[str] | None = None,
     confidence: float = 0.95,
 ) -> pd.DataFrame:
-    """Mean, std, n and confidence interval of per-image values.
+    """Compute mean, std, n and confidence interval of per-image values.
 
-    For each group of images and each value column of ``per_image``:
+    For each group of images and each value column of `per_image`:
     ``mean``, sample ``std``, ``n`` (images with a value) and the
     t-based interval ``mean ± t(q, n - 1) · std / √n`` with
     ``q = (1 + confidence) / 2``. Each image weighs equally ("the
     typical image"); a pooled value of the whole population is
-    ``summary``.
+    `summary`.
 
-    Rules: one row per image (and ``keys``), repeats raise (a particle
-    or agglomerate table must be aggregated per image first); an image
-    of ``images`` missing from ``per_image`` has NaN values, with a
-    warning; NaN values are left out per column, so ``n`` is per
-    column; ``n = 1`` gives NaN ``std`` and interval.
+    Parameters
+    ----------
+    images : DataFrame
+        Images table with ``image`` (unique); the groups come from it.
+    per_image : DataFrame
+        Table with ``image``, the `keys` columns and the value columns;
+        one row per image (and key).
+    by : str or list of str, optional
+        As in `summary`.
+    keys : str or list of str, default ()
+        Columns that tell several values of one image apart (e.g. size
+        class and basis); they are kept in the output.
+    values : str or list of str, optional
+        The value columns; None: every other column of `per_image` not
+        in `images` (columns of the images table describe the image and
+        are not values).
+    confidence : float, default 0.95
+        Level of the interval, between 0 and 1.
 
-    Args:
-        images: The images table; the groups come from it.
-        per_image: ``image``, the ``keys`` columns and the value
-            columns.
-        by: As ``summary``.
-        keys: Columns that tell several values of one image apart
-            (e.g. size class and basis); they are kept in the output.
-        values: The value columns; ``None``: every other column of
-            ``per_image`` not in ``images`` (columns of the images table
-            describe the image and are not values).
-        confidence: Level of the interval, between 0 and 1.
-
-    Returns:
-        A long table: the ``by`` columns, the ``keys``, ``metric`` (the
+    Returns
+    -------
+    DataFrame
+        A long table: the `by` columns, the `keys`, ``metric`` (the
         value column's name), ``mean``, ``std``, ``n``, ``ci_low``,
         ``ci_high``.
 
-    Raises:
-        TableError: If ``per_image`` lacks a column, names an unknown
-            image, repeats an image (and key) or has a value column
-            that is not numeric, or a ``by`` column has the name of an
-            output column.
-        ParamsError: If ``confidence`` is not between 0 and 1.
+    Raises
+    ------
+    TableError
+        If `per_image` lacks a column, names an unknown image, repeats
+        an image (and key) or has a value column that is not numeric,
+        or if a `by` column has the name of an output column.
+    ParamsError
+        If `confidence` is not between 0 and 1, or `by`, `keys` or
+        `values` are not column names.
 
-    Warns:
-        MissingImagesWarning: If images of ``images`` have no row.
+    Warns
+    -----
+    MissingImagesWarning
+        If images of `images` have no row.
+
+    Notes
+    -----
+    Repeats raise: a particle or agglomerate table must be aggregated
+    per image first. An image of `images` missing from `per_image` has
+    NaN values, with the warning. NaN values are left out per column,
+    so ``n`` is per column; ``n = 1`` gives NaN ``std`` and interval.
     """
     level = _number("confidence", confidence)
     if not 0 < level < 1:
@@ -549,7 +566,7 @@ def _size(
 def _describe(
     values: NDArray[np.float64], group: NDArray[np.intp], k: int
 ) -> pd.DataFrame:
-    """Mean, sample std and quantiles per group; NaN for empty groups.
+    """Return mean, sample std and quantiles per group; NaN when empty.
 
     Columns ``mean``, ``std``, ``0.1``, ``0.5``, ``0.9`` (floats); one
     row per group 0 … k-1.

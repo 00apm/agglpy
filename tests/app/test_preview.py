@@ -63,7 +63,10 @@ def test_preview_shows_what_detect_stores(tuning_col: Collection) -> None:
         )
     pd.testing.assert_frame_equal(p.particles, expected)
     assert len(p.particles) == 7
-    with pytest.warns(DuplicateParticlesWarning):
+    with pytest.warns(
+        DuplicateParticlesWarning,
+        match=r"DuplicateParticlesWarning in T1|near-identical circles",
+    ):
         tuning_col.detect(["T1"], progress=False)
         stored = read_particles(work(tuning_col, "T1") / "particles_hct.csv")
     pd.testing.assert_frame_equal(stored, p.particles)
@@ -174,7 +177,10 @@ def test_preview_is_immutable(tuning_col: Collection) -> None:
     table = p.particles
     table["x"] += 1
     assert not p.particles.equals(table)
-    with pytest.raises(AttributeError):
+    with pytest.raises(
+        AttributeError,
+        match="property 'params' of 'Preview' object has no setter",
+    ):
         p.params = tuning_col.params("T2")  # type: ignore[misc]
     held = p._state.prepared
     arrays = [held.raw, held.cut, *(s.image for s in held.stages)]
@@ -188,9 +194,9 @@ def test_image_array(tuning_col: Collection) -> None:
     assert array.shape == (160, 200)  # the whole file, not the region
     np.testing.assert_array_equal(array, read_image(_file(tuning_col, "T1")))
     _file(tuning_col, "T1").unlink()
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(FileNotFoundError, match=r"T1\.tif"):
         tuning_col["T1"].array
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(FileNotFoundError, match=r"T1\.tif"):
         tuning_col["T1"].preview(progress=False)
 
 
@@ -510,7 +516,9 @@ def test_keep_writes_only_this_image(
     tuning_col: Collection, caplog: pytest.LogCaptureFixture
 ) -> None:
     yml = tuning_col.folder / "agglpy.yml"
-    with pytest.warns(DuplicateParticlesWarning):
+    with pytest.warns(
+        DuplicateParticlesWarning, match="DuplicateParticlesWarning in T1"
+    ):
         tuning_col.detect("T1", progress=False)
     before = _yaml.load(yml)
     t2 = tuning_col.params("T2")

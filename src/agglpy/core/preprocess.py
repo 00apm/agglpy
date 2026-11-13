@@ -1,13 +1,11 @@
 """Image preprocessing before detection.
 
-``preprocess`` runs the steps of ``PreprocessParams`` in a fixed order:
-median blur, rolling-ball background subtraction, CLAHE. Noise is
-removed first, since the later steps amplify it; the background is
-subtracted while intensity is still signal plus background; CLAHE
-evens out edge strength last, for the fixed thresholds of the edge
-detector inside HCT. Each step is optional.
+The steps run in a fixed order: median blur, rolling-ball background
+subtraction, CLAHE; each is optional. The input image is never
+modified; a new array is returned.
 
-The input image is never modified; a new array is returned.
+See *Methodology* (``docs/methodology.md``), section *1. Input image
+preprocessing*.
 """
 
 from collections.abc import Callable
@@ -29,18 +27,27 @@ def preprocess(
 ) -> NDArray[np.uint8]:
     """Preprocess a grey image for detection.
 
-    Args:
-        image: A 2-D ``uint8`` grey image, usually the analysed region
-            cut from the raw image (``core.region.region_slices``).
-        params: The steps to run; ``PreprocessParams()`` runs none.
+    Runs median blur, rolling-ball background subtraction and CLAHE, in
+    this order, each when `params` sets it.
 
-    Returns:
+    Parameters
+    ----------
+    image : ndarray
+        A 2-D ``uint8`` grey image, usually the analysed region cut
+        from the raw image (`agglpy.core.region.region_slices`).
+    params : PreprocessParams
+        The steps to run; ``PreprocessParams()`` runs none.
+
+    Returns
+    -------
+    ndarray
         A new array of the same shape and dtype; with no step, an equal
         copy.
 
-    Raises:
-        ImageError: If ``image`` is not a 2-D ``uint8`` array of at
-            least 1 x 1 px.
+    Raises
+    ------
+    ImageError
+        If `image` is not a 2-D ``uint8`` array of at least 1 x 1 px.
     """
     out = check_grey_image(image).copy()
     for _, step in _steps(params):
@@ -49,7 +56,7 @@ def preprocess(
 
 
 def _steps(params: PreprocessParams) -> list[tuple[str, _Step]]:
-    """The steps to run, in order, by name (kept for diagnostics)."""
+    """List the steps to run, in order, by name (for diagnostics)."""
     steps: list[tuple[str, _Step]] = []
     if params.median_blur is not None:
         steps.append(
@@ -81,7 +88,7 @@ def _clahe(image: NDArray[np.uint8], params: ClaheParams) -> NDArray[np.uint8]:
 def _subtract_background(
     image: NDArray[np.uint8], params: RollingBallParams
 ) -> NDArray[np.uint8]:
-    """Rolling-ball background subtraction with ImageJ's semantics.
+    """Subtract the background by rolling ball, with ImageJ's semantics.
 
     The background is estimated on a float copy (presmoothed if asked)
     and subtracted from the unsmoothed image; the result is rounded and

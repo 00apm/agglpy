@@ -63,7 +63,7 @@ def agglomerate_types(
 def type_counts(
     agglomerates: pd.DataFrame, threshold: float, by: str = "image"
 ) -> pd.DataFrame:
-    """Number of agglomerates of each type, one row per value of ``by``."""
+    """Agglomerate count per type, one row per value of ``by``."""
     types = agglomerate_types(agglomerates, threshold)
     counts = pd.crosstab(agglomerates[by], types)
     return counts.reindex(columns=TYPES, fill_value=0)

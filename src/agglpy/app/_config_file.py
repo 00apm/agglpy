@@ -34,8 +34,10 @@ _TOP_KEYS = ("defaults", "images")
 class ConfigFile:
     """The loaded ``agglpy.yml``.
 
-    Attributes:
-        path: The file it was read from.
+    Attributes
+    ----------
+    path : Path
+        The file it was read from.
     """
 
     def __init__(self, path: Path, doc: Any) -> None:
@@ -59,7 +61,7 @@ class ConfigFile:
         return config
 
     def text(self) -> str:
-        """The document as YAML text, comments included.
+        """Return the document as YAML text, comments included.
 
         Raises RuntimeError when the text would not read back as the
         same data: the file is then not written.
@@ -78,11 +80,11 @@ class ConfigFile:
         return text
 
     def images(self) -> list[str]:
-        """The image names that have an entry, in file order."""
+        """Return the image names that have an entry, in file order."""
         return list(self._entries())
 
     def params(self, image: str | None) -> ImageParams:
-        """The params of ``image``; ``None`` gives the defaults.
+        """Return the params of ``image``; None gives the defaults.
 
         An image without an entry gets the defaults. Raises ParamsError
         listing the problems of the defaults and of that entry.
@@ -97,7 +99,7 @@ class ConfigFile:
         return params
 
     def check(self, images: Sequence[str]) -> None:
-        """Check the defaults and every entry against the sheet's images.
+        """Check the defaults and each entry against the sheet's images.
 
         Raises ParamsError listing every problem: defaults first, then
         the images in the order given, then entries naming an image
@@ -143,11 +145,11 @@ class ConfigFile:
         self._prune(image, _leaf_paths(data))
 
     def reset(self, image: str, key: str | None = None) -> None:
-        """Remove ``key`` (dotted, e.g. ``"preprocess.rolling_ball"``)
-        from the entry of ``image``, or the whole entry, in memory.
+        """Remove ``key`` or the whole entry of ``image``, in memory.
 
-        Raises ParamsError when ``key`` is not a params key; a key the
-        entry does not set changes nothing.
+        ``key`` is dotted, e.g. ``"preprocess.rolling_ball"``. Raises
+        ParamsError when ``key`` is not a params key; a key the entry
+        does not set changes nothing.
         """
         images = self._entries()
         if key is not None:
@@ -162,7 +164,7 @@ class ConfigFile:
         self._remove_empty(image, parts[:-1])
 
     def _section(self, name: str) -> Any:
-        """The top-level mapping ``name``, created when missing."""
+        """Return the top-level mapping ``name``, made when missing."""
         if not isinstance(self._doc.get(name), Mapping):
             _yaml.replace(self._doc, name, {})
         return self._doc[name]
@@ -194,7 +196,7 @@ class ConfigFile:
             _yaml.remove(parent, parts[-1])
 
     def _remove_empty(self, image: str, parts: list[str]) -> None:
-        """Remove empty mappings along ``parts``, then an empty entry."""
+        """Remove empty mappings on ``parts``, then an empty entry."""
         for depth in range(len(parts), 0, -1):
             parent = _walk(self._entry(image), parts[: depth - 1])
             value = parent.get(parts[depth - 1]) if parent else None
@@ -217,7 +219,11 @@ class ConfigFile:
     def _problems(
         self, images: Sequence[str]
     ) -> tuple[ImageParams, list[Problem]]:
-        """The defaults' params and the problems of defaults + images."""
+        """Return the defaults' params and the problems found.
+
+        The problems are those of the defaults and of the entries of
+        ``images``.
+        """
         defaults = self._defaults()
         params, own = to_params(merge({}, defaults))
         problems = [_prefixed("defaults", p) for p in own]
@@ -237,7 +243,7 @@ class ConfigFile:
 
 
 def _data(value: Any) -> Any:
-    """The plain data of a loaded document, without comments."""
+    """Return the plain data of a loaded document, without comments."""
     if isinstance(value, Mapping):
         return {k: _data(v) for k, v in value.items()}
     if isinstance(value, list):

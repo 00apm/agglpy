@@ -19,8 +19,9 @@ from support.paths import EXAMPLES_DIR
 
 def _brush() -> pd.DataFrame:
     """Agglomerate 0 of image a: a base, 10 single particles on it
-    (tips of depth 1) and 2 dendrites of 5 (tips of depth 5); agglomerate
-    1: a pair (one tip of depth 1). Every particle has D = 2, volume 1.
+    (tips of depth 1) and 2 dendrites of 5 (tips of depth 5);
+    agglomerate 1: a pair (one tip of depth 1). Every particle has
+    D = 2, volume 1.
     """
     depth = [0] + [1] * 10 + [1, 2, 3, 4, 5] * 2 + [0, 1]
     tip = [False] + [True] * 10 + [False, False, False, False, True] * 2

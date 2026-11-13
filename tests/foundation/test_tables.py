@@ -32,7 +32,7 @@ def _table(**columns: list) -> pd.DataFrame:
 
 
 def test_schema_is_geometry_only() -> None:
-    # No provenance column (D-052): which particle set an image used is
+    # No provenance column: which particle set an image used is
     # recorded by the application, once per image.
     assert PARTICLE_COLUMNS == ("id", "x", "y", "r")
 
@@ -104,8 +104,9 @@ def test_extra_columns_are_kept_after_the_schema() -> None:
 
 
 def test_old_source_column_is_an_ordinary_extra_column() -> None:
-    # A table built before D-052 still validates; its source column is
-    # kept like any other extra column, missing values included.
+    # A table from older agglpy versions still validates; its source
+    # column is kept like any other extra column, missing values
+    # included.
     out = validate_particles(_table(source=["hct", None]))
     assert list(out.columns) == [*PARTICLE_COLUMNS, "source"]
     assert out["source"].tolist() == ["hct", None]
@@ -120,8 +121,10 @@ def test_input_is_not_modified_and_index_is_fresh() -> None:
 
 
 def test_real_duplicate_from_the_golden_image_is_found() -> None:
-    # D7-019 HCT output: same centre, R = 29.4 and R = 30.5 (item 2.1)
-    with pytest.warns(DuplicateParticlesWarning):
+    # D7-019 HCT output: same centre, R = 29.4 and R = 30.5
+    with pytest.warns(
+        DuplicateParticlesWarning, match="1 pairs of near-identical circles"
+    ):
         t = make_particles(
             [43.5, 43.5, 200.0], [109.5, 109.5, 200.0], [29.4, 30.5, 10.0]
         )
@@ -136,7 +139,9 @@ def test_concentric_small_inside_large_is_not_a_duplicate() -> None:
 
 
 def test_tolerances_are_inclusive_and_adjustable() -> None:
-    with pytest.warns(DuplicateParticlesWarning):
+    with pytest.warns(
+        DuplicateParticlesWarning, match="1 pairs of near-identical circles"
+    ):
         t = make_particles([0.0, 2.0], [0.0, 0.0], [10.0, 11.0])
     assert find_duplicates(t) == [(1, 2)]  # 2 px, 10 %
     assert find_duplicates(t, xy_tol=1.0) == []
@@ -170,7 +175,9 @@ def test_make_particles_bad_input_is_a_table_error(
     args: tuple, ids: list | None
 ) -> None:
     # A frontend catching AgglpyError must catch these too.
-    with pytest.raises(ParticleTableError):
+    with pytest.raises(
+        ParticleTableError, match=r"1-D and of equal length|must be numeric"
+    ):
         make_particles(*args, ids=ids)
 
 

@@ -246,7 +246,9 @@ def test_locked_file_raises_and_keeps_original(
         raise PermissionError(13, "in use")
 
     monkeypatch.setattr(_files.os, "replace", locked)
-    with pytest.raises(OutputLockedError) as e:
+    with pytest.raises(
+        OutputLockedError, match=r"close images\.xlsx and run again"
+    ) as e:
         write_sheet(book, H, ROWS[:1])
     assert "close images.xlsx and run again" in str(e.value)
     assert book.read_bytes() == original

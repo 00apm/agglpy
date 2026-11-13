@@ -1,8 +1,7 @@
 """Neutral result format that every adapter returns.
 
-Column names follow the planned particle and agglomerate tables of the
-new core (roadmap 2.1), so the Phase 2 adapter has almost nothing to
-convert.
+Column names follow the particle and agglomerate tables of the new
+core, so the core adapter has almost nothing to convert.
 """
 
 from dataclasses import dataclass
@@ -18,12 +17,13 @@ class Result:
     (``adapters.SUPPORTED_CHECKS``).
 
     Attributes:
-        particles: One row per circle, indexed by the case key. Columns:
-            ``x, y, r`` (px), ``agglomerate_id`` (any label; only equality
-            within one result matters), ``type``, ``enclosed`` (bool).
+        particles: One row per circle, indexed by the case key.
+            Columns: ``x, y, r`` (px), ``agglomerate_id`` (any label;
+            only equality within one result matters), ``type``,
+            ``enclosed`` (bool).
         agglomerates: One row per agglomerate, indexed by
-            ``agglomerate_id``. Columns: ``members`` (frozenset of keys),
-            ``type``, and the properties in px / px³ named as in
+            ``agglomerate_id``. Columns: ``members`` (frozenset of
+            keys), ``type``, and the properties in px / px³ named as in
             ``cases.PROPERTIES`` (``volume``, ``D``, ``member_count``,
             ``D_mean``, ``D_std``, ``enclosed_count`` and the
             ``*_with_hidden`` values).
@@ -60,6 +60,6 @@ class Result:
         )
 
     def agglomerate_properties(self) -> dict[frozenset[str], dict]:
-        """All agglomerate columns except ``members``, keyed by members."""
+        """Agglomerate columns except ``members``, keyed by members."""
         table = self.agglomerates.set_index("members")
         return {members: row.to_dict() for members, row in table.iterrows()}

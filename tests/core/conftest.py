@@ -1,4 +1,4 @@
-"""Fixtures for the core tests: every test runs once per implementation."""
+"""Core test fixtures: every test runs once per implementation."""
 
 import pytest
 

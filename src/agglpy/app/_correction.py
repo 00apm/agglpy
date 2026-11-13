@@ -52,7 +52,7 @@ _CHANGED = {
 
 
 def count_kept(detected: pd.DataFrame, corrected: pd.DataFrame) -> int:
-    """How many detected circles have a matching corrected circle.
+    """Count the detected circles that have a matching corrected one.
 
     Matching as for duplicates: centres at most ``_DUPLICATE_XY_TOL``
     px apart, radii within ``_DUPLICATE_R_REL_TOL`` of the larger one.
@@ -76,7 +76,10 @@ def count_kept(detected: pd.DataFrame, corrected: pd.DataFrame) -> int:
 
 
 def based_on_detection(started: StartedFrom | None) -> bool:
-    """Whether a correction kept enough of the detection it started from."""
+    """Return whether a correction kept enough of its detection.
+
+    The detection is the one it started from.
+    """
     return (
         started is not None
         and started.detection_count > 0
@@ -92,19 +95,23 @@ def run_import(
     Returns the one-row report and the warnings caught, for the caller
     to re-emit at the user's line.
 
-    Raises:
-        FileNotFoundError: If ``path`` doesn't exist.
-        FileFormatError: If ``path`` is not a particle file.
-        OutputExistsError: If the existing correction was changed by a
-            person and ``force`` is False; nothing is written.
+    Raises
+    ------
+    FileNotFoundError
+        If ``path`` doesn't exist.
+    FileFormatError
+        If ``path`` is not a particle file.
+    OutputExistsError
+        If the existing correction was changed by a person and
+        ``force`` is False; nothing is written.
     """
     name = entry.image
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         resolved = particle_format(path) if format == "auto" else format
         table = read_particles(path, format=format)
-        # absolute and with "/": the notebook's working folder and the OS
-        # mean nothing to whoever reads the record later
+        # absolute and with "/": the notebook's working folder and the
+        # OS mean nothing to whoever reads the record later
         source = SourceInfo(path.resolve().as_posix(), resolved, sha256(path))
         read_end = len(caught)
         work = image_folder(folder, name)
@@ -176,7 +183,7 @@ def run_import(
 
 
 def _started_from(work: Path, corrected: pd.DataFrame) -> StartedFrom | None:
-    """The detection present now, if its CSV reads."""
+    """Return the detection present now, if its CSV reads."""
     hct = inspect(work / HCT_CSV, work / HCT_RECORD, DetectionRecord)
     if hct is None or hct.particles is None:
         return None

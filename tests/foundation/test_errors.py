@@ -45,8 +45,9 @@ from agglpy.errors import (
 def test_errors_share_one_base_and_are_value_errors(
     error: type[Exception],
 ) -> None:
-    # One base lets a frontend catch everything agglpy raises on purpose;
-    # ValueError keeps `except ValueError` in user code working.
+    # One base lets a frontend catch everything agglpy raises on
+    # purpose; ValueError keeps `except ValueError` in user code
+    # working.
     assert issubclass(error, AgglpyError)
     assert issubclass(error, ValueError)
 

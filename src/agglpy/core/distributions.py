@@ -1,13 +1,9 @@
 """Size classes and distributions of any numeric column.
 
-``size_classes`` builds the class edges; ``distribution`` counts the
-values of one column per class and group of images (particle size,
-agglomerate size, member count or any other column), in number and
-optionally weighted by other columns; ``distribution_across_images``
-gives the mean ± confidence interval of each class's fraction over the
-images of a group.
+Unit-agnostic, like `agglpy.core.metrics`: edges and values must share
+one unit.
 
-Unit-agnostic, like ``metrics``: edges and values must share one unit.
+See *Results* (``docs/results.md``), section *Size distributions*.
 """
 
 import math
@@ -47,27 +43,42 @@ def size_classes(
     step: float | None = None,
     scale: str = "linear",
 ) -> NDArray[np.float64]:
-    """Edges of size classes from ``start`` to ``end``, both included.
+    """Return the edges of size classes from `start` to `end`.
 
-    Give exactly one of ``count`` (number of classes) or ``step``:
+    Both ends are edges. Any increasing array of edges works in
+    `distribution` too; this is a helper for the usual ones.
 
-    - ``scale="linear"``: ``step`` is the class width. It must divide
-      ``end - start``: ``size_classes(0, 10, step=2.5)`` gives
-      ``[0, 2.5, 5, 7.5, 10]``; ``step=3`` raises.
-    - ``scale="log"``: ``step`` is the **factor** between consecutive
-      edges, ``start`` must be > 0. ``size_classes(0.1, 0.8, step=2)``
-      gives ``[0.1, 0.2, 0.4, 0.8]``; ten classes per decade is
-      ``step=10**0.1``.
+    Parameters
+    ----------
+    start : float
+        The first edge; > 0 for ``scale="log"``.
+    end : float
+        The last edge; > `start`.
+    count : int, optional
+        The number of classes; give exactly one of `count` and `step`.
+    step : float, optional
+        ``"linear"``: the class width, which must divide
+        ``end - start``; ``"log"``: the **factor** between consecutive
+        edges, > 1.
+    scale : {"linear", "log"}, default "linear"
+        The spacing of the edges.
 
-    Any increasing array of edges works in ``distribution`` too; this
-    is a helper for the usual ones.
-
-    Returns:
+    Returns
+    -------
+    ndarray
         The edges, float64; ``count + 1`` of them.
 
-    Raises:
-        ParamsError: If an argument is invalid or ``step`` does not
-            divide the range.
+    Raises
+    ------
+    ParamsError
+        If an argument is invalid or `step` does not divide the range.
+
+    Notes
+    -----
+    ``size_classes(0, 10, step=2.5)`` gives ``[0, 2.5, 5, 7.5, 10]``;
+    ``step=3`` raises. ``size_classes(0.1, 0.8, step=2, scale="log")``
+    gives ``[0.1, 0.2, 0.4, 0.8]``; ten classes per decade is
+    ``step=10**0.1``.
     """
     low = _number("start", start)
     high = _number("end", end)
@@ -104,36 +115,39 @@ def distribution(
     closed: str = "right",
     weights: str | Iterable[str] = (),
 ) -> pd.DataFrame:
-    """Distribution of ``column`` over size classes, per group of images.
+    """Compute the distribution of `column` over size classes per group.
 
     One function for the particle size distribution (particle ``D``),
     the agglomerate size distribution (agglomerate ``D``), the member
-    count distribution (``member_count``) and any numeric column.
+    count distribution (``member_count``) and any numeric column; in
+    number and optionally weighted by other columns.
 
-    - Classes are ``(a, b]`` (``closed="right"``) or ``[a, b)``
-      (``"left"``); the outer edge is always included, so a value equal
-      to the first (or last) edge is counted.
-    - A value within 1e-9 (relative) of an edge counts as on the edge.
-    - Values outside the classes and NaN values are not counted; a
-      warning says how many per group. Fractions refer to the counted
-      values.
-    - Every class appears in every group, zeros included; a group
-      without values has zero amounts and NaN fractions.
+    Parameters
+    ----------
+    images : DataFrame
+        Images table with ``image`` (unique); the groups come from it.
+    table : DataFrame
+        A table with ``image``, `column` and the `weights` columns
+        (particle or agglomerate table).
+    column : str
+        The column to classify.
+    edges : array_like
+        Increasing class edges (e.g. `size_classes`), in the unit of
+        `column`.
+    by : str or list of str, optional
+        As in `agglpy.core.metrics.summary`.
+    closed : {"right", "left"}, default "right"
+        Classes ``(a, b]`` (``"right"``) or ``[a, b)`` (``"left"``);
+        the outer edge is always included.
+    weights : str or list of str, default ()
+        Column names to weight by, e.g. ``"volume"``; each adds one
+        ``basis``. Its values must be finite wherever the value is
+        counted.
 
-    Args:
-        images: The images table; the groups come from it.
-        table: A table with ``image``, ``column`` and the ``weights``
-            columns (particle or agglomerate table).
-        column: The column to classify.
-        edges: Increasing class edges (e.g. ``size_classes``).
-        by: As ``metrics.summary``.
-        closed: ``"right"`` or ``"left"``.
-        weights: Column names to weight by, e.g. ``"volume"``; each
-            adds one ``basis``. Its values must be finite wherever the
-            value is counted.
-
-    Returns:
-        A long table: the ``by`` columns, ``left, mid, right, width``,
+    Returns
+    -------
+    DataFrame
+        A long table: the `by` columns, ``left, mid, right, width``,
         ``basis`` (``"number"``, then each weight column), ``amount``
         (count, or the sum of the weight column, per class),
         ``fraction`` (sums to 1 over the classes), ``cumulative`` (ends
@@ -141,15 +155,37 @@ def distribution(
         fraction / (log10 right - log10 left)`` (dN/dlogD; NaN where
         ``left <= 0``).
 
-    Raises:
-        TableError: If a column is missing or not numeric, a weight is
-            not finite on a counted value, an image is unknown, or a
-            ``by`` column has the name of an output column.
-        ParamsError: If ``edges`` or ``closed`` is invalid, or a weight
-            column is called ``"number"`` (the name of the count basis).
+    Raises
+    ------
+    TableError
+        If a column is missing or not numeric, a weight is not finite
+        on a counted value, an image is unknown, or a `by` column has
+        the name of an output column.
+    ParamsError
+        If `edges` or `closed` is invalid, or a weight column is called
+        ``"number"`` (the name of the count basis).
 
-    Warns:
-        ValuesNotCountedWarning: If values were left out.
+    Warns
+    -----
+    ValuesNotCountedWarning
+        If values were left out.
+
+    See Also
+    --------
+    distribution_across_images : Mean ± CI of the fractions over
+        images.
+
+    Notes
+    -----
+    - A value equal to the first (or last) edge is counted; a value
+      within 1e-9 (relative) of an edge counts as on the edge.
+    - Values outside the classes and NaN values are not counted; the
+      warning says how many per group. Fractions refer to the counted
+      values.
+    - Every class appears in every group, zeros included; a group
+      without values has zero amounts and NaN fractions.
+
+    See *Results* (``docs/results.md``), section *Size distributions*.
     """
     check_images(images)
     groups = group_images(images, by)
@@ -233,21 +269,51 @@ def distribution_across_images(
     weights: str | Iterable[str] = (),
     confidence: float = 0.95,
 ) -> pd.DataFrame:
-    """The fraction of each class per image, then mean ± CI over images.
+    """Return the mean ± CI over images of each class's fraction.
 
-    ``distribution(..., by="image")``, then ``values_across_images``
-    with the class and basis as keys. An image without counted values
-    has NaN fractions: it is left out of the means and of ``n``.
+    ``distribution(..., by="image")``, then
+    `agglpy.core.metrics.values_across_images` with the class and basis
+    as keys. An image without counted values has NaN fractions: it is
+    left out of the means and of ``n``.
 
-    Args:
-        images, table, column, edges, by, closed, weights: As
-            ``distribution``.
-        confidence: Level of the confidence interval.
+    Parameters
+    ----------
+    images : DataFrame
+        As in `distribution`.
+    table : DataFrame
+        As in `distribution`.
+    column : str
+        As in `distribution`.
+    edges : array_like
+        As in `distribution`.
+    by : str or list of str, optional
+        As in `distribution`.
+    closed : {"right", "left"}, default "right"
+        As in `distribution`.
+    weights : str or list of str, default ()
+        As in `distribution`.
+    confidence : float, default 0.95
+        Level of the confidence interval, between 0 and 1.
 
-    Returns:
-        A long table: the ``by`` columns, ``left, mid, right, width``,
+    Returns
+    -------
+    DataFrame
+        A long table: the `by` columns, ``left, mid, right, width``,
         ``basis``, ``metric`` (``"fraction"``), ``mean``, ``std``,
         ``n``, ``ci_low``, ``ci_high``.
+
+    Raises
+    ------
+    TableError
+        If a table is invalid, as in `distribution`.
+    ParamsError
+        If an argument is invalid, as in `distribution`, or
+        `confidence` is not between 0 and 1.
+
+    Warns
+    -----
+    ValuesNotCountedWarning
+        If values were left out.
     """
     per_image = distribution(
         images, table, column, edges, "image", closed=closed, weights=weights
@@ -303,7 +369,7 @@ def _edges(edges: ArrayLike) -> NDArray[np.float64]:
 def _classify(
     values: NDArray[np.float64], edges: NDArray[np.float64], closed: str
 ) -> NDArray[np.intp]:
-    """Class index of each value; -1 if outside the classes or NaN."""
+    """Return each value's class index; -1 if outside or NaN."""
     m = len(edges) - 1
     # Move a value lying within the tolerance of an edge onto it.
     upper = np.clip(np.searchsorted(edges, values), 1, m)

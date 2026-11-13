@@ -1,7 +1,7 @@
 """agglpy.io.read_particles and write_particles.
 
 Replaces the CSV importer tests of tests/legacy/test_particle_csv.py
-for the new API (that file stays until roadmap 2.9).
+for the new API (that file goes with the legacy code).
 """
 
 import os
@@ -51,7 +51,7 @@ def _no_unexpected_warnings():
 
 
 def write_csv(path: Path, lines: list[str], bom: bool = False) -> Path:
-    """Write lines as a UTF-8 file, optionally with a byte order mark."""
+    """Write lines as a UTF-8 file, optionally with a BOM."""
     path.write_text(
         "\n".join(lines) + "\n", encoding="utf-8-sig" if bom else "utf-8"
     )
@@ -105,7 +105,7 @@ def test_particle_format_unknown_header(tmp_path: Path) -> None:
 
 
 def test_particle_format_missing_file(tmp_path: Path) -> None:
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(FileNotFoundError, match=r"missing\.csv"):
         particle_format(tmp_path / "missing.csv")
 
 
@@ -159,7 +159,7 @@ def test_unknown_header_names_the_public_formats(tmp_path: Path) -> None:
 
 def test_recognition_is_case_sensitive(tmp_path: Path) -> None:
     path = write_csv(tmp_path / "p.csv", ["Id,X,Y,r", "1,10,10,5"])
-    with pytest.raises(FileFormatError):
+    with pytest.raises(FileFormatError, match="not a particle file"):
         read_particles(path)
 
 
@@ -228,7 +228,7 @@ def test_v00_ids_are_row_numbers(tmp_path: Path) -> None:
 
 def test_imagej_shift_matches_hct_centre(tmp_path: Path) -> None:
     # HCT x = 2700.5 and the ImageJ oval X = 2674, Width = 54 are the
-    # same centre (D-051)
+    # same centre (ImageJ puts pixel centres at i + 0.5)
     path = _imagej(tmp_path / "p.csv", ["1,0,a,Oval,none,2674,1978,54,54"])
     assert tuple(read_particles(path).iloc[0, 1:]) == (2700.5, 2004.5, 27.0)
 
@@ -246,11 +246,14 @@ def test_near_circles_are_read_as_circles_and_warned(tmp_path: Path) -> None:
             "1,0,a,Oval,none,0,0,60,60",
             "2,1,b,Oval,none,100,0,30,31",  # |W - H| = 1: a circle
             "3,2,c,Oval,none,200,0,31,30",
-            # float32 noise of ImageJ's subpixel bounds: a circle, unlisted
+            # ImageJ's float32 subpixel noise: a circle, not listed
             "4,3,d,Oval,none,300,0,182.4000,182.3999",
         ],
     )
-    with pytest.warns(NonCircularParticlesWarning) as record:
+    with pytest.warns(
+        NonCircularParticlesWarning,
+        match="near-circular ovals read as circles",
+    ) as record:
         table = read_particles(path)
     assert len(record) == 1  # one warning per file
     message = str(record[0].message)
@@ -274,7 +277,9 @@ def test_non_circular_rois_are_dropped_and_warned(tmp_path: Path) -> None:
             "5,4,e,Oval,none,400,0,30,31",  # near-circle
         ],
     )
-    with pytest.warns(NonCircularParticlesWarning) as record:
+    with pytest.warns(
+        NonCircularParticlesWarning, match="non-circular ROIs dropped"
+    ) as record:
         table = read_particles(path)
     assert len(record) == 1
     message = str(record[0].message)
@@ -348,7 +353,7 @@ def test_non_utf8_file_is_a_file_format_error(tmp_path: Path) -> None:
 
 
 def test_missing_file_raises_file_not_found(tmp_path: Path) -> None:
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(FileNotFoundError, match=r"missing\.csv"):
         read_particles(tmp_path / "missing.csv")
 
 
@@ -373,7 +378,9 @@ def test_imagej_row_without_a_size_is_dropped_and_named(
 
 def test_shape_warning_points_at_the_caller(tmp_path: Path) -> None:
     path = _imagej(tmp_path / "p.csv", ["1,0,a,Rectangle,none,0,0,6,6"])
-    with pytest.warns(NonCircularParticlesWarning) as record:
+    with pytest.warns(
+        NonCircularParticlesWarning, match="non-circular ROIs dropped"
+    ) as record:
         read_particles(path)
     assert os.path.normcase(record[0].filename) == os.path.normcase(__file__)
 
@@ -426,7 +433,7 @@ def test_existing_file_is_never_overwritten_by_default(
     tmp_path: Path,
 ) -> None:
     path = write_csv(tmp_path / "p.csv", ["keep me"])
-    with pytest.raises(FileExistsError):
+    with pytest.raises(FileExistsError, match=r"p\.csv"):
         write_particles(make_particles([1.0], [1.0], [1.0]), path)
     assert path.read_text() == "keep me\n"
     write_particles(make_particles([1.0], [1.0], [1.0]), path, overwrite=True)
@@ -435,13 +442,13 @@ def test_existing_file_is_never_overwritten_by_default(
 
 def test_bad_table_writes_nothing(tmp_path: Path) -> None:
     bad = pd.DataFrame({"id": [1], "x": [1.0], "y": [1.0], "r": [-1.0]})
-    with pytest.raises(ParticleTableError):
+    with pytest.raises(ParticleTableError, match="column 'r' must be > 0"):
         write_particles(bad, tmp_path / "p.csv")
     assert not (tmp_path / "p.csv").exists()
 
 
 def test_missing_folder_raises_file_not_found(tmp_path: Path) -> None:
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(FileNotFoundError, match=r"p\.csv"):
         write_particles(
             make_particles([1.0], [1.0], [1.0]), tmp_path / "no" / "p.csv"
         )
@@ -449,7 +456,7 @@ def test_missing_folder_raises_file_not_found(tmp_path: Path) -> None:
 
 def test_writing_does_not_warn_about_duplicates(tmp_path: Path) -> None:
     # the duplicate warning belongs to creating or reading a table
-    with pytest.warns(Warning):
+    with pytest.warns(Warning, match="near-identical circles"):
         table = make_particles([10.0, 10.5], [10.0, 10.0], [5.0, 5.0])
     write_particles(table, tmp_path / "p.csv")  # fixture: no warning
 
@@ -463,7 +470,9 @@ def test_duplicate_warning_names_the_file_and_points_at_the_caller(
     )
     with pytest.warns(DuplicateParticlesWarning, match=r"p\.csv: 1 pairs"):
         read_particles(path)
-    with pytest.warns(DuplicateParticlesWarning) as record:
+    with pytest.warns(
+        DuplicateParticlesWarning, match=r"p\.csv: 1 pairs"
+    ) as record:
         read_particles(path)
     assert os.path.normcase(record[0].filename) == os.path.normcase(__file__)
 

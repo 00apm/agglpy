@@ -1,8 +1,8 @@
 """Particle and agglomerate properties (``agglpy.core.properties``).
 
-The 1.4 synthetic cases (``support.synthetic.cases.PROPERTIES``, values
+The synthetic cases (``support.synthetic.cases.PROPERTIES``, values
 worked out by hand) run once per implementation; the unit tests below
-run the core directly, on cases worked out in the 2.4 plan.
+run the core directly, on hand-worked cases.
 """
 
 import math
@@ -249,7 +249,7 @@ def test_agglomerate_properties_adds_contact_and_loop_counts():
 
 
 def _bare(**columns) -> pd.DataFrame:
-    """Two agglomerates (A + B touching, C alone), columns overridable."""
+    """Agglomerates A + B (touching) and C, with overridable columns."""
     table = {
         "id": [1, 2, 3],
         "x": [0.0, 14.0, 100.0],
@@ -547,7 +547,7 @@ def test_dimensions_cover_exactly_the_property_columns():
 
 
 def test_dimensions_are_read_only():
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="does not support item assignment"):
         DIMENSIONS["D"] = 2  # type: ignore[index]
 
 

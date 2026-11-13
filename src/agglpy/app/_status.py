@@ -1,6 +1,7 @@
 """``Collection.status``: where each image's particles come from.
 
 Read-only: every value is worked out from the files as they are now.
+See *Collection* (``docs/collection.md``), section *Status*.
 """
 
 import unicodedata
@@ -77,24 +78,36 @@ class ImageFacts:
     Read once by ``image_facts``, so ``status()`` and ``analyze()`` see
     the same facts.
 
-    Attributes:
-        entry: The sheet row.
-        path: The image file, resolved.
-        file: ``ok``, ``missing`` or ``unreadable``.
-        meta: The image metadata; None unless ``file`` is ``ok``.
-        meta_warnings: The metadata reader's warnings (e.g.
-            ``PixelSizeWarning``), caught.
-        hct: The detection's particle file; None without its CSV.
-        corrected: The correction's particle file; None without its
-            CSV.
-        pixel_size: In m as read (the sheet's nm · 1e-9, the image
-            metadata, or a record's copy of it), or None.
-        pixel_size_source: ``images.xlsx`` / ``images.csv``, ``image
-            file`` or ``none``.
-        size: ``(width, height)`` in px from the image or a record;
-            None when neither gives it.
-        detection: The ``status()`` label of the detection.
-        correction: The ``status()`` label of the correction.
+    Attributes
+    ----------
+    entry : Entry
+        The sheet row.
+    path : Path
+        The image file, resolved.
+    file : {"ok", "missing", "unreadable"}
+        ``ok``, ``missing`` or ``unreadable``.
+    meta : ImageMetadata or None
+        The image metadata; None unless ``file`` is ``ok``.
+    meta_warnings : tuple of WarningMessage
+        The metadata reader's warnings (e.g. ``PixelSizeWarning``),
+        caught.
+    hct : ParticleFile or None
+        The detection's particle file; None without its CSV.
+    corrected : ParticleFile or None
+        The correction's particle file; None without its CSV.
+    pixel_size : float or None
+        In m as read (the sheet's nm · 1e-9, the image metadata, or
+        a record's copy of it), or None.
+    pixel_size_source : str
+        ``images.xlsx`` / ``images.csv``, ``image file`` or
+        ``none``.
+    size : tuple or None
+        ``(width, height)`` in px from the image or a record;
+        None when neither gives it.
+    detection : str
+        The ``status()`` label of the detection.
+    correction : str
+        The ``status()`` label of the correction.
     """
 
     entry: Entry
@@ -124,13 +137,17 @@ class ImageFacts:
 
 
 def table(folder: Path, sheet: Sheet, config: ConfigFile) -> pd.DataFrame:
-    """One row per sheet image, in sheet order.
+    """Return the status table: one row per sheet image, in sheet order.
 
-    Warns:
-        UserWarning: For each particle CSV that does not read.
-        UnreadableRecordWarning: For each record that does not read.
-        LeftoverFoldersWarning: Once, if ``agglpy/`` holds folders of
-            images the sheet does not list.
+    Warns
+    -----
+    UserWarning
+        For each particle CSV that does not read.
+    UnreadableRecordWarning
+        For each record that does not read.
+    LeftoverFoldersWarning
+        Once, if ``agglpy/`` holds folders of images the sheet does
+        not list.
     """
     rows = [
         _row(image_facts(folder, sheet, entry, config.params(entry.image)))
@@ -146,9 +163,12 @@ def image_facts(
 ) -> ImageFacts:
     """Read the facts of one image from its files.
 
-    Warns:
-        UserWarning: If a particle CSV does not read.
-        UnreadableRecordWarning: For each record that does not read.
+    Warns
+    -----
+    UserWarning
+        If a particle CSV does not read.
+    UnreadableRecordWarning
+        For each record that does not read.
     """
     path = resolve_stored(entry.file, folder)
     meta: ImageMetadata | None = None
@@ -191,7 +211,7 @@ def image_facts(
 def pixel_size(
     folder: Path, sheet: Sheet, entry: Entry
 ) -> tuple[float | None, str]:
-    """The pixel size in m and its source, reading no more than needed.
+    """Return the pixel size in m and its source, reading the least.
 
     The precedence of ``image_facts``; nothing is hashed and the
     readers' warnings are dropped.
@@ -211,7 +231,7 @@ def pixel_size(
 def _records(
     folder: Path, name: str
 ) -> Iterator[DetectionRecord | CorrectionRecord]:
-    """The records next to their CSVs, correction first, read lazily."""
+    """Yield the records next to their CSVs, correction first."""
     work = image_folder(folder, name)
     files: tuple[tuple[str, str, type[Any]], ...] = (
         (CORRECTED_CSV, CORRECTED_RECORD, CorrectionRecord),
@@ -282,7 +302,11 @@ def _pixel_size(
     meta: ImageMetadata | None,
     records: Iterable[DetectionRecord | CorrectionRecord],
 ) -> tuple[float | None, str]:
-    """Sheet > image metadata > a record's copy of it > none, in m."""
+    """Return the pixel size in m and its source.
+
+    The sheet comes first, then the image metadata, then a record's
+    copy of it, then none.
+    """
     if entry.pixel_size_nm is not None:
         return entry.pixel_size_nm * 1e-9, sheet.path.name
     if meta is not None:
@@ -377,7 +401,11 @@ def _owned(folder: Path, path: Path, by_fold: dict[str, list[str]]) -> bool:
 
 
 def _hint(path: Path, by_file: dict[str, str]) -> str:
-    """Point at the sheet row whose image file the folder's record names."""
+    """Return a hint naming the sheet row of the folder's image file.
+
+    The image file is the one the folder's record names; ``""`` when
+    no sheet row has it.
+    """
     records: list[CorrectionRecord | DetectionRecord | None] = []
     # a record whose CSV is gone is ignored, as everywhere else
     if (path / CORRECTED_CSV).is_file():

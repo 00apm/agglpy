@@ -83,7 +83,8 @@ STATS: dict[str, StatsFunctions] = {
     "core": StatsFunctions(core_size_classes, core_distribution),
 }
 
-# Realistic SEM pixel size in metres. Runs at 1.0 keep coordinates in px.
+# Realistic SEM pixel size in metres. Runs at 1.0 keep coordinates in
+# px.
 REAL_PIXEL_SIZE = 2.5e-9
 
 
@@ -126,7 +127,7 @@ KNOWN_FAILURES: dict[tuple[str, str, str, float], KnownFailure] = {
         "a value equal to the first edge is dropped; the core counts "
         "the outer edge (2.5)"
     ),
-    # the constructor rejects an empty particle table (D-022)
+    # the constructor rejects an empty particle table
     ("legacy", "summary", "no_particles", 1.0): KnownFailure(
         "an image without particles raises instead of giving an empty "
         "summary (2.5)",
@@ -151,7 +152,7 @@ def expect_known_failure(
     case: Case,
     pixel_size: float = 1.0,
 ) -> None:
-    """Mark the running test as a strict xfail if it is a known failure."""
+    """Mark the running test a strict xfail if it is a known failure."""
     known = KNOWN_FAILURES.get((adapter, check, case.name, pixel_size))
     if known is not None:
         request.applymarker(

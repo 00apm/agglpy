@@ -44,7 +44,7 @@ def plot_distribution(
     by: str | None = None,
     basis: str = "number",
 ) -> Axes:
-    """Bars per size class on a log axis, the cumulative curve on top."""
+    """Bars per size class on a log axis, cumulative curve on top."""
     rows = table[table["basis"] == basis]
     groups = [(None, rows)] if by is None else rows.groupby(by, sort=False)
     cumulative = ax.twinx()

@@ -59,7 +59,9 @@ def test_record_without_csv_or_unreadable_is_none(
     particles_col.detect(progress=False)
     folder = work(particles_col, "D7-017")
     (folder / "particles_hct_record.yml").write_text("format: 2\n")
-    with pytest.warns(UserWarning):
+    with pytest.warns(
+        UserWarning, match=r"particles_hct_record\.yml in D7-017/ unreadable"
+    ):
         assert particles_col["D7-017"].detection is None
     folder = work(particles_col, "D7-018")
     (folder / "particles_hct.csv").unlink()
@@ -91,12 +93,14 @@ def test_detection_params_none_for_unreadable_record(
     particles_col.detect(progress=False)
     folder = work(particles_col, "D7-017")
     (folder / "particles_hct_record.yml").write_text("format: 2\n")
-    with pytest.warns(UserWarning):
+    with pytest.warns(
+        UserWarning, match=r"particles_hct_record\.yml in D7-017/ unreadable"
+    ):
         assert particles_col["D7-017"].detection_params is None
 
 
 def test_unknown_name_is_key_error(particles_col: Collection) -> None:
-    with pytest.raises(KeyError):
+    with pytest.raises(KeyError, match="'X'"):
         particles_col["X"]
 
 
@@ -125,7 +129,7 @@ def test_pixel_size_in_metres(tmp_path: Path) -> None:
     assert col["C"].pixel_size is None
     # the image gone: the copy in the particle record
     col.set_params(None, hct=HCT)
-    with pytest.warns(NoParticlesWarning):
+    with pytest.warns(NoParticlesWarning, match="NoParticlesWarning in B"):
         col.detect(["B"], progress=False)
     zeiss.unlink()
     assert col["B"].pixel_size == pytest.approx(from_tag)

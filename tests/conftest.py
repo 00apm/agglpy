@@ -1,4 +1,4 @@
-"""Shared pytest fixtures, discovered automatically by pytest (no import needed)."""
+"""Shared pytest fixtures, found by pytest without an import."""
 
 import pathlib
 
@@ -13,9 +13,10 @@ def tests_dir():
 
 @pytest.fixture
 def input_multi_raw_wdir():
-    """Flat dir with 3 .tif images and a settings.yml, no images/ subdirs yet.
+    """Flat dir with 3 .tif images and a settings.yml, no subdirs yet.
 
-    Not a valid Manager working dir until init_mgr_dirstruct() is run on it.
+    Not a valid Manager working dir until init_mgr_dirstruct() is run
+    on it.
     """
     return (
         pathlib.Path(__file__).parent / "data" / "input" / "multiple_image_raw"
@@ -24,7 +25,7 @@ def input_multi_raw_wdir():
 
 @pytest.fixture
 def input_single_wdir():
-    """Single D5 image with ImageJ RoiSet and fitting CSV (legacy layout)."""
+    """A D5 image with ImageJ RoiSet and fitting CSV (legacy layout)."""
     return pathlib.Path(__file__).parent / "data" / "input" / "single_image"
 
 
@@ -32,17 +33,19 @@ def input_single_wdir():
 def input_multi_wdir():
     """Valid Manager working dir: images/<name>/ subdirs, settings.yml.
 
-    D7-021 and D7-023 are in exclude_images, so only D7-017 and D7-019 are
-    analysed. Uses rolling_ball: null, like the real D5 series settings.
+    D7-021 and D7-023 are in exclude_images, so only D7-017 and D7-019
+    are analysed. Uses rolling_ball: null, like the real D5 series
+    settings.
     """
     return pathlib.Path(__file__).parent / "data" / "input" / "multiple_image"
 
 
 @pytest.fixture
 def expected_valid_config():
-    """Raw settings dict that passes validate_settings (sentinels like "auto" kept).
+    """Raw settings dict that passes validate_settings.
 
-    Matches data/input/valid_config_only/settings.yml as read from YAML, with
+    Sentinels like "auto" are kept. Matches
+    data/input/valid_config_only/settings.yml as read from YAML, with
     the anchor/merge keys already expanded into each image entry.
     """
     config = {
@@ -130,7 +133,7 @@ def expected_valid_config():
 
 @pytest.fixture
 def expected_valid_config_processed(expected_valid_config):
-    """expected_valid_config after handle_defaults: "auto" resolved to None.
+    """expected_valid_config after handle_defaults: "auto" is None.
 
     This is the state returned by load_manager_settings().
     """

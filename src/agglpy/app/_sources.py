@@ -38,10 +38,13 @@ PathLike = str | os.PathLike[str]
 class Found:
     """One image file and the text the filename rule sees.
 
-    Attributes:
-        path: The file, absolute.
-        key: The path relative to the folder given, ``/``-separated,
-            NFC; the file name for a file given directly.
+    Attributes
+    ----------
+    path : Path
+        The file, absolute.
+    key : str
+        The path relative to the folder given, ``/``-separated,
+        NFC; the file name for a file given directly.
     """
 
     path: Path
@@ -64,8 +67,10 @@ def find_images(
     files below any ``skip`` folder inside it; searching a ``skip``
     folder itself lists its files.
 
-    Raises:
-        FileNotFoundError: If a path does not exist.
+    Raises
+    ------
+    FileNotFoundError
+        If a path does not exist.
     """
     paths = [images] if isinstance(images, str | os.PathLike) else images
     globs = [pattern] if isinstance(pattern, str) else pattern
@@ -143,14 +148,18 @@ def apply_rule(
     the key. The group ``image`` sets the image name (else the file
     stem); the other groups are sheet columns.
 
-    Returns:
+    Returns
+    -------
+    tuple
         ``(names, columns, values)``: one name per file, the rule's
         columns in pattern order, and per file the columns' values
         (``{}`` when the key does not match).
 
-    Raises:
-        ParamsError: If ``rule`` is not a valid regular expression or
-            a group is named like a reserved column.
+    Raises
+    ------
+    ParamsError
+        If ``rule`` is not a valid regular expression or a group is
+        named like a reserved column.
     """
     names = [unicodedata.normalize("NFC", f.path.stem) for f in found]
     if rule is None:

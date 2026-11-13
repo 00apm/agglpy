@@ -11,7 +11,10 @@ REPORT_COLUMNS = ("image", "outcome", "particle_count", "message", "warnings")
 
 
 def report(rows: Sequence[Mapping[str, object]]) -> pd.DataFrame:
-    """One row per image; ``particle_count`` empty unless written."""
+    """Return the report table: one row per image.
+
+    ``particle_count`` is empty unless a particle file was written.
+    """
     table = pd.DataFrame(list(rows), columns=list(REPORT_COLUMNS))
     return table.astype(
         {
@@ -25,12 +28,15 @@ def report(rows: Sequence[Mapping[str, object]]) -> pd.DataFrame:
 
 
 def warning_text(w: warnings.WarningMessage) -> str:
-    """A caught warning as stored in a record: ``"<Class>: <message>"``."""
+    """Return a caught warning as stored in a record.
+
+    The text is ``"<Class>: <message>"``.
+    """
     return f"{w.category.__name__}: {w.message}"
 
 
 def class_names(texts: Iterable[str]) -> str:
-    """The classes of record warning texts, once each, in order."""
+    """Return the classes of record warning texts, once each."""
     names = dict.fromkeys(text.split(":", 1)[0] for text in texts)
     return ", ".join(names)
 

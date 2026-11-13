@@ -26,14 +26,14 @@ class Graph(NamedTuple):
 
 
 def graph(n: int, a: NDArray[np.intp], b: NDArray[np.intp]) -> Graph:
-    """The graph of ``n`` nodes and the pairs ``a[k]`` - ``b[k]``."""
+    """Build the graph of `n` nodes and pairs ``a[k]`` - ``b[k]``."""
     a = np.asarray(a, dtype=np.intp)
     b = np.asarray(b, dtype=np.intp)
     return Graph(n, a, b, _symmetric(n, a, b, np.ones(len(a))))
 
 
 def tight(g: Graph) -> NDArray[np.bool_]:
-    """Per pair: whether its two ends share a neighbour (a triangle)."""
+    """Mark the pairs whose two ends share a neighbour (a triangle)."""
     if len(g.a) == 0:
         return np.zeros(0, dtype=bool)
     # (A @ A)[i, j] counts the common neighbours of i and j.
@@ -42,7 +42,7 @@ def tight(g: Graph) -> NDArray[np.bool_]:
 
 
 def bridges(g: Graph) -> NDArray[np.bool_]:
-    """Per pair: whether removing it splits its component.
+    """Mark the pairs whose removal splits their component.
 
     One depth-first pass with low links (Tarjan), iterative, so a long
     thread does not hit Python's recursion limit.
@@ -94,7 +94,7 @@ def bridges(g: Graph) -> NDArray[np.bool_]:
 def components(
     n: int, a: NDArray[np.intp], b: NDArray[np.intp]
 ) -> NDArray[np.intp]:
-    """Component label of each node, for the pairs ``a[k]`` - ``b[k]``."""
+    """Label each node's component for the pairs ``a[k]`` - ``b[k]``."""
     if n == 0:
         return np.zeros(0, dtype=np.intp)
     matrix = coo_matrix((np.ones(len(a), dtype=np.int8), (a, b)), shape=(n, n))
@@ -105,7 +105,7 @@ def components(
 def distances(
     matrix: csr_matrix, sources: NDArray[np.intp], *, unweighted: bool
 ) -> NDArray[np.float64]:
-    """Per node: its distance from the nearest of ``sources``.
+    """Return each node's distance from the nearest of `sources`.
 
     With one source per component, every node gets the distance from
     its own component's source, so one search serves all components.
@@ -126,7 +126,7 @@ def distances(
 
 
 def weighted(g: Graph, r: NDArray[np.float64]) -> csr_matrix:
-    """The matrix of ``g`` with weight ``r_a + r_b`` on each pair.
+    """Return the matrix of `g` with weight ``r_a + r_b`` on each pair.
 
     A path's weight is then the sum of ``2 r`` over its nodes, minus
     the radii of its two ends.
@@ -147,7 +147,7 @@ def diameters(
     *,
     r: NDArray[np.float64] | None,
 ) -> NDArray[np.float64]:
-    """Per group: the largest distance between two of its members.
+    """Return each group's largest distance between two of its members.
 
     ``codes[i]`` is node ``i``'s group, ``0 … k-1``; each group must be
     connected. With ``r=None`` distances are hops (a lone node: 0);
@@ -194,7 +194,7 @@ def diameters(
 def _bounded_diameter(
     matrix: csr_matrix, r: NDArray[np.float64], unweighted: bool
 ) -> float:
-    """Exact diameter of one connected group, by eccentricity bounds.
+    """Compute one connected group's exact diameter, by eccentricities.
 
     BoundingDiameters (Takes and Kosters, 2011). The distance is
     ``dist(u, v) + r_u + r_v`` for ``u != v`` (``r = 0`` for hops),
@@ -236,7 +236,7 @@ _TIE = 1e-12
 
 
 def equal(x: NDArray[np.float64] | float, y: float) -> NDArray[np.bool_]:
-    """Whether ``x`` equals ``y`` up to ``_TIE`` (relative)."""
+    """Return whether `x` equals `y` up to ``_TIE`` (relative)."""
     return np.asarray(np.abs(x - y) <= _TIE * abs(y))
 
 
@@ -248,9 +248,9 @@ def path(
     *,
     unweighted: bool,
 ) -> list[int]:
-    """A shortest path from ``start`` to ``end``, as row positions.
+    """Return a shortest path from `start` to `end`, as row positions.
 
-    Each step goes to the neighbour with the lowest ``ids`` value among
+    Each step goes to the neighbour with the lowest `ids` value among
     those that stay on a shortest path.
     """
     far = np.asarray(

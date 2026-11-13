@@ -1,4 +1,4 @@
-"""draw.color_scale: one colour scale over the values of several images."""
+"""draw.color_scale: one colour scale over the values of many images."""
 
 import matplotlib
 import pandas as pd
@@ -12,7 +12,7 @@ TAB10 = matplotlib.colormaps["tab10"]
 
 
 def drawn(column: str, values: list, scale: dict) -> draw.Drawing:
-    """Two separate particles carrying ``values``, drawn with ``scale``."""
+    """Two separate particles with ``values``, drawn with ``scale``."""
     p = pd.DataFrame(
         {"x": [30.0, 70.0], "y": [40.0, 40.0], "r": [10.0, 10.0]}
     ).assign(**{column: values})
@@ -43,14 +43,36 @@ def test_numbers_and_labels_keep_the_scale_of_all_images():
 
 
 @pytest.mark.parametrize(
-    "values, options, error",
+    "values, options, error, match",
     [
-        ([1.0, 2.0], {"colors": {1.0: "red"}}, ParamsError),
-        (["a", "b"], {"cmap": "viridis"}, ParamsError),
-        ([1.0, 2.0], {"norm": LogNorm(), "vmin": 1.0}, ParamsError),
-        ([f"l{i}" for i in range(11)], {}, TableError),
+        (
+            [1.0, 2.0],
+            {"colors": {1.0: "red"}},
+            ParamsError,
+            "colors= is for label columns",
+        ),
+        (
+            ["a", "b"],
+            {"cmap": "viridis"},
+            ParamsError,
+            "are for numeric columns",
+        ),
+        (
+            [1.0, 2.0],
+            {"norm": LogNorm(), "vmin": 1.0},
+            ParamsError,
+            "pass either norm= or vmin=",
+        ),
+        (
+            [f"l{i}" for i in range(11)],
+            {},
+            TableError,
+            "more than the 10 default colours",
+        ),
     ],
 )
-def test_options_are_checked_as_by_the_draw_functions(values, options, error):
-    with pytest.raises(error):
+def test_options_are_checked_as_by_the_draw_functions(
+    values, options, error, match
+):
+    with pytest.raises(error, match=match):
         draw.color_scale(pd.Series(values, name="v"), **options)

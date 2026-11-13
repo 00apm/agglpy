@@ -1,4 +1,4 @@
-"""Image sources: files from folders, stored paths, the filename rule."""
+"""Image sources: files from folders, stored paths, filename rule."""
 
 import os
 import unicodedata
@@ -123,7 +123,9 @@ def test_rule_nfc(tmp_path: Path) -> None:
 
 
 def test_unmatched_paths_warn_once() -> None:
-    with pytest.warns(UnmatchedPathsWarning) as record:
+    with pytest.warns(
+        UnmatchedPathsWarning, match="did not match columns_from_path"
+    ) as record:
         names, _, values = apply_rule(
             found("D7-017.tif", "a.tif", "b.tif"), r"(?P<series>D\d+)"
         )

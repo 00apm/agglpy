@@ -401,7 +401,7 @@ def agglomerate_table(particles):
 
 
 def wheel(centre, ring):
-    """Edges of a centre joined to every ring particle, the ring cyclic."""
+    """Edges of a centre joined to each ring particle, ring closed."""
     ring = list(ring)
     spokes = [(centre, i) for i in ring]
     rim = [(ring[k], ring[(k + 1) % len(ring)]) for k in range(len(ring))]

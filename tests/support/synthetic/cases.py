@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True)
 class Circle:
-    """One primary particle, identified by a key that is unique per case."""
+    """One primary particle, with a key unique within its case."""
 
     key: str
     x: float
@@ -28,7 +28,7 @@ class Case:
     Attributes:
         name: Short id, used as the pytest id.
         circles: The particles of the case.
-        groups: Expected agglomerates, as a partition of the circle keys.
+        groups: Expected agglomerates, a partition of the circle keys.
         enclosed: Keys of the particles expected to be enclosed (lying
             completely inside another particle; old name ``idj``).
         threshold: ``collector_threshold`` for classification.
@@ -81,7 +81,7 @@ def make_case(
     summary: Mapping[str, float] | None = None,
     note: str = "",
 ) -> Case:
-    """Build a Case from plain tuples ``(key, x, y, r)`` and key groups."""
+    """A Case from plain tuples ``(key, x, y, r)`` and key groups."""
     circle_objs = tuple(Circle(*c) for c in circles)
     group_sets = frozenset(frozenset(g) for g in groups)
     keys = [c.key for c in circle_objs]
@@ -118,7 +118,7 @@ SINGLE = make_case(
 
 
 def _external_doublets(r1: float, r2: float, label: str) -> list[Case]:
-    """Two circles side by side on the x axis, around the contact distance.
+    """Two circles side by side along x, around the contact distance.
 
     The contact condition is ``dist <= r1 + r2``.
     """
@@ -201,8 +201,8 @@ DOUBLETS: list[Case] = [
 STRUCTURES: list[Case] = [
     make_case(
         "triangle_tangent_plus_isolated",
-        # right triangle with sides 30-40-50; radii 10, 20, 30 make every
-        # pair exactly tangent: 10+20=30, 10+30=40, 20+30=50
+        # right triangle with sides 30-40-50; radii 10, 20, 30 make
+        # every pair exactly tangent: 10+20=30, 10+30=40, 20+30=50
         [
             ("a", 0, 0, 10),
             ("b", 30, 0, 20),
@@ -261,7 +261,8 @@ STRUCTURES: list[Case] = [
         "ring_square_plus_centre",
         # 8 particles on the outline of a 40 x 40 square, neighbours 20
         # apart (tangent); next-but-one neighbours are >= 28.3 apart.
-        # The centre particle is 20 from the nearest ring centre, needs 15.
+        # The centre particle is 20 from the nearest ring centre, needs
+        # 15.
         [
             ("r1", 0, 0, 10),
             ("r2", 20, 0, 10),
@@ -314,7 +315,7 @@ STRUCTURES: list[Case] = [
 
 
 def long_chain(n: int) -> Case:
-    """``n`` equal particles in a straight line, each touching the next."""
+    """``n`` equal particles in a line, each touching the next."""
     keys = [f"p{i:05d}" for i in range(n)]
     return make_case(
         f"chain_{n}",
@@ -349,10 +350,10 @@ def _pair(
 COLL = ("collector", "attached2coll")
 SIM = ("similar", "similar")
 
-# The rule: an agglomerate is a collector when D(2nd largest) / D(largest)
-# <= threshold. Then the largest particle is the collector and all
-# others are attached2coll; otherwise all are similar. A single particle
-# is separate.
+# The rule: an agglomerate is a collector when
+# D(2nd largest) / D(largest) <= threshold. Then the largest particle is
+# the collector and all others are attached2coll; otherwise all are
+# similar. A single particle is separate.
 CLASSIFICATION: list[Case] = [
     make_case(
         "single_is_separate",
@@ -444,8 +445,8 @@ def volume_equivalent_d(volume: float) -> float:
 # Agglomerate properties, by definition:
 #   volume             sum of the member sphere volumes
 #   D                  diameter of one sphere with that volume
-#   D_mean / D_std     mean / sample std (n - 1) of the member diameters;
-#                      std is NaN for a single member
+#   D_mean / D_std     mean / sample std (n - 1) of the member
+#                      diameters; std is NaN for a single member
 #   enclosed_count     members lying completely inside another member
 #   *_with_hidden      a member seen completely inside another one's
 #                      outline is assumed to have a twin hidden on the
@@ -582,7 +583,7 @@ SUMMARY: list[Case] = [
     make_case(
         "composed_scene",
         [
-            # similar triangle (radii 10/20/30, all tangent): 40/60 > 0.5
+            # similar triangle (radii 10/20/30, tangent): 40/60 > 0.5
             ("t1", 0, 0, 10),
             ("t2", 30, 0, 20),
             ("t3", 0, 40, 30),

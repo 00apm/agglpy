@@ -1,34 +1,11 @@
 """The particle table: a plain DataFrame with a checked schema.
 
-One row per detected circle, in px:
-
-========  =======  ==================================================
-column    dtype    meaning
-========  =======  ==================================================
-id        int64    particle id, unique within one image
-x, y      float64  centre (px), finite
-r         float64  radius (px), finite and > 0
-========  =======  ==================================================
-
-**Coordinates** (D-051): pixel centres lie at integers, so pixel ``i``
-covers ``[i - 0.5, i + 0.5)`` and an image ``width x height`` covers
-``[-0.5, width - 0.5] x [-0.5, height - 0.5]``, as in OpenCV, NumPy
-indexing, scikit-image and matplotlib ``imshow``. The origin is the
-raw image's origin, whatever region detection used (D-048). ImageJ
-counts from pixel edges (the centre of pixel ``i`` at ``i + 0.5``);
-``agglpy.io`` converts when it reads ImageJ files. A circle reaching
-past an edge, or with its centre outside the image, is valid data
-(a partly visible particle): the schema has no bounds check; the
-pipeline drops circles lying entirely outside the analysed region
-(``agglpy.core.region.outside_region``).
-
-The table carries geometry only. Which particle set an image was
-analysed from is recorded per image by the application, and which
-circles a manual correction kept, edited or added is inferred by
-matching geometry (D-036, D-052): ImageJ renumbers circles.
-
-Analysis adds columns later (agglomerate id, enclosed flag).
-An empty table is valid: zero particles is a result (D-022).
+One row per circle: ``id`` (int64, unique within one image), centre
+``x``, ``y`` and radius ``r`` (float64, finite, ``r > 0``), in px of
+the raw image with pixel centres at integers. Analysis adds columns;
+an empty table is valid. See *Results* (``docs/results.md``), section
+*Particle table*, and *Collection* (``docs/collection.md``), section
+*Coordinates*.
 """
 
 import warnings
@@ -44,6 +21,7 @@ from agglpy.errors import (
 )
 
 PARTICLE_COLUMNS: tuple[str, ...] = ("id", "x", "y", "r")
+"""The schema columns of the particle table, in order."""
 _FLOAT_COLUMNS = ("x", "y", "r")
 _MAX_LISTED_DUPLICATES = 10
 
@@ -57,17 +35,26 @@ def make_particles(
 ) -> pd.DataFrame:
     """Build a validated particle table from coordinate arrays.
 
-    Args:
-        x: Centre x coordinates in px.
-        y: Centre y coordinates in px.
-        r: Radii in px.
-        ids: Particle ids; ``1..n`` if omitted.
+    Parameters
+    ----------
+    x : array_like
+        Centre x coordinates in px, 1-D.
+    y : array_like
+        Centre y coordinates in px, as long as `x`.
+    r : array_like
+        Radii in px, > 0, as long as `x`.
+    ids : array_like, optional
+        Particle ids, unique integers; ``1..n`` if omitted.
 
-    Returns:
-        A new particle table (see the module docstring).
+    Returns
+    -------
+    DataFrame
+        A new particle table: ``id, x, y, r``.
 
-    Raises:
-        ParticleTableError: If the values break the schema.
+    Raises
+    ------
+    ParticleTableError
+        If the values break the schema.
     """
     try:
         columns = {
@@ -104,18 +91,29 @@ def validate_particles(
     extra columns in their original order, and a fresh ``RangeIndex``.
     The input is not modified.
 
-    Args:
-        table: A table with at least the columns in ``PARTICLE_COLUMNS``.
-        warn_duplicates: Warn about near-identical circles
-            (see ``find_duplicates``).
+    Parameters
+    ----------
+    table : DataFrame
+        A table with at least the columns in `PARTICLE_COLUMNS`.
+    warn_duplicates : bool, default True
+        Warn about near-identical circles (see `find_duplicates`).
 
-    Returns:
+    Returns
+    -------
+    DataFrame
         The validated copy.
 
-    Raises:
-        ParticleTableError: If a column is missing, not numeric where
-            it must be, not finite, ``r <= 0``, or ids not integral or
-            not unique.
+    Raises
+    ------
+    ParticleTableError
+        If a column is missing, not numeric where it must be, not
+        finite, ``r <= 0``, or ids not integral or not unique.
+
+    Warns
+    -----
+    DuplicateParticlesWarning
+        If `warn_duplicates` is True and near-identical circles are
+        found.
     """
     missing = [c for c in PARTICLE_COLUMNS if c not in table.columns]
     if missing:
@@ -150,7 +148,7 @@ def validate_particles(
 
 
 def _duplicates_message(pairs: list[tuple[int, int]]) -> str:
-    """Text of the duplicate warning; io prefixes it with the file."""
+    """Return the duplicate warning's text; io prefixes the file."""
     listed = pairs[:_MAX_LISTED_DUPLICATES]
     more = len(pairs) - len(listed)
     suffix = f" and {more} more" if more else ""
@@ -174,20 +172,30 @@ def find_duplicates(
 ) -> list[tuple[int, int]]:
     """Find pairs of near-identical circles.
 
-    Two circles are duplicates when their centres are at most
-    ``xy_tol`` px apart and their radii differ by at most
-    ``r_rel_tol`` times the larger radius. A small circle inside a
-    large one is not a duplicate. The result is an indicator: it
-    depends on the tolerances, whose defaults are first guesses until
-    they are calibrated on corrected images.
+    Two circles are duplicates when their centres are at most `xy_tol`
+    px apart and their radii differ by at most `r_rel_tol` times the
+    larger radius. A small circle inside a large one is not a
+    duplicate.
 
-    Args:
-        table: A particle table (columns ``id, x, y, r``).
-        xy_tol: Largest centre distance in px (inclusive).
-        r_rel_tol: Largest relative radius difference (inclusive).
+    Parameters
+    ----------
+    table : DataFrame
+        A particle table (columns ``id, x, y, r``, px).
+    xy_tol : float, default 2.0
+        Largest centre distance in px (inclusive).
+    r_rel_tol : float, default 0.1
+        Largest relative radius difference (inclusive).
 
-    Returns:
+    Returns
+    -------
+    list of tuple of int
         Pairs of ids ``(smaller id, larger id)``, sorted.
+
+    Notes
+    -----
+    The result is an indicator: it depends on the tolerances, whose
+    defaults are first guesses until they are calibrated on corrected
+    images.
     """
     if len(table) < 2:
         return []

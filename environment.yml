@@ -63,5 +63,6 @@ dependencies:
   # lint: same version as CI (.github/workflows/ci.yml); bump both together
   - ruff=0.16.7
   - import-linter=2.15
+  - numpydoc=1.11.0
   # dist
   - tox<5

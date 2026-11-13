@@ -28,7 +28,7 @@ defaults:
 
 jobs:
   lint:
-    name: lint (ruff, import-linter)
+    name: lint (ruff, numpydoc, import-linter)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -37,9 +37,14 @@ jobs:
         with:
           python-version: "3.11"
       # pinned to the versions used locally; bump them deliberately
-      - run: python -m pip install "ruff==0.16.7" "import-linter==2.15"
+      - run: >-
+          python -m pip install "ruff==0.16.7" "import-linter==2.15"
+          "numpydoc==1.11.0"
       - run: ruff check src tests examples
       - run: ruff format --check src tests examples
+      # the docstrings of the public API (docs/contributing/docstrings.md);
+      # the legacy package is excluded in pyproject.toml
+      - run: numpydoc lint $(git ls-files 'src/agglpy/*.py')
       # import-linter reads the package from the source tree; no
       # dependencies needed
       - run: python -m pip install -e . --no-deps

@@ -34,10 +34,22 @@ R = TypeVar("R", DetectionRecord, CorrectionRecord)
 
 
 class Image:
-    """One image of a collection, made by ``col[name]``.
+    """One image of a collection.
 
     Holds only the collection and the name: every attribute reads the
     files again, so the handle always shows what is on disk.
+
+    Parameters
+    ----------
+    collection : Collection
+        The collection the image belongs to.
+    name : str
+        The image name, as in the sheet.
+
+    Notes
+    -----
+    Get one with ``col[name]``, which checks that the sheet has the
+    name; the constructor does not.
     """
 
     def __init__(self, collection: "Collection", name: str) -> None:
@@ -51,18 +63,15 @@ class Image:
 
     @property
     def params(self) -> ImageParams:
-        """The image's params (``col.params(name)``)."""
+        """The image's params, as `Collection.params` gives them."""
         return self._collection.params(self._name)
 
     @property
     def array(self) -> NDArray[np.uint8]:
-        """The image file as ``io.read_image`` returns it: whole, uncut.
+        """The image file as `agglpy.io.read_image` returns it, uncut.
 
-        Read on each access.
-
-        Raises:
-            FileNotFoundError: If the image file is missing.
-            FileFormatError: If OpenCV can't decode it.
+        Read on each access; raises ``FileNotFoundError`` if the image
+        file is missing and `FileFormatError` if OpenCV can't decode it.
         """
         return read_image(self._path())
 
@@ -77,22 +86,31 @@ class Image:
         warning: what ``detect()`` would warn is in ``p.warnings``.
         Works for every image of the sheet, excluded ones too.
 
-        Args:
-            params: The params to use, e.g. another image's
-                (``col["other"].params``) or another preview's
-                (``p.params``); None for this image's params in
-                ``agglpy.yml``. Change them with the preview's change
-                methods.
-            progress: Show a progress bar of the steps.
+        Parameters
+        ----------
+        params : ImageParams, optional
+            The params to use, e.g. another image's
+            (``col["other"].params``) or another preview's
+            (``p.params``); None for this image's params in
+            ``agglpy.yml``. Change them with the preview's change
+            methods.
+        progress : bool, default True
+            Show a progress bar of the steps.
 
-        Returns:
+        Returns
+        -------
+        Preview
             The preview.
 
-        Raises:
-            ParamsError: If ``params`` is not an ``ImageParams`` or
-                ``agglpy.yml`` has problems.
-            FileNotFoundError: If the image file is missing.
-            FileFormatError: If OpenCV can't decode it.
+        Raises
+        ------
+        ParamsError
+            If `params` is not an `ImageParams` or
+            ``agglpy.yml`` has problems.
+        FileNotFoundError
+            If the image file is missing.
+        FileFormatError
+            If OpenCV can't decode it.
         """
         return make(self._collection, self._name, params, progress)
 
@@ -120,8 +138,7 @@ class Image:
     def particles(self) -> pd.DataFrame:
         """The particle table (px) of the set in use.
 
-        Raises:
-            NoParticleSetError: If the image has no particles yet.
+        Raises `NoParticleSetError` if the image has no particles yet.
         """
         used = self.particle_set
         if used is None:
@@ -158,8 +175,11 @@ class Image:
 
     @property
     def correction(self) -> dict[str, Any] | None:
-        """The record of ``particles_corrected.csv`` as plain data, or
-        None."""
+        """The record of ``particles_corrected.csv``, or None.
+
+        As plain data; None when there is no correction or its record
+        does not read.
+        """
         return self._record(CORRECTED_CSV, CORRECTED_RECORD, CorrectionRecord)
 
     def __repr__(self) -> str:
@@ -173,7 +193,7 @@ class Image:
         raise KeyError(self._name)
 
     def _path(self) -> Path:
-        """The image file of the sheet entry, resolved."""
+        """Return the image file of the sheet entry, resolved."""
         return resolve_stored(self._entry().file, self._collection.folder)
 
     @property
@@ -197,7 +217,7 @@ class Image:
 
 
 def _plain(value: Any) -> Any:
-    """YAML data as built-in dicts, lists, str, int, float, bool."""
+    """Return YAML data as built-in dicts, lists and scalars."""
     if isinstance(value, dict):
         return {str(k): _plain(v) for k, v in value.items()}
     if isinstance(value, list):

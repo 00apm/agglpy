@@ -1,8 +1,8 @@
 """Tiny synthetic TIFFs carrying only the tag entries a reader uses.
 
-The values are copied from real files (item 2.2 Findings); a whole
+The values are copied from real files; a whole
 vendor tag is never copied, because real tags carry private paths,
-user names and serial numbers (D-023).
+user names and serial numbers.
 """
 
 from pathlib import Path
