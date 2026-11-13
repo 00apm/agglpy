@@ -18,6 +18,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Literal
 
+import numpy as np
 import pandas as pd
 from matplotlib.colors import Colormap, Normalize
 from matplotlib.figure import Figure
@@ -34,6 +35,11 @@ from agglpy.core import metrics as _metrics
 from agglpy.core.agglomerates import select_agglomerates
 from agglpy.core.properties import DIMENSIONS
 from agglpy.core.region import Bounds, region_bounds
+from agglpy.core.structure import (
+    AGGLOMERATE_COLUMNS,
+    PARTICLE_COLUMNS,
+    structure_properties,
+)
 from agglpy.errors import (
     ImageError,
     OutputExistsError,
@@ -61,6 +67,7 @@ class Origin:
             ``note``.
         steps: The subset steps taken, in order.
         names: Every image of the sheet.
+        structure: The settings of ``Results.with_structure``, or None.
     """
 
     analyzed: str
@@ -71,6 +78,7 @@ class Origin:
     excluded: tuple[Mapping[str, str], ...]
     steps: tuple[Mapping[str, object], ...]
     names: tuple[str, ...]
+    structure: Mapping[str, object] | None = None
 
 
 _TABLES = ("particles", "agglomerates")
@@ -113,6 +121,10 @@ class Results:
       ``res.agglomerates.groupby("image").touches_edge.mean()``;
     - leaving them out:
       ``res.subset(agglomerates=~res.agglomerates.touches_edge)``.
+
+    ``with_structure()`` returns new results with the structure of each
+    agglomerate: segments (cores, links, loops, dangling ends),
+    branches and the longest chain (``docs/agglomerate-structure.md``).
 
     Attributes:
         images: One row per analysed image: agglpy's columns, the
@@ -163,6 +175,7 @@ class Results:
 
         As ``agglpy.core.metrics.summary`` on these tables.
         """
+        metrics = self._check_structure(metrics)
         return self._core(
             _metrics.summary,
             self.images,
@@ -184,6 +197,7 @@ class Results:
         As ``agglpy.core.metrics.summary_across_images`` on these
         tables.
         """
+        metrics = self._check_structure(metrics)
         return self._core(
             _metrics.summary_across_images,
             self.images,
@@ -358,6 +372,56 @@ class Results:
             origin,
         )
 
+    def with_structure(self, *, min_core_members: int = 7) -> "Results":
+        """New results with the structure columns added, image by image.
+
+        Particles get ``PARTICLE_COLUMNS``, agglomerates
+        ``AGGLOMERATE_COLUMNS`` of ``agglpy.core.structure`` (lengths in
+        m), replacing any from an earlier call; ``self`` stays as it is.
+        ``subset`` keeps whole agglomerates, so the columns stay valid
+        after it; ``segment_id`` then keeps its numbers, while
+        ``subset`` first numbers them from 0. Draw the segments with
+        ``draw(what="particles", color_by="segment_type")``.
+
+        Args:
+            min_core_members: Particles a group of triangles needs to
+                be a core; an integer of 3 or more.
+
+        Raises:
+            ParamsError: If ``min_core_members`` is not an integer >= 3.
+        """
+        particles: list[pd.DataFrame] = []
+        aggls: list[pd.DataFrame] = []
+        p_rows = self.particles.groupby("image").indices
+        a_rows = self.agglomerates.groupby("image").indices
+        c_rows = self.contacts.groupby("image").indices
+        none = np.empty(0, dtype=np.intp)
+        for name in self.images.image:
+            p, a = structure_properties(
+                self.particles.iloc[p_rows.get(name, none)],
+                self.agglomerates.iloc[a_rows.get(name, none)],
+                self.contacts.iloc[c_rows.get(name, none)].drop(
+                    columns="image"
+                ),
+                min_core_members=min_core_members,
+            )
+            particles.append(p)
+            aggls.append(a)
+        origin = dataclasses.replace(
+            self._origin,
+            structure={
+                "min_core_members": int(min_core_members),
+                "base": "largest member, ties: lower id",
+            },
+        )
+        return Results(
+            self.images.copy(),
+            _in_order(particles, self.particles),
+            _in_order(aggls, self.agglomerates),
+            self.contacts.copy(),
+            origin,
+        )
+
     def export(
         self,
         folder: PathLike | None = None,
@@ -426,6 +490,8 @@ class Results:
             "excluded": list(origin.excluded),
             "subset": list(origin.steps),
         }
+        if origin.structure is not None:
+            record["structure"] = dict(origin.structure)
         units = {
             "images": {
                 c: u for c, u in _IMAGES_UNITS.items() if c in self.images
@@ -655,6 +721,24 @@ class Results:
                 )
             raise ParamsError(f"no image {name!r} in the collection")
         return self.images.image.isin(names)
+
+    def _check_structure(
+        self, metrics: str | Iterable[str] | None
+    ) -> list[str] | None:
+        """The family names, read once; refuse the family structure on
+        results without its columns."""
+        if metrics is None:
+            return None
+        chosen = [metrics] if isinstance(metrics, str) else list(metrics)
+        present = set(PARTICLE_COLUMNS) <= set(self.particles.columns) and set(
+            AGGLOMERATE_COLUMNS
+        ) <= set(self.agglomerates.columns)
+        if "structure" in chosen and not present:
+            raise TableError(
+                "metrics 'structure' needs the structure columns: call "
+                "res.with_structure() first"
+            )
+        return chosen
 
     def _table(self, name: str) -> pd.DataFrame:
         if name not in _TABLES:
@@ -898,6 +982,14 @@ def _check_size(sheet: _Sheet, width: int, height: int) -> None:
             f"{sheet.path.name} is now {width} x {height} px, analysed at "
             f"{sheet.width} x {sheet.height} px: run analyze() again"
         )
+
+
+def _in_order(parts: list[pd.DataFrame], of: pd.DataFrame) -> pd.DataFrame:
+    """``parts`` (row subsets of ``of``) joined in the rows' order."""
+    joined = pd.concat(parts)
+    # The index of each part is the rows' index in ``of``.
+    position = of.index.get_indexer(joined.index)
+    return joined.iloc[np.argsort(position, kind="stable")]
 
 
 def _kept(table: pd.DataFrame, of: pd.DataFrame) -> dict[str, int]:

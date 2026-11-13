@@ -33,6 +33,7 @@ from agglpy.core._images import (
     require,
     with_labels,
 )
+from agglpy.core.structure import SEGMENT_TYPES
 from agglpy.errors import MissingImagesWarning, ParamsError, TableError
 from agglpy.params import _number
 
@@ -55,6 +56,13 @@ _FAMILIES: MappingProxyType[str, tuple[str, ...]] = MappingProxyType(
             "n_ppP",
         ),
         "contacts": ("N_contacts", "N_loops", "coordination_mean"),
+        "structure": (
+            "N_cores",
+            "N_small_cores",
+            "N_links",
+            "N_dangling_ends",
+            *(f"{s.replace(' ', '_')}_fraction" for s in SEGMENT_TYPES),
+        ),
         "per_area": (
             "coverage",
             "N_primary_per_area",
@@ -85,6 +93,17 @@ _FAMILIES: MappingProxyType[str, tuple[str, ...]] = MappingProxyType(
     }
 )
 
+
+# The columns of structure.structure_properties the family reads.
+_STRUCTURE_COLUMNS = {
+    "particles": ["segment_type"],
+    "agglomerates": [
+        "core_count",
+        "small_core_member_count",
+        "link_count",
+        "dangling_end_count",
+    ],
+}
 
 _QUANTILES = [0.1, 0.5, 0.9]
 _MAX_LISTED = 10
@@ -128,6 +147,12 @@ def summary(
       together), ``coordination_mean = 2 * N_contacts / N_primary``
       (each contact has two ends). Possible contacts, so upper bounds
       (``agglomerates.find_agglomerates``).
+    - ``structure``, from the columns of ``structure.structure_properties``
+      (``res.with_structure()``): ``N_cores``, ``N_small_cores``,
+      ``N_links``, ``N_dangling_ends`` and the number fraction of the
+      primary particles in each segment type (``core_fraction`` …
+      ``no_core_fraction``, adding up to 1). Without ``metrics=``, only
+      when the tables have these columns.
     - ``per_area``, over the summed ``fov_area``: ``coverage`` (summed
       agglomerate ``area`` / FoV area: the covered surface fraction;
       agglomerates never overlap, so this is the exact union of all
@@ -172,7 +197,7 @@ def summary(
             has the name of an output column.
         ParamsError: If a family name is unknown.
     """
-    families = _families(metrics)
+    families = _families(metrics, particles, agglomerates)
     check_images(images, fov_area="per_area" in families)
     groups = group_images(images, by)
     require(particles, ["image"], "particles")
@@ -185,6 +210,11 @@ def summary(
         require(agglomerates, ["area"], "agglomerates")
     if "contacts" in families:
         require(agglomerates, ["contact_count"], "agglomerates")
+    if "structure" in families:
+        require(particles, _STRUCTURE_COLUMNS["particles"], "particles")
+        require(
+            agglomerates, _STRUCTURE_COLUMNS["agglomerates"], "agglomerates"
+        )
     p_image = image_positions(images, particles, "particles")
     a_image = image_positions(images, agglomerates, "agglomerates")
     members = numbers(agglomerates, "member_count", "agglomerates")
@@ -216,6 +246,10 @@ def summary(
             columns.update(_ratios(counts))
         if "contacts" in families:
             columns.update(_contacts(agglomerates, a_group, k, counts))
+        if "structure" in families:
+            columns.update(
+                _structure(particles, agglomerates, p_group, a_group, k)
+            )
         if "per_area" in families:
             columns.update(
                 _per_area(images, groups, agglomerates, a_group, counts)
@@ -380,9 +414,22 @@ def values_across_images(
     return with_labels(labels, out)
 
 
-def _families(metrics: str | Iterable[str] | None) -> list[str]:
+def _families(
+    metrics: str | Iterable[str] | None,
+    particles: pd.DataFrame,
+    agglomerates: pd.DataFrame,
+) -> list[str]:
     if metrics is None:
-        return list(_FAMILIES)
+        # structure is opt-in: plain tables keep their summary.
+        present = all(
+            c in table.columns
+            for table, name in (
+                (particles, "particles"),
+                (agglomerates, "agglomerates"),
+            )
+            for c in _STRUCTURE_COLUMNS[name]
+        )
+        return [f for f in _FAMILIES if f != "structure" or present]
     chosen = names(metrics, "metrics")
     unknown = [f for f in chosen if f not in _FAMILIES]
     if unknown:
@@ -425,6 +472,38 @@ def _contacts(
         "N_loops": n_contacts - counts["N_merges"],
         "coordination_mean": 2 * n_contacts / counts["N_primary"],
     }
+
+
+def _structure(
+    particles: pd.DataFrame,
+    agglomerates: pd.DataFrame,
+    p_group: NDArray[np.intp],
+    a_group: NDArray[np.intp],
+    k: int,
+) -> dict[str, NDArray[np.generic]]:
+    def total(column: str) -> NDArray[np.int64]:
+        values = numbers(agglomerates, column, "agglomerates")
+        return np.bincount(a_group, weights=values, minlength=k).astype(
+            np.int64
+        )
+
+    small = numbers(agglomerates, "small_core_member_count", "agglomerates")
+    out: dict[str, NDArray[np.generic]] = {
+        "N_cores": total("core_count"),
+        "N_small_cores": np.bincount(a_group[small > 0], minlength=k).astype(
+            np.int64
+        ),
+        "N_links": total("link_count"),
+        "N_dangling_ends": total("dangling_end_count"),
+    }
+    segment = particles["segment_type"].to_numpy()
+    n_primary = np.bincount(p_group, minlength=k)
+    for label in SEGMENT_TYPES:
+        name = f"{label.replace(' ', '_')}_fraction"
+        out[name] = (
+            np.bincount(p_group[segment == label], minlength=k) / n_primary
+        )
+    return out
 
 
 def _per_area(

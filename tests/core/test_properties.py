@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from agglpy.core import properties
+from agglpy.core import properties, structure
 from agglpy.core.agglomerates import _contact_rows, find_agglomerates
 from agglpy.core.properties import (
     DIMENSIONS,
@@ -516,12 +516,14 @@ FAR = Bounds(-100.5, -100.5, 100.5, 100.5)
 
 # The particle column find_agglomerates adds; the others are properties.
 FOUND = ("coordination",)
+# The columns structure_properties adds (tests/core/test_structure.py).
+STRUCTURE = (*structure.PARTICLE_COLUMNS, *structure.AGGLOMERATE_COLUMNS)
 
 
 def test_columns_in_spec_order():
     found = _found([0], [0], [1])
     out = agglomerate_properties(*found, bounds=FAR)
-    columns = [c for c in DIMENSIONS if c not in FOUND]
+    columns = [c for c in DIMENSIONS if c not in FOUND + STRUCTURE]
     assert list(out.columns) == ["agglomerate_id", *columns]
     # without bounds, the same columns without touches_edge
     out = agglomerate_properties(*found)
@@ -535,10 +537,13 @@ def test_dimensions_cover_exactly_the_property_columns():
     table, contacts = _found(*ABC)
     particle = particle_properties(table, bounds=FAR)
     added = set(particle.columns) - set(table.columns) | set(FOUND)
-    agglomerate = set(
-        agglomerate_properties(table, contacts, bounds=FAR).columns
-    )
-    assert set(DIMENSIONS) == added | (agglomerate - {"agglomerate_id"})
+    agglomerate = agglomerate_properties(table, contacts, bounds=FAR)
+    found = set(agglomerate.columns) - {"agglomerate_id"}
+    p, a = structure.structure_properties(particle, agglomerate, contacts)
+    added |= set(p.columns) - set(particle.columns)
+    found |= set(a.columns) - set(agglomerate.columns)
+    # segment_type is text: no unit to convert
+    assert set(DIMENSIONS) == (added | found) - {"segment_type"}
 
 
 def test_dimensions_are_read_only():
@@ -567,7 +572,7 @@ def test_to_physical_scales_agglomerate_columns_by_dimensions():
     table = agglomerate_properties(*_found(*ABC), bounds=FAR)
     out = to_physical(table, 0.5)
     for column, power in DIMENSIONS.items():
-        if column in FOUND:
+        if column in FOUND + STRUCTURE:
             continue
         expected = table[column] * 0.5**power if power else table[column]
         # counts and ratios (power 0) keep their values and dtypes

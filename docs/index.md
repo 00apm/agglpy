@@ -6,3 +6,4 @@
 agglpy detects spherical primary particles on microscopic (SEM/TEM) images and classifies them into agglomerates, then computes particle-size-distribution (PSD) statistics.
 
 - [Methodology](methodology.md) — the semi-automatic detection method (preprocessing, edge/circle detection, connectivity, agglomerate classification) and how it maps to the codebase.
+- [Structure of agglomerates](agglomerate-structure.md) — cores, links, loops, dangling ends, branches and the longest chain of each agglomerate (`res.with_structure()`).
