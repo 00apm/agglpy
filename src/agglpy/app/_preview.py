@@ -210,8 +210,10 @@ class Preview:
         E.g. ``bottom_fraction=0.1``. Reruns preprocessing and every
         pass (the file is not read again).
 
-        Raises:
-            ParamsError: For an unknown field or an invalid value.
+        Raises
+        ------
+        ParamsError
+            For an unknown field or an invalid value.
         """
         region = _with_fields(
             RegionParams, self.params.region, fields, "region"
@@ -227,9 +229,11 @@ class Preview:
         ``median_blur=None``. Reruns from the first changed step on,
         then every pass.
 
-        Raises:
-            ParamsError: For an unknown field, a missing required field
-                of a step switched on, or an invalid value.
+        Raises
+        ------
+        ParamsError
+            For an unknown field, a missing required field
+            of a step switched on, or an invalid value.
         """
         current = self.params.preprocess
         _check_names(PreprocessParams, fields, "preprocess")
@@ -259,9 +263,11 @@ class Preview:
         E.g. ``p.change_hct(range=1, canny_threshold=180)``. Reruns that
         range's pass only.
 
-        Raises:
-            ParamsError: If range ``range`` does not exist, for an
-                unknown field or an invalid value.
+        Raises
+        ------
+        ParamsError
+            If range ``range`` does not exist, for an
+            unknown field or an invalid value.
         """
         ranges = list(_ranges_of(self.params))
         i = self._index(range)
@@ -277,10 +283,12 @@ class Preview:
         range; the others take the ``HCTRange`` defaults. Reruns only
         the passes that differ from this preview's.
 
-        Raises:
-            ParamsError: For no pair, a pair that is not two values,
-                ``d_min`` / ``d_max`` among ``shared``, an unknown field
-                or an invalid value.
+        Raises
+        ------
+        ParamsError
+            For no pair, a pair that is not two values,
+            ``d_min`` / ``d_max`` among ``shared``, an unknown field
+            or an invalid value.
         """
         for key in ("d_min", "d_max"):
             if key in shared:
@@ -319,8 +327,10 @@ class Preview:
         Fields not given take the ``HCTRange`` defaults. Runs the new
         range's pass only.
 
-        Raises:
-            ParamsError: For an unknown field or an invalid value.
+        Raises
+        ------
+        ParamsError
+            For an unknown field or an invalid value.
         """
         ranges = _ranges_of(self.params)
         new = _with_fields(
@@ -337,8 +347,10 @@ class Preview:
         Runs no pass. Removing the last range gives a preview with no
         ranges.
 
-        Raises:
-            ParamsError: If range ``k`` does not exist.
+        Raises
+        ------
+        ParamsError
+            If range ``k`` does not exist.
         """
         ranges = list(_ranges_of(self.params))
         del ranges[self._index(k)]
@@ -352,10 +364,12 @@ class Preview:
         the file holds now. ``col.detect()`` then runs with them;
         ``col.status()`` shows ``params changed`` until it does.
 
-        Raises:
-            ParamsError: If the preview has no HCT ranges (keeping it
-                would switch detection off), the image is no longer in
-                the sheet, or the file has problems; nothing is written.
+        Raises
+        ------
+        ParamsError
+            If the preview has no HCT ranges (keeping it
+            would switch detection off), the image is no longer in
+            the sheet, or the file has problems; nothing is written.
         """
         state = self._state
         name = state.name
@@ -398,26 +412,36 @@ class Preview:
         ``agglpy.yml`` layout, the numbers per range, the warnings, the
         date and the versions.
 
-        Args:
-            folder: The folder to write into; created with its parents.
-                None gives ``exports/tuning`` in the collection, where a
-                repeated export needs ``overwrite=True``. A relative
-                path is taken from the current working directory.
-            full_image: Every view of the whole image, the region
-                outlined; the file names stay the same.
-            overwrite: Replace files of this image already there.
+        Parameters
+        ----------
+        folder : path-like, optional
+            The folder to write into; created with its parents.
+            None gives ``exports/tuning`` in the collection, where a
+            repeated export needs ``overwrite=True``. A relative
+            path is taken from the current working directory.
+        full_image : bool, default False
+            Every view of the whole image, the region
+            outlined; the file names stay the same.
+        overwrite : bool, default False
+            Replace files of this image already there.
 
-        Returns:
+        Returns
+        -------
+        list of Path
             The files written, absolute, in the order above.
 
-        Raises:
-            ParamsError: If ``folder`` lies in the collection's work
-                folder ``agglpy/`` or ``full_image`` is not True /
-                False.
-            OutputExistsError: If one of the files is there and
-                ``overwrite`` is False; nothing is written.
-            OutputLockedError: If a file to replace is open in another
-                program; nothing is changed.
+        Raises
+        ------
+        ParamsError
+            If ``folder`` lies in the collection's work
+            folder ``agglpy/`` or ``full_image`` is not True /
+            False.
+        OutputExistsError
+            If one of the files is there and
+            ``overwrite`` is False; nothing is written.
+        OutputLockedError
+            If a file to replace is open in another
+            program; nothing is changed.
         """
         _check_full_image(full_image)
         state = self._state
@@ -523,12 +547,16 @@ class Preview:
         region's outermost pixels and is drawn only when the region is
         smaller than the image.
 
-        Args:
-            full_image: The whole image; False shows the raw region
-                only, without the outline.
+        Parameters
+        ----------
+        full_image : bool, default True
+            The whole image; False shows the raw region
+            only, without the outline.
 
-        Raises:
-            ParamsError: If ``full_image`` is not True / False.
+        Raises
+        ------
+        ParamsError
+            If ``full_image`` is not True / False.
         """
         fig, ax = self._figure(
             legend=False, background="white", full_image=full_image
@@ -552,18 +580,25 @@ class Preview:
         two panels zoomed together: ``compare``'s step left, this one's
         right (two grey images do not overlay, so always side by side).
 
-        Args:
-            name: The step.
-            compare: Another preview of this image that ran the step.
-            side_by_side: Without ``compare``, two panels zoomed
-                together: the raw image left, the step right.
-            full_image: The whole image's area: the region at its place
-                and outlined, the rest black.
+        Parameters
+        ----------
+        name : str
+            The step.
+        compare : Preview or None, optional
+            Another preview of this image that ran the step.
+        side_by_side : bool, default False
+            Without ``compare``, two panels zoomed
+            together: the raw image left, the step right.
+        full_image : bool, default False
+            The whole image's area: the region at its place
+            and outlined, the rest black.
 
-        Raises:
-            ParamsError: If no step of that name ran (in either
-                preview), ``compare`` is not a preview of this image or
-                ``full_image`` is not True / False.
+        Raises
+        ------
+        ParamsError
+            If no step of that name ran (in either
+            preview), ``compare`` is not a preview of this image or
+            ``full_image`` is not True / False.
         """
         _check_full_image(full_image)
         mine = self._stage_image(name)
@@ -605,23 +640,32 @@ class Preview:
         both previews' range ``k``: green only in this one (new),
         red only in ``compare`` (gone), white in both.
 
-        Args:
-            k: The range, numbered from 1.
-            compare: Another preview of this image.
-            side_by_side: Two panels zoomed together: ``compare``'s
-                edges left, these right; without ``compare`` the image
-                left (raw when ``image`` is None), the edges on black
-                right.
-            image: The image underneath: ``"raw"``, ``"preprocessed"``
-                (the region) or None.
-            image_alpha: Its opacity, 0-1.
-            full_image: The whole image, the region outlined; False
-                shows the region (both regions with ``compare``).
+        Parameters
+        ----------
+        k : int
+            The range, numbered from 1.
+        compare : Preview or None, optional
+            Another preview of this image.
+        side_by_side : bool, default False
+            Two panels zoomed together: ``compare``'s
+            edges left, these right; without ``compare`` the image
+            left (raw when ``image`` is None), the edges on black
+            right.
+        image : Underlay, optional
+            The image underneath: ``"raw"``, ``"preprocessed"``
+            (the region) or None.
+        image_alpha : float, default 1.0
+            Its opacity, 0-1.
+        full_image : bool, default False
+            The whole image, the region outlined; False
+            shows the region (both regions with ``compare``).
 
-        Raises:
-            ParamsError: If range ``k`` does not exist (in either
-                preview), ``compare`` is not a preview of this image or
-                an option is invalid.
+        Raises
+        ------
+        ParamsError
+            If range ``k`` does not exist (in either
+            preview), ``compare`` is not a preview of this image or
+            an option is invalid.
         """
         _check_full_image(full_image)
         i = self._index(k)
@@ -694,27 +738,39 @@ class Preview:
         (gone), grey those in both, matched with the tolerances of
         ``tables.find_duplicates`` (a circle that moved is gone + new).
 
-        Args:
-            k: The range, numbered from 1; None for every range.
-            compare: Another preview of this image.
-            side_by_side: Two panels zoomed together: ``compare``'s
-                circles left, these right; without ``compare`` the
-                image left (raw when ``image`` is None), the circles on
-                ``background`` right.
-            image: The image underneath: ``"raw"``, ``"preprocessed"``
-                (the region) or None (the background).
-            image_alpha: Its opacity, 0-1.
-            background: The figure's colour; None for transparent.
-            alpha: Opacity of the fill, 0 (outlines only) to 1.
-            linewidth: Width of the outlines in px.
-            full_image: The whole image, the region outlined, circles
-                drawn whole; False shows the region (both regions with
-                ``compare``), circles cut at its edge.
+        Parameters
+        ----------
+        k : int, optional
+            The range, numbered from 1; None for every range.
+        compare : Preview or None, optional
+            Another preview of this image.
+        side_by_side : bool, default False
+            Two panels zoomed together: ``compare``'s
+            circles left, these right; without ``compare`` the
+            image left (raw when ``image`` is None), the circles on
+            ``background`` right.
+        image : Underlay, default "raw"
+            The image underneath: ``"raw"``, ``"preprocessed"``
+            (the region) or None (the background).
+        image_alpha : float, default 1.0
+            Its opacity, 0-1.
+        background : ColorType or None, default "black"
+            The figure's colour; None for transparent.
+        alpha : float, default 0.0
+            Opacity of the fill, 0 (outlines only) to 1.
+        linewidth : float, default 1.0
+            Width of the outlines in px.
+        full_image : bool, default False
+            The whole image, the region outlined, circles
+            drawn whole; False shows the region (both regions with
+            ``compare``), circles cut at its edge.
 
-        Raises:
-            ParamsError: If range ``k`` does not exist (in either
-                preview), ``compare`` is not a preview of this image or
-                an option is invalid.
+        Raises
+        ------
+        ParamsError
+            If range ``k`` does not exist (in either
+            preview), ``compare`` is not a preview of this image or
+            an option is invalid.
         """
         _check_full_image(full_image)
         if k is None:

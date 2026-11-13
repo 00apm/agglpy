@@ -65,10 +65,12 @@ def names(value: str | Iterable[str] | None, argument: str) -> list[str]:
 def check_images(images: pd.DataFrame, *, fov_area: bool = False) -> None:
     """Check the images table (module docstring).
 
-    Raises:
-        TableError: If ``image`` is missing, has gaps or repeats, or,
-            with ``fov_area=True``, ``fov_area`` is missing, not
-            numeric or not > 0 where given.
+    Raises
+    ------
+    TableError
+        If ``image`` is missing, has gaps or repeats, or,
+        with ``fov_area=True``, ``fov_area`` is missing, not
+        numeric or not > 0 where given.
     """
     require(images, ["image"], "images")
     keys = images["image"]
@@ -101,9 +103,12 @@ def group_images(
     existing combination, sorted. An empty cell forms its own group,
     labelled NaN, sorted last (pandas would drop it).
 
-    Raises:
-        TableError: If a ``by`` column is not in the images table.
-        ParamsError: If ``by`` is not column names or repeats one.
+    Raises
+    ------
+    TableError
+        If a ``by`` column is not in the images table.
+    ParamsError
+        If ``by`` is not column names or repeats one.
     """
     columns = names(by, "by")
     repeated = sorted({c for c in columns if columns.count(c) > 1})
@@ -132,9 +137,11 @@ def group_images(
 def with_labels(labels: pd.DataFrame, out: pd.DataFrame) -> pd.DataFrame:
     """The ``by`` columns of each row's group, then the output columns.
 
-    Raises:
-        TableError: If a ``by`` column has the name of an output column
-            (the table would hold two columns of that name).
+    Raises
+    ------
+    TableError
+        If a ``by`` column has the name of an output column
+        (the table would hold two columns of that name).
     """
     clash = [c for c in labels.columns if c in out.columns]
     if clash:
@@ -150,9 +157,11 @@ def image_positions(
 ) -> NDArray[np.intp]:
     """Row of the images table for each row of ``table``.
 
-    Raises:
-        TableError: If ``table`` has no ``image`` column or names an
-            image that is not in the images table.
+    Raises
+    ------
+    TableError
+        If ``table`` has no ``image`` column or names an
+        image that is not in the images table.
     """
     require(table, ["image"], name)
     positions = np.asarray(

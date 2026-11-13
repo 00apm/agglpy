@@ -90,12 +90,16 @@ def find_sheet(folder: Path) -> Path:
 class Grid:
     """The cells of a sheet as stored.
 
-    Attributes:
-        path: The sheet file.
-        header: The column names (row 1).
-        rows: ``(row number, cells)`` for every row that is not fully
-            empty; row numbers as Excel shows them (header = 1); cells
-            None when empty, xlsx values or CSV text.
+    Parameters
+    ----------
+    path : Path
+        The sheet file.
+    header : list of str
+        The column names (row 1).
+    rows : list of tuple
+        ``(row number, cells)`` for every row that is not fully
+        empty; row numbers as Excel shows them (header = 1); cells
+        None when empty, xlsx values or CSV text.
     """
 
     path: Path
@@ -107,15 +111,23 @@ class Grid:
 class Entry:
     """One image row of a valid sheet.
 
-    Attributes:
-        row: Its row number in the sheet.
-        image: The image name.
-        file: The image file as written in the sheet.
-        include: Whether the image is analysed.
-        pixel_size_nm: The pixel size in nm, or None (taken from the
-            image file then).
-        note: Free text.
-        user: The user columns' cells as stored.
+    Parameters
+    ----------
+    row : int
+        Its row number in the sheet.
+    image : str
+        The image name.
+    file : str
+        The image file as written in the sheet.
+    include : bool
+        Whether the image is analysed.
+    pixel_size_nm : float or None
+        The pixel size in nm, or None (taken from the
+        image file then).
+    note : str
+        Free text.
+    user : mapping
+        The user columns' cells as stored.
     """
 
     row: int
@@ -131,10 +143,14 @@ class Entry:
 class Sheet:
     """A valid image sheet.
 
-    Attributes:
-        path: The sheet file.
-        columns: All column names in file order.
-        entries: The image rows in file order.
+    Parameters
+    ----------
+    path : Path
+        The sheet file.
+    columns : tuple of str
+        All column names in file order.
+    entries : tuple of Entry
+        The image rows in file order.
     """
 
     path: Path

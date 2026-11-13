@@ -173,29 +173,40 @@ def summary(
     without agglomerates give ``n_ppA`` NaN and ``Ra`` 0. Divisions
     follow numpy (0 / 0 is NaN).
 
-    Args:
-        images: The images table (``agglpy.core._images``).
-        particles: Particle table with ``image``, ``D``.
-        agglomerates: Agglomerate table with ``image``,
-            ``member_count``, ``D``, ``area``, ``contact_count``.
-        by: ``None`` (all images, one row), ``"image"``, an images-table
-            column or a list of them (one row per existing
-            combination; an empty cell is its own group). A ``by``
-            column must not share a name with an output column.
-        metrics: Family names; narrows the table.
+    Parameters
+    ----------
+    images : DataFrame
+        The images table (``agglpy.core._images``).
+    particles : DataFrame
+        Particle table with ``image``, ``D``.
+    agglomerates : DataFrame
+        Agglomerate table with ``image``,
+        ``member_count``, ``D``, ``area``, ``contact_count``.
+    by : str or iterable of str, optional
+        ``None`` (all images, one row), ``"image"``, an images-table
+        column or a list of them (one row per existing
+        combination; an empty cell is its own group). A ``by``
+        column must not share a name with an output column.
+    metrics : str or iterable of str, optional
+        Family names; narrows the table.
 
-    Returns:
+    Returns
+    -------
+    DataFrame
         One row per group: the ``by`` columns, ``n_images`` (blank
         images included), then the metrics.
 
-    Raises:
-        TableError: If a table lacks a column or names an unknown image,
-            or the particle and agglomerate tables do not match: in each
-            image, the agglomerates' ``member_count`` must add up to the
-            particle rows (filter both with
-            ``agglomerates.select_agglomerates``), or a ``by`` column
-            has the name of an output column.
-        ParamsError: If a family name is unknown.
+    Raises
+    ------
+    TableError
+        If a table lacks a column or names an unknown image,
+        or the particle and agglomerate tables do not match: in each
+        image, the agglomerates' ``member_count`` must add up to the
+        particle rows (filter both with
+        ``agglomerates.select_agglomerates``), or a ``by`` column
+        has the name of an output column.
+    ParamsError
+        If a family name is unknown.
     """
     families = _families(metrics, particles, agglomerates)
     check_images(images, fov_area="per_area" in families)
@@ -288,11 +299,16 @@ def summary_across_images(
     the groups of ``by``. Each image weighs equally: this describes the
     typical image, not the pooled population (``summary``).
 
-    Args:
-        images, particles, agglomerates, by, metrics: As ``summary``.
-        confidence: Level of the confidence interval.
+    Parameters
+    ----------
+    images, particles, agglomerates, by, metrics
+        As ``summary``.
+    confidence : float, default 0.95
+        Level of the confidence interval.
 
-    Returns:
+    Returns
+    -------
+    DataFrame
         A long table: the ``by`` columns, ``metric``, ``mean``, ``std``,
         ``n``, ``ci_low``, ``ci_high``; one row per group and metric.
     """
@@ -329,32 +345,46 @@ def values_across_images(
     warning; NaN values are left out per column, so ``n`` is per
     column; ``n = 1`` gives NaN ``std`` and interval.
 
-    Args:
-        images: The images table; the groups come from it.
-        per_image: ``image``, the ``keys`` columns and the value
-            columns.
-        by: As ``summary``.
-        keys: Columns that tell several values of one image apart
-            (e.g. size class and basis); they are kept in the output.
-        values: The value columns; ``None``: every other column of
-            ``per_image`` not in ``images`` (columns of the images table
-            describe the image and are not values).
-        confidence: Level of the interval, between 0 and 1.
+    Parameters
+    ----------
+    images : DataFrame
+        The images table; the groups come from it.
+    per_image : DataFrame
+        ``image``, the ``keys`` columns and the value
+        columns.
+    by : str or iterable of str, optional
+        As ``summary``.
+    keys : str or iterable of str, default ()
+        Columns that tell several values of one image apart
+        (e.g. size class and basis); they are kept in the output.
+    values : str or iterable of str, optional
+        The value columns; ``None``: every other column of
+        ``per_image`` not in ``images`` (columns of the images table
+        describe the image and are not values).
+    confidence : float, default 0.95
+        Level of the interval, between 0 and 1.
 
-    Returns:
+    Returns
+    -------
+    DataFrame
         A long table: the ``by`` columns, the ``keys``, ``metric`` (the
         value column's name), ``mean``, ``std``, ``n``, ``ci_low``,
         ``ci_high``.
 
-    Raises:
-        TableError: If ``per_image`` lacks a column, names an unknown
-            image, repeats an image (and key) or has a value column
-            that is not numeric, or a ``by`` column has the name of an
-            output column.
-        ParamsError: If ``confidence`` is not between 0 and 1.
+    Raises
+    ------
+    TableError
+        If ``per_image`` lacks a column, names an unknown
+        image, repeats an image (and key) or has a value column
+        that is not numeric, or a ``by`` column has the name of an
+        output column.
+    ParamsError
+        If ``confidence`` is not between 0 and 1.
 
-    Warns:
-        MissingImagesWarning: If images of ``images`` have no row.
+    Warns
+    -----
+    MissingImagesWarning
+        If images of ``images`` have no row.
     """
     level = _number("confidence", confidence)
     if not 0 < level < 1:

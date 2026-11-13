@@ -119,20 +119,27 @@ def particle_properties(
     edge, ``x - r <= x_min`` or ``x + r >= x_max`` (same for y); a
     circle exactly at the edge may already be cut off.
 
-    Args:
-        table: A particle table with at least the column ``r``, and
-            ``x, y`` when ``bounds`` is given.
-        bounds: The analysed region (``core.region.region_bounds``);
-            None adds no ``touches_edge`` (no image, e.g. imported
-            particles).
+    Parameters
+    ----------
+    table : DataFrame
+        A particle table with at least the column ``r``, and
+        ``x, y`` when ``bounds`` is given.
+    bounds : Bounds, optional
+        The analysed region (``core.region.region_bounds``);
+        None adds no ``touches_edge`` (no image, e.g. imported
+        particles).
 
-    Returns:
+    Returns
+    -------
+    DataFrame
         A copy with the new columns, replacing any from an earlier
         run; every other column, the row order and the index are kept.
 
-    Raises:
-        ParticleTableError: If a needed column is missing, not numeric,
-            not finite, or ``r`` is not > 0.
+    Raises
+    ------
+    ParticleTableError
+        If a needed column is missing, not numeric,
+        not finite, or ``r`` is not > 0.
     """
     _require(table, ("r",) if bounds is None else ("x", "y", "r"))
     r = _radii(table)
@@ -195,24 +202,33 @@ def agglomerate_properties(
     ``area`` and the Feret diameters describe the circle model, not the
     agglomerate's outline on the image.
 
-    Args:
-        table: The particle table from ``find_agglomerates``; only
-            ``id, x, y, r, agglomerate_id, enclosed`` are read.
-        contacts: The contacts table from ``find_agglomerates`` for
-            these particles, all of it (``inside`` is not read).
-        bounds: The analysed region (``core.region.region_bounds``);
-            None adds no ``touches_edge``.
+    Parameters
+    ----------
+    table : DataFrame
+        The particle table from ``find_agglomerates``; only
+        ``id, x, y, r, agglomerate_id, enclosed`` are read.
+    contacts : DataFrame
+        The contacts table from ``find_agglomerates`` for
+        these particles, all of it (``inside`` is not read).
+    bounds : Bounds, optional
+        The analysed region (``core.region.region_bounds``);
+        None adds no ``touches_edge``.
 
-    Returns:
+    Returns
+    -------
+    DataFrame
         A new table, one row per agglomerate sorted by
         ``agglomerate_id`` (first column), with a fresh ``RangeIndex``.
         An empty particle table gives an empty table with every column.
 
-    Raises:
-        ParticleTableError: If a needed column is missing; ``x, y, r``
-            are not finite numbers or ``r <= 0``; ``agglomerate_id``
-            does not hold integers; ``enclosed`` is not True / False.
-        TableError: If ``contacts`` are not pairs of these particles.
+    Raises
+    ------
+    ParticleTableError
+        If a needed column is missing; ``x, y, r``
+        are not finite numbers or ``r <= 0``; ``agglomerate_id``
+        does not hold integers; ``enclosed`` is not True / False.
+    TableError
+        If ``contacts`` are not pairs of these particles.
     """
     _require(table, _AGGLOMERATE_INPUT)
     # A table fresh from find_agglomerates is clean, but one read back
@@ -268,19 +284,27 @@ def to_physical(table: pd.DataFrame, pixel_size: float) -> pd.DataFrame:
     tables of several images: metrics and distributions assume one
     unit for all rows.
 
-    Args:
-        table: The particle table or the agglomerate table of one
-            image, in px.
-        pixel_size: The length of one pixel in the unit wanted, e.g.
-            2.5e-9 for m when one pixel is 2.5 nm.
+    Parameters
+    ----------
+    table : DataFrame
+        The particle table or the agglomerate table of one
+        image, in px.
+    pixel_size : float
+        The length of one pixel in the unit wanted, e.g.
+        2.5e-9 for m when one pixel is 2.5 nm.
 
-    Returns:
+    Returns
+    -------
+    DataFrame
         A converted copy; columns, rows and index are kept. Converting
         a table twice scales it twice.
 
-    Raises:
-        ParamsError: If ``pixel_size`` is not a finite number > 0.
-        ParticleTableError: If a column to convert is not numeric.
+    Raises
+    ------
+    ParamsError
+        If ``pixel_size`` is not a finite number > 0.
+    ParticleTableError
+        If a column to convert is not numeric.
     """
     p = _positive("pixel_size", pixel_size)
     out = table.copy()

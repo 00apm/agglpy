@@ -37,11 +37,16 @@ def detect_hct(image: NDArray[np.uint8], params: HCTParams) -> pd.DataFrame:
     partly visible particle with its centre outside comes from manual
     correction.
 
-    Args:
-        image: A 2-D ``uint8`` grey image, usually preprocessed.
-        params: The HCT ranges, run in the given order.
+    Parameters
+    ----------
+    image : ndarray
+        A 2-D ``uint8`` grey image, usually preprocessed.
+    params : HCTParams
+        The HCT ranges, run in the given order.
 
-    Returns:
+    Returns
+    -------
+    DataFrame
         A particle table ``id, x, y, r`` in px, in the frame of
         ``image``: ids ``1..n``, rows range by range, strongest circle
         first within a range. Values are OpenCV's float32 results as
@@ -49,9 +54,11 @@ def detect_hct(image: NDArray[np.uint8], params: HCTParams) -> pd.DataFrame:
         An empty table when nothing is found, with one
         ``NoParticlesWarning``.
 
-    Raises:
-        ImageError: If ``image`` is not a 2-D ``uint8`` array of at
-            least 1 x 1 px.
+    Raises
+    ------
+    ImageError
+        If ``image`` is not a 2-D ``uint8`` array of at
+        least 1 x 1 px.
     """
     image = check_grey_image(image)
     return _table(image, [_hough(image, r) for r in params.ranges])
@@ -68,17 +75,24 @@ def hct_edges(
     half to even), ``low = max(1, high // 2)`` and the L1 gradient. A
     circle can only be found on these edges.
 
-    Args:
-        image: A 2-D ``uint8`` grey image, usually preprocessed.
-        hct_range: The pass; only ``canny_threshold`` is used.
+    Parameters
+    ----------
+    image : ndarray
+        A 2-D ``uint8`` grey image, usually preprocessed.
+    hct_range : HCTRange
+        The pass; only ``canny_threshold`` is used.
 
-    Returns:
+    Returns
+    -------
+    ndarray
         A ``uint8`` image of the shape of ``image``: 255 on an edge,
         0 elsewhere.
 
-    Raises:
-        ImageError: If ``image`` is not a 2-D ``uint8`` array of at
-            least 1 x 1 px.
+    Raises
+    ------
+    ImageError
+        If ``image`` is not a 2-D ``uint8`` array of at
+        least 1 x 1 px.
     """
     image = check_grey_image(image)
     dx, dy = (

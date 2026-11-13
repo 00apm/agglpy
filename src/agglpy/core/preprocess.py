@@ -29,18 +29,25 @@ def preprocess(
 ) -> NDArray[np.uint8]:
     """Preprocess a grey image for detection.
 
-    Args:
-        image: A 2-D ``uint8`` grey image, usually the analysed region
-            cut from the raw image (``core.region.region_slices``).
-        params: The steps to run; ``PreprocessParams()`` runs none.
+    Parameters
+    ----------
+    image : ndarray
+        A 2-D ``uint8`` grey image, usually the analysed region
+        cut from the raw image (``core.region.region_slices``).
+    params : PreprocessParams
+        The steps to run; ``PreprocessParams()`` runs none.
 
-    Returns:
+    Returns
+    -------
+    ndarray
         A new array of the same shape and dtype; with no step, an equal
         copy.
 
-    Raises:
-        ImageError: If ``image`` is not a 2-D ``uint8`` array of at
-            least 1 x 1 px.
+    Raises
+    ------
+    ImageError
+        If ``image`` is not a 2-D ``uint8`` array of at
+        least 1 x 1 px.
     """
     out = check_grey_image(image).copy()
     for _, step in _steps(params):

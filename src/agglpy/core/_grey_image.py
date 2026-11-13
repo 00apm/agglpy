@@ -12,8 +12,10 @@ def check_grey_image(image: object) -> NDArray[np.uint8]:
     Nothing is converted: scaling a float or 16-bit image is a choice
     that changes what is detected, so it is left to the caller.
 
-    Raises:
-        ImageError: For anything else, naming what was given.
+    Raises
+    ------
+    ImageError
+        For anything else, naming what was given.
     """
     if not isinstance(image, np.ndarray):
         got = type(image).__name__

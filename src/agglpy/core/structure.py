@@ -79,24 +79,34 @@ def structure_properties(
     its largest member (equal radii: the lower id). Lengths are sums of
     diameters, in the units of ``r``.
 
-    Args:
-        particles: One image's particle table with ``id``, ``r`` and
-            ``agglomerate_id``.
-        agglomerates: Its agglomerate table: one row per
-            ``agglomerate_id`` of ``particles``, no other.
-        contacts: Its contacts table (``find_agglomerates``).
-        min_core_members: Particles a group of triangles needs to be a
-            core; an integer of 3 or more.
+    Parameters
+    ----------
+    particles : DataFrame
+        One image's particle table with ``id``, ``r`` and
+        ``agglomerate_id``.
+    agglomerates : DataFrame
+        Its agglomerate table: one row per
+        ``agglomerate_id`` of ``particles``, no other.
+    contacts : DataFrame
+        Its contacts table (``find_agglomerates``).
+    min_core_members : int, default 7
+        Particles a group of triangles needs to be a
+        core; an integer of 3 or more.
 
-    Returns:
+    Returns
+    -------
+    tuple
         Copies of ``particles`` and ``agglomerates`` with the columns
         ``PARTICLE_COLUMNS`` and ``AGGLOMERATE_COLUMNS``, replacing any
         from an earlier run; other columns, row order and index kept.
 
-    Raises:
-        ParamsError: If ``min_core_members`` is not an integer >= 3.
-        TableError: If a column is missing or invalid, or the three
-            tables do not belong together.
+    Raises
+    ------
+    ParamsError
+        If ``min_core_members`` is not an integer >= 3.
+    TableError
+        If a column is missing or invalid, or the three
+        tables do not belong together.
     """
     m = _min_core_members(min_core_members)
     _one_image(particles, agglomerates)
@@ -164,22 +174,33 @@ def chain_path(
     each step the lower id. A large agglomerate may need one search per
     member.
 
-    Args:
-        particles: One image's particle table with ``id``, ``r`` and
-            ``agglomerate_id``.
-        contacts: Its contacts table (``find_agglomerates``).
-        agglomerate_id: The agglomerate.
-        to: The particle id of a tip, or None.
-        by: ``"hops"`` or ``"length"``.
+    Parameters
+    ----------
+    particles : DataFrame
+        One image's particle table with ``id``, ``r`` and
+        ``agglomerate_id``.
+    contacts : DataFrame
+        Its contacts table (``find_agglomerates``).
+    agglomerate_id : int
+        The agglomerate.
+    to : int, optional
+        The particle id of a tip, or None.
+    by : {"hops", "length"}, default "hops"
+        ``"hops"`` or ``"length"``.
 
-    Returns:
+    Returns
+    -------
+    list of int
         Particle ids in walking order.
 
-    Raises:
-        ParamsError: If ``by`` is unknown, the agglomerate does not
-            exist or ``to`` is not one of its tips.
-        TableError: If a column is missing or invalid, or the tables do
-            not belong together.
+    Raises
+    ------
+    ParamsError
+        If ``by`` is unknown, the agglomerate does not
+        exist or ``to`` is not one of its tips.
+    TableError
+        If a column is missing or invalid, or the tables do
+        not belong together.
     """
     if by not in ("hops", "length"):
         raise ParamsError(f"by must be 'hops' or 'length', got {by!r}")

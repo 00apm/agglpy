@@ -57,17 +57,27 @@ __all__ = ["Drawings", "Origin", "Results"]
 class Origin:
     """What a ``Results`` was made from, for its export record.
 
-    Attributes:
-        analyzed: When ``analyze()`` ran (ISO 8601).
-        collection: The collection folder.
-        sheet: The sheet's file name.
-        images: The record entry of each image, as plain YAML data.
-        files: The image files, resolved, for drawing them.
-        excluded: The sheet rows with ``include`` false: ``image`` and
-            ``note``.
-        steps: The subset steps taken, in order.
-        names: Every image of the sheet.
-        structure: The settings of ``Results.with_structure``, or None.
+    Parameters
+    ----------
+    analyzed : str
+        When ``analyze()`` ran (ISO 8601).
+    collection : Path
+        The collection folder.
+    sheet : str
+        The sheet's file name.
+    images : mapping
+        The record entry of each image, as plain YAML data.
+    files : mapping
+        The image files, resolved, for drawing them.
+    excluded : tuple of mapping
+        The sheet rows with ``include`` false: ``image`` and
+        ``note``.
+    steps : tuple of mapping
+        The subset steps taken, in order.
+    names : tuple of str
+        Every image of the sheet.
+    structure : mapping, optional
+        The settings of ``Results.with_structure``, or None.
     """
 
     analyzed: str
@@ -126,19 +136,24 @@ class Results:
     agglomerate: segments (cores, links, loops, dangling ends),
     branches and the longest chain (``docs/agglomerate-structure.md``).
 
-    Attributes:
-        images: One row per analysed image: agglpy's columns, the
-            user columns of the sheet, then ``note``.
-        particles: One row per particle, keyed by ``(image, id)``.
-        agglomerates: One row per agglomerate, keyed by ``(image,
-            agglomerate_id)``. Ids are unique only within an image
-            and change with a new detection or correction.
-        contacts: One row per possible contact: ``image``,
-            ``agglomerate_id``, the particle ids ``id_a`` (the larger)
-            and ``id_b``, ``inside`` (``id_b`` lies inside ``id_a``);
-            an agglomerate has ``contact_count`` rows
-            (``agglpy.core.agglomerates.find_agglomerates``). Pairs per
-            image: ``res.contacts.groupby("image").size()``.
+    Attributes
+    ----------
+    images : DataFrame
+        One row per analysed image: agglpy's columns, the
+        user columns of the sheet, then ``note``.
+    particles : DataFrame
+        One row per particle, keyed by ``(image, id)``.
+    agglomerates : DataFrame
+        One row per agglomerate, keyed by ``(image,
+        agglomerate_id)``. Ids are unique only within an image
+        and change with a new detection or correction.
+    contacts : DataFrame
+        One row per possible contact: ``image``,
+        ``agglomerate_id``, the particle ids ``id_a`` (the larger)
+        and ``id_b``, ``inside`` (``id_b`` lies inside ``id_a``);
+        an agglomerate has ``contact_count`` rows
+        (``agglpy.core.agglomerates.find_agglomerates``). Pairs per
+        image: ``res.contacts.groupby("image").size()``.
     """
 
     def __init__(
@@ -247,8 +262,10 @@ class Results:
         As ``agglpy.core.distributions.distribution``; ``table`` is
         ``"particles"`` or ``"agglomerates"``.
 
-        Raises:
-            ParamsError: If ``table`` is another name.
+        Raises
+        ------
+        ParamsError
+            If ``table`` is another name.
         """
         return self._core(
             distributions.distribution,
@@ -277,8 +294,10 @@ class Results:
         As ``agglpy.core.distributions.distribution_across_images``;
         ``table`` is ``"particles"`` or ``"agglomerates"``.
 
-        Raises:
-            ParamsError: If ``table`` is another name.
+        Raises
+        ------
+        ParamsError
+            If ``table`` is another name.
         """
         return self._core(
             distributions.distribution_across_images,
@@ -308,19 +327,26 @@ class Results:
         step, images first. The tables of the new results are
         renumbered from 0; ``self`` stays as it is.
 
-        Args:
-            images: A True / False Series on ``images``' index, e.g.
-                ``res.images.series == "a"``, or a name or list of
-                names (kept in the order of the results).
-            agglomerates: A True / False Series on ``agglomerates``'
-                index, e.g. ``~res.agglomerates.touches_edge``.
-            label: Names the step in the export record.
+        Parameters
+        ----------
+        images : Series or str or sequence of str, optional
+            A True / False Series on ``images``' index, e.g.
+            ``res.images.series == "a"``, or a name or list of
+            names (kept in the order of the results).
+        agglomerates : Series, optional
+            A True / False Series on ``agglomerates``'
+            index, e.g. ``~res.agglomerates.touches_edge``.
+        label : str, optional
+            Names the step in the export record.
 
-        Raises:
-            ParamsError: If neither is given, a name is not in these
-                results, or no image is left.
-            TableError: If a mask is not a True / False Series on its
-                table's index.
+        Raises
+        ------
+        ParamsError
+            If neither is given, a name is not in these
+            results, or no image is left.
+        TableError
+            If a mask is not a True / False Series on its
+            table's index.
         """
         if images is None and agglomerates is None:
             raise ParamsError("subset needs images= or agglomerates=")
@@ -383,12 +409,16 @@ class Results:
         ``subset`` first numbers them from 0. Draw the segments with
         ``draw(what="particles", color_by="segment_type")``.
 
-        Args:
-            min_core_members: Particles a group of triangles needs to
-                be a core; an integer of 3 or more.
+        Parameters
+        ----------
+        min_core_members : int, default 7
+            Particles a group of triangles needs to
+            be a core; an integer of 3 or more.
 
-        Raises:
-            ParamsError: If ``min_core_members`` is not an integer >= 3.
+        Raises
+        ------
+        ParamsError
+            If ``min_core_members`` is not an integer >= 3.
         """
         particles: list[pd.DataFrame] = []
         aggls: list[pd.DataFrame] = []
@@ -440,29 +470,39 @@ class Results:
         subset steps. Drawings of the same results fit in a folder next
         to it (``Drawings.export``).
 
-        Args:
-            folder: The folder to write into; created if missing. A
-                folder named for each export is the recommended way;
-                None gives ``exports/results`` in the collection, where
-                a repeated export needs ``overwrite=True``. A relative
-                path is taken from the current working directory.
-            tables: Extra tables made from these results, e.g.
-                ``{"summary": res.summary(by="series")}``; written
-                after the four, without units.
-            overwrite: Replace an earlier export in ``folder``.
+        Parameters
+        ----------
+        folder : path-like, optional
+            The folder to write into; created if missing. A
+            folder named for each export is the recommended way;
+            None gives ``exports/results`` in the collection, where
+            a repeated export needs ``overwrite=True``. A relative
+            path is taken from the current working directory.
+        tables : mapping, optional
+            Extra tables made from these results, e.g.
+            ``{"summary": res.summary(by="series")}``; written
+            after the four, without units.
+        overwrite : bool, default False
+            Replace an earlier export in ``folder``.
 
-        Returns:
+        Returns
+        -------
+        Path
             The folder, absolute.
 
-        Raises:
-            ParamsError: If an extra table is called ``images``,
-                ``agglomerates``, ``particles`` or ``contacts``, or
-                ``folder`` lies in the collection's work folder
-                ``agglpy/``.
-            OutputExistsError: If ``folder`` has an export and
-                ``overwrite`` is False.
-            OutputLockedError: If a file to replace is open in another
-                program.
+        Raises
+        ------
+        ParamsError
+            If an extra table is called ``images``,
+            ``agglomerates``, ``particles`` or ``contacts``, or
+            ``folder`` lies in the collection's work folder
+            ``agglpy/``.
+        OutputExistsError
+            If ``folder`` has an export and
+            ``overwrite`` is False.
+        OutputLockedError
+            If a file to replace is open in another
+            program.
         """
         folder = export_folder(self._origin.collection, folder, "results")
         extra = dict(tables or {})
@@ -538,48 +578,63 @@ class Results:
         exported, not held: a figure changed by hand is saved with
         ``fig.savefig``.
 
-        Args:
-            images: A name or list of names; None draws every image.
-            what: ``"particles"`` (each particle coloured by a column
-                of ``particles``) or ``"agglomerates"`` (each
-                agglomerate by a column of ``agglomerates``).
-            color_by: The column of that table that gives the colours.
-                A column of ``images`` has to be merged onto the table
-                first.
-            select: A True / False Series on that table's index; the
-                others are drawn as thin ``others`` outlines.
-            image: Draw the image file underneath, read when a figure
-                is made.
-            image_alpha: Opacity of the image, 0 to 1: below 1 the
-                background shows through, e.g. ``background="black",
-                image_alpha=0.4`` darkens the image so the circles
-                stand out.
-            background: The figure's colour, under the image: any
-                matplotlib colour (``"white"``, ``"#FF000033"``, ``(0,
-                1, 0, 0.47)`` with values in 0-1) or None for a
-                transparent figure.
-            others, cmap, norm, vmin, vmax, colors, alpha, linewidth:
-                As for ``agglpy.draw.particles``.
-            legend: A colorbar or legend in a strip right of the image;
-                a string titles it; False draws the figure without the
-                strip, the image's size exactly.
-            full_image: Draw the whole image; False draws the analysed
-                region (the region of the params ``analyze()`` used),
-                circles cut at its edge.
+        Parameters
+        ----------
+        images : str or sequence of str, optional
+            A name or list of names; None draws every image.
+        what : {"particles", "agglomerates"}, default "agglomerates"
+            ``"particles"`` (each particle coloured by a column
+            of ``particles``) or ``"agglomerates"`` (each
+            agglomerate by a column of ``agglomerates``).
+        color_by : Hashable
+            The column of that table that gives the colours.
+            A column of ``images`` has to be merged onto the table
+            first.
+        select : Series, optional
+            A True / False Series on that table's index; the
+            others are drawn as thin ``others`` outlines.
+        image : bool, default True
+            Draw the image file underneath, read when a figure
+            is made.
+        image_alpha : float, default 1.0
+            Opacity of the image, 0 to 1: below 1 the
+            background shows through, e.g. ``background="black",
+            image_alpha=0.4`` darkens the image so the circles
+            stand out.
+        background : ColorType or None, default "white"
+            The figure's colour, under the image: any
+            matplotlib colour (``"white"``, ``"#FF000033"``, ``(0,
+            1, 0, 0.47)`` with values in 0-1) or None for a
+            transparent figure.
+        others, cmap, norm, vmin, vmax, colors, alpha, linewidth
+            As for ``agglpy.draw.particles``.
+        legend : bool or str, default True
+            A colorbar or legend in a strip right of the image;
+            a string titles it; False draws the figure without the
+            strip, the image's size exactly.
+        full_image : bool, default False
+            Draw the whole image; False draws the analysed
+            region (the region of the params ``analyze()`` used),
+            circles cut at its edge.
 
-        Returns:
+        Returns
+        -------
+        Drawings
             The ``Drawings``: image name → figure.
 
-        Raises:
-            ParamsError: If no image or a name not in these results is
-                given, ``what`` is
-                another name, ``color_by`` is a column of ``images``
-                only, ``image`` or ``full_image`` is not True / False,
-                ``alpha`` /
-                ``image_alpha`` is not within 0-1, ``linewidth`` is
-                negative, or an option does not fit the column.
-            TableError: If ``color_by`` is not a column of the table or
-                ``select`` not a True / False Series on its index.
+        Raises
+        ------
+        ParamsError
+            If no image or a name not in these results is
+            given, ``what`` is
+            another name, ``color_by`` is a column of ``images``
+            only, ``image`` or ``full_image`` is not True / False,
+            ``alpha`` /
+            ``image_alpha`` is not within 0-1, ``linewidth`` is
+            negative, or an option does not fit the column.
+        TableError
+            If ``color_by`` is not a column of the table or
+            ``select`` not a True / False Series on its index.
         """
         names = (
             list(self.images.image)
@@ -812,12 +867,16 @@ class Drawings(Mapping[str, Figure]):
     def __getitem__(self, name: str) -> Figure:
         """A new figure of image ``name``.
 
-        Raises:
-            KeyError: If ``name`` was not drawn.
-            FileNotFoundError: If the image file is gone
-                (``image=True``).
-            ImageError: If the image file no longer has the analysed
-                size.
+        Raises
+        ------
+        KeyError
+            If ``name`` was not drawn.
+        FileNotFoundError
+            If the image file is gone
+            (``image=True``).
+        ImageError
+            If the image file no longer has the analysed
+            size.
         """
         sheet = self._sheets[name]
         image = _image(sheet) if self._image else None
@@ -884,27 +943,38 @@ class Drawings(Mapping[str, Figure]):
         written: export next to ``res.export`` of the same
         results, whose record covers the drawings.
 
-        Args:
-            folder: The folder to write into; created with its parents.
-                None gives ``exports/drawings`` in the collection, where
-                a repeated export needs ``overwrite=True``. A relative
-                path is taken from the current working directory.
-            overwrite: Replace PNGs of these images already there.
+        Parameters
+        ----------
+        folder : path-like, optional
+            The folder to write into; created with its parents.
+            None gives ``exports/drawings`` in the collection, where
+            a repeated export needs ``overwrite=True``. A relative
+            path is taken from the current working directory.
+        overwrite : bool, default False
+            Replace PNGs of these images already there.
 
-        Returns:
+        Returns
+        -------
+        list of Path
             The PNG files, absolute, in the order of the results.
 
-        Raises:
-            ParamsError: If ``folder`` lies in the collection's work
-                folder ``agglpy/``.
-            OutputExistsError: If a PNG of a drawn image is there and
-                ``overwrite`` is False; nothing is written.
-            OutputLockedError: If a PNG to replace is open in another
-                program; nothing is changed.
-            FileNotFoundError: If an image file is gone (``image=True``);
-                nothing is written.
-            ImageError: If an image file no longer has the analysed
-                size; nothing is written.
+        Raises
+        ------
+        ParamsError
+            If ``folder`` lies in the collection's work
+            folder ``agglpy/``.
+        OutputExistsError
+            If a PNG of a drawn image is there and
+            ``overwrite`` is False; nothing is written.
+        OutputLockedError
+            If a PNG to replace is open in another
+            program; nothing is changed.
+        FileNotFoundError
+            If an image file is gone (``image=True``);
+            nothing is written.
+        ImageError
+            If an image file no longer has the analysed
+            size; nothing is written.
         """
         folder = export_folder(self._collection, folder, "drawings")
         paths = [folder / f"{name}.png" for name in self]

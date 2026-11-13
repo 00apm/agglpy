@@ -42,11 +42,15 @@ __all__ = [
 class ImageParams:
     """The params of one image.
 
-    Attributes:
-        region: The analysed part of the image.
-        preprocess: Image preprocessing before detection.
-        hct: The HCT ranges; None while ``hct.ranges`` is empty
-            (detection needs at least one range).
+    Parameters
+    ----------
+    region : RegionParams
+        The analysed part of the image.
+    preprocess : PreprocessParams
+        Image preprocessing before detection.
+    hct : HCTParams or None
+        The HCT ranges; None while ``hct.ranges`` is empty
+        (detection needs at least one range).
     """
 
     region: RegionParams
@@ -68,9 +72,12 @@ _SECTION_CLASSES: dict[str, type] = {
 class Problem(NamedTuple):
     """One problem in a params mapping.
 
-    Attributes:
-        path: Where, like ``"hct.ranges[0]"``; ``""`` for the root.
-        message: What is wrong.
+    Parameters
+    ----------
+    path : str
+        Where, like ``"hct.ranges[0]"``; ``""`` for the root.
+    message : str
+        What is wrong.
     """
 
     path: str

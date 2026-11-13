@@ -64,10 +64,14 @@ def _find_contacts(particles: pd.DataFrame) -> _Contacts:
     and keeps only partners not larger than itself, so a large particle
     searches far once and the many small ones search only nearby.
 
-    Args:
-        particles: A validated particle table.
+    Parameters
+    ----------
+    particles : DataFrame
+        A validated particle table.
 
-    Returns:
+    Returns
+    -------
+    _Contacts
         The touching pairs (see ``_Contacts``).
     """
     n = len(particles)
@@ -110,11 +114,16 @@ def _label_agglomerates(
     from 0, ordered by each agglomerate's smallest particle id, so
     they depend only on the particles, not on the row order.
 
-    Args:
-        particles: A validated particle table.
-        contacts: Its contacts (``_find_contacts``).
+    Parameters
+    ----------
+    particles : DataFrame
+        A validated particle table.
+    contacts : _Contacts
+        Its contacts (``_find_contacts``).
 
-    Returns:
+    Returns
+    -------
+    Series
         ``agglomerate_id`` (int64) per particle, on the table's index.
     """
     n = len(particles)
@@ -171,20 +180,28 @@ def _find_enclosed(
     the circle of a particle it touches (``_find_inside``). For two
     identical circles only the one with the higher id is enclosed.
 
-    Args:
-        particles: A validated particle table.
-        contacts: Its contacts (``_find_contacts``).
-        inside: Per contact, whether it is an enclosure
-            (``_find_inside``).
+    Parameters
+    ----------
+    particles : DataFrame
+        A validated particle table.
+    contacts : _Contacts
+        Its contacts (``_find_contacts``).
+    inside : ndarray
+        Per contact, whether it is an enclosure
+        (``_find_inside``).
 
-    Returns:
+    Returns
+    -------
+    Series
         ``enclosed`` (bool) per particle, on the table's index.
 
-    Warns:
-        DuplicateParticlesWarning: If an enclosed particle and the one
-            enclosing it are near-identical (see
-            ``tables.find_duplicates``): a detection error that is
-            counted as an enclosed particle.
+    Warns
+    -----
+    DuplicateParticlesWarning
+        If an enclosed particle and the one
+        enclosing it are near-identical (see
+        ``tables.find_duplicates``): a detection error that is
+        counted as an enclosed particle.
     """
     enclosed = np.zeros(len(particles), dtype=bool)
     if inside.any():
@@ -296,10 +313,14 @@ def find_agglomerates(
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Group particles into agglomerates and list their contacts.
 
-    Args:
-        particles: A particle table.
+    Parameters
+    ----------
+    particles : DataFrame
+        A particle table.
 
-    Returns:
+    Returns
+    -------
+    tuple
         ``(particles, contacts)``. ``particles``: a validated copy
         (fresh index, rows in input order) with the columns
         ``agglomerate_id`` (int64), ``enclosed`` (bool) and
@@ -313,11 +334,15 @@ def find_agglomerates(
         Possible contacts are an upper bound: ``coordination`` may
         count a particle that only overlaps in the projection.
 
-    Raises:
-        ParticleTableError: If the table breaks the schema.
+    Raises
+    ------
+    ParticleTableError
+        If the table breaks the schema.
 
-    Warns:
-        DuplicateParticlesWarning: See ``_find_enclosed``.
+    Warns
+    -----
+    DuplicateParticlesWarning
+        See ``_find_enclosed``.
     """
     # The caller saw the general duplicate warning when the table was
     # made; only the one about enclosed duplicates comes from here.
@@ -344,12 +369,16 @@ def _check_contacts(particles: pd.DataFrame, contacts: pd.DataFrame) -> _Pairs:
     counts. Ids may be whole floats (a table read back from a CSV
     file). ``inside`` is not needed.
 
-    Returns:
+    Returns
+    -------
+    _Pairs
         The ids, read once, for the caller to use.
 
-    Raises:
-        TableError: If a column is missing, an id is not an integer or
-            repeats, or the pairs do not match the particles.
+    Raises
+    ------
+    TableError
+        If a column is missing, an id is not an integer or
+        repeats, or the pairs do not match the particles.
     """
     for name, table, columns in (
         ("particles", particles, ("id", "agglomerate_id")),
@@ -467,20 +496,28 @@ def select_agglomerates(
     which read both tables, would mix the two (``N_ppA``, ``n_ppA``).
     A particle stays when its ``(image, agglomerate_id)`` stays.
 
-    Args:
-        particles: Particle table with ``image`` and ``agglomerate_id``.
-        agglomerates: Agglomerate table with the same two columns.
-        mask: True / False per agglomerate, on the agglomerate table's
-            index, e.g. ``agglomerates["D_feret_max"] > 1.5``.
+    Parameters
+    ----------
+    particles : DataFrame
+        Particle table with ``image`` and ``agglomerate_id``.
+    agglomerates : DataFrame
+        Agglomerate table with the same two columns.
+    mask : Series
+        True / False per agglomerate, on the agglomerate table's
+        index, e.g. ``agglomerates["D_feret_max"] > 1.5``.
 
-    Returns:
+    Returns
+    -------
+    tuple
         ``(particles, agglomerates)``: copies with the kept rows; index
         and columns unchanged. The images table is not touched, so an
         image with nothing left still counts (zeros).
 
-    Raises:
-        TableError: If a column is missing, or ``mask`` is not a
-            True / False Series on the agglomerate table's index.
+    Raises
+    ------
+    TableError
+        If a column is missing, or ``mask`` is not a
+        True / False Series on the agglomerate table's index.
     """
     columns = ["image", "agglomerate_id"]
     for name, table in (

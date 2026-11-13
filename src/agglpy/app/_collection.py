@@ -102,11 +102,14 @@ class Collection:
         ``add_images``. A write that fails removes what this call
         wrote and re-raises the error.
 
-        Raises:
-            OutputExistsError: If ``folder`` already holds a sheet or
-                ``agglpy.yml``; nothing is written.
-            SheetError: If image names clash (ignoring case) or are not
-                valid; nothing is written.
+        Raises
+        ------
+        OutputExistsError
+            If ``folder`` already holds a sheet or
+            ``agglpy.yml``; nothing is written.
+        SheetError
+            If image names clash (ignoring case) or are not
+            valid; nothing is written.
         """
         if sheet_format not in _FORMATS:
             raise ParamsError(
@@ -157,11 +160,15 @@ class Collection:
     def open(cls, folder: PathLike) -> "Collection":
         """Open the collection in ``folder``, checking both files.
 
-        Raises:
-            FileNotFoundError: If the sheet or ``agglpy.yml`` is
-                missing.
-            SheetError: Listing every problem of the sheet.
-            ParamsError: Listing every problem of ``agglpy.yml``.
+        Raises
+        ------
+        FileNotFoundError
+            If the sheet or ``agglpy.yml`` is
+            missing.
+        SheetError
+            Listing every problem of the sheet.
+        ParamsError
+            Listing every problem of ``agglpy.yml``.
         """
         col = cls(folder)
         col._read(check=True)
@@ -180,8 +187,10 @@ class Collection:
     def __getitem__(self, name: str) -> Image:
         """A handle on image ``name``; it reads the files on access.
 
-        Raises:
-            KeyError: If ``name`` is not in the sheet.
+        Raises
+        ------
+        KeyError
+            If ``name`` is not in the sheet.
         """
         sheet = validate(read_grid(self.sheet_path))
         if name not in sheet.names:
@@ -223,11 +232,14 @@ class Collection:
         are set, rows left out removed, new rows appended. Everything
         else in the file is kept. The new content is checked first.
 
-        Raises:
-            SheetError: Listing every problem of the new content;
-                nothing is written.
-            ParamsError: If ``agglpy.yml`` has settings for an image
-                the table leaves out; nothing is written.
+        Raises
+        ------
+        SheetError
+            Listing every problem of the new content;
+            nothing is written.
+        ParamsError
+            If ``agglpy.yml`` has settings for an image
+            the table leaves out; nothing is written.
         """
         sheet, config = self._read()
         header = [str(c) for c in table.columns]
@@ -257,12 +269,16 @@ class Collection:
         on the rows of ``status()`` or ``read_sheet()``. Their ``note``
         stays. Cells already holding 1/0 get 1/0.
 
-        Raises:
-            SheetError: If the sheet has problems; nothing is written.
-            ParamsError: If a name is not in the sheet or
-                ``agglpy.yml`` has problems; nothing is written.
-            TableError: If a mask is not on the sheet's rows; nothing
-                is written.
+        Raises
+        ------
+        SheetError
+            If the sheet has problems; nothing is written.
+        ParamsError
+            If a name is not in the sheet or
+            ``agglpy.yml`` has problems; nothing is written.
+        TableError
+            If a mask is not on the sheet's rows; nothing
+            is written.
         """
         self._set_include(images, True, None)
 
@@ -274,12 +290,16 @@ class Collection:
         reason) replaces their ``note``; None keeps it. Cells already
         holding 1/0 get 1/0.
 
-        Raises:
-            SheetError: If the sheet has problems; nothing is written.
-            ParamsError: If a name is not in the sheet or
-                ``agglpy.yml`` has problems; nothing is written.
-            TableError: If a mask is not on the sheet's rows; nothing
-                is written.
+        Raises
+        ------
+        SheetError
+            If the sheet has problems; nothing is written.
+        ParamsError
+            If a name is not in the sheet or
+            ``agglpy.yml`` has problems; nothing is written.
+        TableError
+            If a mask is not on the sheet's rows; nothing
+            is written.
         """
         self._set_include(images, False, note)
 
@@ -323,12 +343,16 @@ class Collection:
         Files already in the sheet are skipped; nothing typed into the
         sheet changes.
 
-        Returns:
+        Returns
+        -------
+        list of str
             The new image names, in order.
 
-        Raises:
-            SheetError: If image names clash (ignoring case) or are not
-                valid; nothing is written.
+        Raises
+        ------
+        SheetError
+            If image names clash (ignoring case) or are not
+            valid; nothing is written.
         """
         sheet, _ = self._read()
         grid = read_grid(sheet.path)
@@ -364,19 +388,26 @@ class Collection:
         ``add_images`` on its folder adds it again. ``exclude`` keeps
         an image in the collection without using it.
 
-        Returns:
+        Returns
+        -------
+        list of str
             The removed names, in sheet order.
 
-        Raises:
-            ParamsError: If a name is not in the sheet or
-                ``agglpy.yml`` has problems; nothing is changed.
-            TableError: If a mask is not on the sheet's rows; nothing
-                is changed.
-            OutputExistsError: If an image has a manual correction
-                (``particles_corrected.csv``) and ``force`` is False;
-                nothing is changed.
-            OutputLockedError: If the sheet, ``agglpy.yml`` or a file
-                in a work folder is held open; nothing is changed.
+        Raises
+        ------
+        ParamsError
+            If a name is not in the sheet or
+            ``agglpy.yml`` has problems; nothing is changed.
+        TableError
+            If a mask is not on the sheet's rows; nothing
+            is changed.
+        OutputExistsError
+            If an image has a manual correction
+            (``particles_corrected.csv``) and ``force`` is False;
+            nothing is changed.
+        OutputLockedError
+            If the sheet, ``agglpy.yml`` or a file
+            in a work folder is held open; nothing is changed.
         """
         sheet, config = self._read()
         names = _names(sheet, images)
@@ -468,9 +499,11 @@ class Collection:
     def params(self, image: str | None = None) -> ImageParams:
         """The params of ``image``; None gives the defaults.
 
-        Raises:
-            ParamsError: If ``image`` is not in the sheet or
-                ``agglpy.yml`` has problems.
+        Raises
+        ------
+        ParamsError
+            If ``image`` is not in the sheet or
+            ``agglpy.yml`` has problems.
         """
         sheet, config = self._read(check=True)
         if image is not None:
@@ -491,9 +524,11 @@ class Collection:
         replaces the section. An image's entry keeps only what differs
         from the defaults. Every image is checked before writing.
 
-        Raises:
-            ParamsError: If ``image`` is not in the sheet or the result
-                has problems; nothing is written.
+        Raises
+        ------
+        ParamsError
+            If ``image`` is not in the sheet or the result
+            has problems; nothing is written.
         """
         sheet, config = self._read()
         if image is not None:
@@ -509,10 +544,12 @@ class Collection:
         The image then takes that value from the defaults. An entry for
         an image the sheet no longer has can be removed too.
 
-        Raises:
-            ParamsError: If ``image`` has neither a row nor an entry,
-                ``key`` is not a params key, or the result has
-                problems; nothing is written.
+        Raises
+        ------
+        ParamsError
+            If ``image`` has neither a row nor an entry,
+            ``key`` is not a params key, or the result has
+            problems; nothing is written.
         """
         sheet, config = self._read()
         if image not in config.images():
@@ -549,21 +586,29 @@ class Collection:
         each image go into its record and the ``warnings`` column; after
         the batch, each warning class is raised once, naming the images.
 
-        Returns:
+        Returns
+        -------
+        DataFrame
             One row per image in sheet order: ``image``, ``outcome``,
             ``particle_count`` (when written), ``message``,
             ``warnings``.
 
-        Raises:
-            ParamsError: If a name is not in the sheet or
-                ``agglpy.yml`` has problems; nothing runs.
-            TableError: If a mask is not on the sheet's rows; nothing
-                runs.
+        Raises
+        ------
+        ParamsError
+            If a name is not in the sheet or
+            ``agglpy.yml`` has problems; nothing runs.
+        TableError
+            If a mask is not on the sheet's rows; nothing
+            runs.
 
-        Warns:
-            IncompleteRunWarning: If an image ended ``kept``, ``error``
-                or ``skipped`` for any reason but ``up to date``.
-            LossyImageWarning: If an image file is JPEG-compressed.
+        Warns
+        -----
+        IncompleteRunWarning
+            If an image ended ``kept``, ``error``
+            or ``skipped`` for any reason but ``up to date``.
+        LossyImageWarning
+            If an image file is JPEG-compressed.
         """
         sheet, config = self._read(check=True)
         if images is None:
@@ -597,22 +642,31 @@ class Collection:
         correction started from, with how many detected circles it
         kept. Works without the image file and without a detection.
 
-        Returns:
+        Returns
+        -------
+        DataFrame
             A one-row table like ``detect``'s; ``outcome`` is
             ``imported`` or ``replaced``.
 
-        Raises:
-            ParamsError: If ``name`` is not in the sheet.
-            FileNotFoundError: If ``path`` doesn't exist.
-            FileFormatError: If ``path`` is not a particle file.
-            OutputExistsError: If ``particles_corrected.csv`` was
-                changed by a person and ``force`` is False; nothing is
-                written.
+        Raises
+        ------
+        ParamsError
+            If ``name`` is not in the sheet.
+        FileNotFoundError
+            If ``path`` doesn't exist.
+        FileFormatError
+            If ``path`` is not a particle file.
+        OutputExistsError
+            If ``particles_corrected.csv`` was
+            changed by a person and ``force`` is False; nothing is
+            written.
 
-        Warns:
-            UserWarning: If the correction keeps less than half of the
-                detected circles: it is then shown as not based on the
-                detection.
+        Warns
+        -----
+        UserWarning
+            If the correction keeps less than half of the
+            detected circles: it is then shown as not based on the
+            detection.
         """
         sheet, _ = self._read()
         _known(sheet, name)
@@ -629,7 +683,9 @@ class Collection:
         Writes nothing. Images are hashed again only when their size or
         time differs from the record; particle files always.
 
-        Returns:
+        Returns
+        -------
+        DataFrame
             One row per sheet image, in sheet order: ``image``,
             ``include``, ``file`` (``ok`` / ``missing`` /
             ``unreadable``), ``pixel_size_nm`` and
@@ -644,14 +700,19 @@ class Collection:
             ``edited by hand``, ``no record``, ``unreadable``),
             ``kept`` and ``warnings`` (of the set in use).
 
-        Raises:
-            ParamsError: If ``agglpy.yml`` has problems.
+        Raises
+        ------
+        ParamsError
+            If ``agglpy.yml`` has problems.
 
-        Warns:
-            LeftoverFoldersWarning: If ``agglpy/`` holds folders of
-                images the sheet does not list.
-            UnreadableRecordWarning: For each record that does not
-                read; it counts as missing.
+        Warns
+        -----
+        LeftoverFoldersWarning
+            If ``agglpy/`` holds folders of
+            images the sheet does not list.
+        UnreadableRecordWarning
+            For each record that does not
+            read; it counts as missing.
         """
         sheet, config = self._read(check=True)
         with warnings.catch_warnings(record=True) as caught:
@@ -676,26 +737,35 @@ class Collection:
         images with their messages. ``progress=True`` shows a bar over
         the images; one log line per image.
 
-        Raises:
-            ParamsError: If ``agglpy.yml`` has problems.
-            NotReadyError: If no image is included, or an included
-                image has no pixel size, no particles, or a file that is
-                missing or does not read; nothing is computed, the
-                message lists every such image.
+        Raises
+        ------
+        ParamsError
+            If ``agglpy.yml`` has problems.
+        NotReadyError
+            If no image is included, or an included
+            image has no pixel size, no particles, or a file that is
+            missing or does not read; nothing is computed, the
+            message lists every such image.
 
-        Warns:
-            OutdatedParticlesWarning: First, if a detection in use was
-                made with other params or another image file: the
-                results don't reflect the current params.
-            ParticlesOutsideRegionWarning: If circles lying entirely
-                outside the region were left out (counted in
-                ``outside_region``).
-            DuplicateParticlesWarning: About duplicate enclosed
-                particles.
-            PixelSizeWarning: If an image file's pixel size, used for
-                the results, is doubtful.
-            UnreadableRecordWarning: For each record that does not
-                read; it counts as missing.
+        Warns
+        -----
+        OutdatedParticlesWarning
+            First, if a detection in use was
+            made with other params or another image file: the
+            results don't reflect the current params.
+        ParticlesOutsideRegionWarning
+            If circles lying entirely
+            outside the region were left out (counted in
+            ``outside_region``).
+        DuplicateParticlesWarning
+            About duplicate enclosed
+            particles.
+        PixelSizeWarning
+            If an image file's pixel size, used for
+            the results, is doubtful.
+        UnreadableRecordWarning
+            For each record that does not
+            read; it counts as missing.
         """
         sheet, config = self._read(check=True)
         with warnings.catch_warnings(record=True) as caught:
@@ -761,10 +831,13 @@ def _names(sheet: Sheet, images: Images) -> list[str]:
     A bool Series is a mask on the sheet's rows (the index of
     ``status()`` and ``read_sheet()``); any other value lists names.
 
-    Raises:
-        TableError: If a mask is not on the sheet's rows, has missing
-            values, or a Series holds neither bools nor names.
-        ParamsError: If a name is not in the sheet.
+    Raises
+    ------
+    TableError
+        If a mask is not on the sheet's rows, has missing
+        values, or a Series holds neither bools nor names.
+    ParamsError
+        If a name is not in the sheet.
     """
     if isinstance(images, pd.Series):
         if pd.api.types.is_bool_dtype(images):

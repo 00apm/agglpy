@@ -84,22 +84,28 @@ class HCTRange:
     2``, ``param1 = canny_threshold``, ``param2 =
     accumulator_threshold``.
 
-    Attributes:
-        d_min: Smallest circle diameter searched, in px.
-        d_max: Largest circle diameter searched, in px.
-        min_dist_ratio: Minimum distance between detected centres, as a
-            fraction of the range's largest radius (``d_max / 2``).
-            OpenCV keeps the stronger of two centres closer than that,
-            so a wide range can lose real overlapping small particles
-            (r 30-120 and 0.4: two r 30 particles 40 px apart, 40 < 48);
-            narrow the range then.
-        canny_threshold: Upper threshold of the Canny edge detector
-            inside OpenCV's HoughCircles (``param1``). OpenCV rounds it
-            to an integer; the lower threshold is half of that, rounded
-            down (``core.detect.hct_edges`` shows the edges).
-        accumulator_threshold: Votes a centre needs (``param2``),
-            rounded to an integer by OpenCV; lower values find more
-            circles, and more false ones.
+    Parameters
+    ----------
+    d_min : int
+        Smallest circle diameter searched, in px.
+    d_max : int
+        Largest circle diameter searched, in px.
+    min_dist_ratio : float, default 0.4
+        Minimum distance between detected centres, as a
+        fraction of the range's largest radius (``d_max / 2``).
+        OpenCV keeps the stronger of two centres closer than that,
+        so a wide range can lose real overlapping small particles
+        (r 30-120 and 0.4: two r 30 particles 40 px apart, 40 < 48);
+        narrow the range then.
+    canny_threshold : float, default 200.0
+        Upper threshold of the Canny edge detector
+        inside OpenCV's HoughCircles (``param1``). OpenCV rounds it
+        to an integer; the lower threshold is half of that, rounded
+        down (``core.detect.hct_edges`` shows the edges).
+    accumulator_threshold : float, default 15.0
+        Votes a centre needs (``param2``),
+        rounded to an integer by OpenCV; lower values find more
+        circles, and more false ones.
     """
 
     d_min: int
@@ -129,8 +135,10 @@ class HCTRange:
 class HCTParams:
     """All HCT ranges for one image, run one after another.
 
-    Attributes:
-        ranges: The passes, at least one. A list is stored as a tuple.
+    Parameters
+    ----------
+    ranges : tuple of HCTRange
+        The passes, at least one. A list is stored as a tuple.
     """
 
     ranges: tuple[HCTRange, ...]
@@ -151,9 +159,12 @@ class HCTParams:
 class ClaheParams:
     """Contrast Limited Adaptive Histogram Equalization (OpenCV).
 
-    Attributes:
-        clip_limit: Contrast limit, > 0.
-        tile_grid: Number of tiles (columns, rows), each >= 1.
+    Parameters
+    ----------
+    clip_limit : float
+        Contrast limit, > 0.
+    tile_grid : tuple
+        Number of tiles (columns, rows), each >= 1.
     """
 
     clip_limit: float
@@ -177,19 +188,23 @@ class RollingBallParams:
     The ball is scikit-image's exact one, so values may differ slightly
     from Fiji's.
 
-    Attributes:
-        radius: Ball radius in px, > 0. Larger than the largest particle
-            for a pure background estimate; a smaller ball also goes
-            inside large particles and raises the contrast within them.
-            The time grows with radius² (about 50 s at 50 px on a
-            3072 x 2074 image).
-        light_background: True if the particles are darker than the
-            background: the image is inverted, its background
-            subtracted and the result inverted back, so the polarity
-            stays.
-        presmooth: Estimate the background on a 3x3 mean-blurred copy,
-            less sensitive to noise; the background is subtracted from
-            the unblurred image.
+    Parameters
+    ----------
+    radius : float
+        Ball radius in px, > 0. Larger than the largest particle
+        for a pure background estimate; a smaller ball also goes
+        inside large particles and raises the contrast within them.
+        The time grows with radius² (about 50 s at 50 px on a
+        3072 x 2074 image).
+    light_background : bool, default False
+        True if the particles are darker than the
+        background: the image is inverted, its background
+        subtracted and the result inverted back, so the polarity
+        stays.
+    presmooth : bool, default True
+        Estimate the background on a 3x3 mean-blurred copy,
+        less sensitive to noise; the background is subtracted from
+        the unblurred image.
     """
 
     radius: float
@@ -206,11 +221,13 @@ class RollingBallParams:
 class RegionParams:
     """The part of an image that is analysed.
 
-    Attributes:
-        bottom_fraction: Fraction of the image height cut off at the
-            bottom (the SEM data bar), 0 <= bottom_fraction < 1. The
-            rows kept are ``(1 - bottom_fraction) * height`` rounded
-            to the nearest whole row, a half up.
+    Parameters
+    ----------
+    bottom_fraction : float, default 0.0
+        Fraction of the image height cut off at the
+        bottom (the SEM data bar), 0 <= bottom_fraction < 1. The
+        rows kept are ``(1 - bottom_fraction) * height`` rounded
+        to the nearest whole row, a half up.
     """
 
     bottom_fraction: float = 0.0
@@ -228,10 +245,14 @@ class PreprocessParams:
 
     The steps run in the order of the fields; ``None`` skips a step.
 
-    Attributes:
-        median_blur: Odd kernel size >= 3, or None for no blur.
-        rolling_ball: Background subtraction settings, or None.
-        clahe: CLAHE settings, or None.
+    Parameters
+    ----------
+    median_blur : int, optional
+        Odd kernel size >= 3, or None for no blur.
+    rolling_ball : RollingBallParams, optional
+        Background subtraction settings, or None.
+    clahe : ClaheParams, optional
+        CLAHE settings, or None.
     """
 
     median_blur: int | None = None

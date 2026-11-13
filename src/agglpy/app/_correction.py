@@ -92,11 +92,15 @@ def run_import(
     Returns the one-row report and the warnings caught, for the caller
     to re-emit at the user's line.
 
-    Raises:
-        FileNotFoundError: If ``path`` doesn't exist.
-        FileFormatError: If ``path`` is not a particle file.
-        OutputExistsError: If the existing correction was changed by a
-            person and ``force`` is False; nothing is written.
+    Raises
+    ------
+    FileNotFoundError
+        If ``path`` doesn't exist.
+    FileFormatError
+        If ``path`` is not a particle file.
+    OutputExistsError
+        If the existing correction was changed by a
+        person and ``force`` is False; nothing is written.
     """
     name = entry.image
     with warnings.catch_warnings(record=True) as caught:

@@ -47,13 +47,18 @@ R = TypeVar("R", DetectionRecord, CorrectionRecord)
 class ParticleFile:
     """A particle CSV against its record.
 
-    Attributes:
-        state: ``matching``, ``edited by hand`` (its hash differs from
-            the record's), ``no record`` (missing or unreadable) or
-            ``unreadable`` (the CSV itself).
-        record: The record, None when missing or unreadable.
-        particles: The particle table, None when the CSV is unreadable.
-        sha256: The CSV's hash.
+    Parameters
+    ----------
+    state : State
+        ``matching``, ``edited by hand`` (its hash differs from
+        the record's), ``no record`` (missing or unreadable) or
+        ``unreadable`` (the CSV itself).
+    record : DetectionRecord or CorrectionRecord or None
+        The record, None when missing or unreadable.
+    particles : DataFrame or None
+        The particle table, None when the CSV is unreadable.
+    sha256 : str
+        The CSV's hash.
     """
 
     state: State
@@ -70,9 +75,11 @@ def export_folder(
     None gives ``exports/<kind>`` in the collection; a relative
     ``folder`` is taken from the current working directory.
 
-    Raises:
-        ParamsError: If the folder lies in the work folder
-            ``agglpy/``, which agglpy owns.
+    Raises
+    ------
+    ParamsError
+        If the folder lies in the work folder
+        ``agglpy/``, which agglpy owns.
     """
     if folder is None:
         return (collection / EXPORTS_FOLDER / kind).resolve()
@@ -98,9 +105,12 @@ def inspect(
     The reader's own warnings (duplicates, ImageJ shapes) are dropped:
     they belong to the record of the run that wrote the file.
 
-    Warns:
-        UserWarning: If the CSV does not read.
-        UnreadableRecordWarning: If the record does not read.
+    Warns
+    -----
+    UserWarning
+        If the CSV does not read.
+    UnreadableRecordWarning
+        If the record does not read.
     """
     if not csv.is_file():
         return None

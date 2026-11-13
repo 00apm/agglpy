@@ -54,9 +54,11 @@ def run(
     (outdated detections first, then one per class) for the caller to
     emit at the user's line.
 
-    Raises:
-        NotReadyError: If no image is included or an included image is
-            not ready; the message lists them all.
+    Raises
+    ------
+    NotReadyError
+        If no image is included or an included image is
+        not ready; the message lists them all.
     """
     included = [e for e in sheet.entries if e.include]
     if not sheet.entries:

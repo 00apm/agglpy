@@ -23,26 +23,36 @@ class ImageResult:
     sent to another process. No equality: compare the tables
     themselves.
 
-    Attributes:
-        particles: The kept particles: ``id, x, y, r``, any extra
-            columns of the input, then ``agglomerate_id``,
-            ``enclosed``, ``coordination``, ``D``, ``area``,
-            ``volume``, ``surface`` and, with an image size,
-            ``touches_edge``.
-        agglomerates: One row per agglomerate
-            (``core.properties.agglomerate_properties``), with
-            ``touches_edge`` when the image size was given.
-        contacts: The possible contacts between the kept particles,
-            by particle id (``core.agglomerates.find_agglomerates``).
-        outside_ids: Ids of the particles left out as lying entirely
-            outside the analysed region, ascending; empty without an
-            image size.
-        width: Image width in px, or None.
-        height: Image height in px, or None.
-        region: The region params used.
-        bounds: The analysed rectangle, or None without an image size.
-        fov_area: Area of the analysed region (field of view) in px²,
-            or None without an image size.
+    Parameters
+    ----------
+    particles : DataFrame
+        The kept particles: ``id, x, y, r``, any extra
+        columns of the input, then ``agglomerate_id``,
+        ``enclosed``, ``coordination``, ``D``, ``area``,
+        ``volume``, ``surface`` and, with an image size,
+        ``touches_edge``.
+    agglomerates : DataFrame
+        One row per agglomerate
+        (``core.properties.agglomerate_properties``), with
+        ``touches_edge`` when the image size was given.
+    contacts : DataFrame
+        The possible contacts between the kept particles,
+        by particle id (``core.agglomerates.find_agglomerates``).
+    outside_ids : tuple of int
+        Ids of the particles left out as lying entirely
+        outside the analysed region, ascending; empty without an
+        image size.
+    width : int or None
+        Image width in px, or None.
+    height : int or None
+        Image height in px, or None.
+    region : RegionParams
+        The region params used.
+    bounds : Bounds or None
+        The analysed rectangle, or None without an image size.
+    fov_area : float or None
+        Area of the analysed region (field of view) in px²,
+        or None without an image size.
     """
 
     particles: pd.DataFrame
@@ -72,26 +82,39 @@ def analyze(
     particles and agglomerates get ``touches_edge``. Without it,
     nothing is left out or flagged.
 
-    Args:
-        particles: A particle table in px; not modified.
-        width: Image width in px; give both sizes or neither.
-        height: Image height in px.
-        region: The analysed region; needs the image size unless it is
-            the whole image.
+    Parameters
+    ----------
+    particles : DataFrame
+        A particle table in px; not modified.
+    width : int, optional
+        Image width in px; give both sizes or neither.
+    height : int, optional
+        Image height in px.
+    region : RegionParams, default RegionParams()
+        The analysed region; needs the image size unless it is
+        the whole image.
 
-    Returns:
+    Returns
+    -------
+    ImageResult
         The tables and the region, in px.
 
-    Raises:
-        ParamsError: If only one size is given, a size is not an
-            integer >= 1, ``region`` cuts the image without a size, or
-            the cut leaves no row.
-        ParticleTableError: If the table breaks the schema.
+    Raises
+    ------
+    ParamsError
+        If only one size is given, a size is not an
+        integer >= 1, ``region`` cuts the image without a size, or
+        the cut leaves no row.
+    ParticleTableError
+        If the table breaks the schema.
 
-    Warns:
-        ParticlesOutsideRegionWarning: If circles were left out.
-        DuplicateParticlesWarning: About duplicate enclosed particles
-            (see ``core.agglomerates.find_agglomerates``).
+    Warns
+    -----
+    ParticlesOutsideRegionWarning
+        If circles were left out.
+    DuplicateParticlesWarning
+        About duplicate enclosed particles
+        (see ``core.agglomerates.find_agglomerates``).
     """
     if (width is None) != (height is None):
         raise ParamsError("give both width and height, or neither")

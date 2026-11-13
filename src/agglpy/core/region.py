@@ -25,11 +25,16 @@ class Bounds:
     Pixel ``i`` covers ``[i - 0.5, i + 0.5)``, so a region of whole
     pixels has its edges at ``k - 0.5``.
 
-    Attributes:
-        x_min: Left edge.
-        y_min: Top edge.
-        x_max: Right edge.
-        y_max: Bottom edge.
+    Parameters
+    ----------
+    x_min : float
+        Left edge.
+    y_min : float
+        Top edge.
+    x_max : float
+        Right edge.
+    y_max : float
+        Bottom edge.
     """
 
     x_min: float
@@ -51,18 +56,26 @@ def region_bounds(region: RegionParams, width: int, height: int) -> Bounds:
     Width and height are plain numbers, so the region of an image is
     known from its metadata without its pixels.
 
-    Args:
-        region: The region params.
-        width: Image width in px.
-        height: Image height in px.
+    Parameters
+    ----------
+    region : RegionParams
+        The region params.
+    width : int
+        Image width in px.
+    height : int
+        Image height in px.
 
-    Returns:
+    Returns
+    -------
+    Bounds
         The analysed rectangle, e.g. ``Bounds(-0.5, -0.5, 3071.5,
         2073.5)`` for a 3072 x 2304 image and ``bottom_fraction=0.1``.
 
-    Raises:
-        ParamsError: If ``width`` or ``height`` is not an integer >= 1,
-            or the cut leaves no row.
+    Raises
+    ------
+    ParamsError
+        If ``width`` or ``height`` is not an integer >= 1,
+        or the cut leaves no row.
     """
     for name, value in (("width", width), ("height", height)):
         if _integer(name, value) < 1:
@@ -87,10 +100,14 @@ def region_slices(bounds: Bounds) -> tuple[slice, slice]:
     bounds.y_min + 0.5)`` to bring them back to the image, which is
     (0, 0) for a bottom cut.
 
-    Args:
-        bounds: A rectangle from ``region_bounds``.
+    Parameters
+    ----------
+    bounds : Bounds
+        A rectangle from ``region_bounds``.
 
-    Returns:
+    Returns
+    -------
+    tuple
         ``(rows, cols)``, e.g. ``(slice(0, 2074), slice(0, 3072))``.
     """
     rows = slice(round(bounds.y_min + 0.5), round(bounds.y_max + 0.5))
@@ -109,18 +126,25 @@ def outside_region(
     but still reaches in is not outside. The region lies inside the
     image, so a circle outside the image is outside the region too.
 
-    Args:
-        particles: A validated particle table (columns ``x, y, r`` in
-            px); a NaN coordinate, which validation rejects, would
-            count as not outside.
-        bounds: The analysed rectangle, from ``region_bounds``.
+    Parameters
+    ----------
+    particles : DataFrame
+        A validated particle table (columns ``x, y, r`` in
+        px); a NaN coordinate, which validation rejects, would
+        count as not outside.
+    bounds : Bounds
+        The analysed rectangle, from ``region_bounds``.
 
-    Returns:
+    Returns
+    -------
+    Series
         A boolean mask on ``particles.index``: ``particles[~mask]``
         keeps the circles that overlap the region.
 
-    Raises:
-        ParticleTableError: If ``x``, ``y`` or ``r`` is missing.
+    Raises
+    ------
+    ParticleTableError
+        If ``x``, ``y`` or ``r`` is missing.
     """
     missing = [c for c in ("x", "y", "r") if c not in particles.columns]
     if missing:

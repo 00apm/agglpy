@@ -62,12 +62,16 @@ def size_classes(
     Any increasing array of edges works in ``distribution`` too; this
     is a helper for the usual ones.
 
-    Returns:
+    Returns
+    -------
+    ndarray
         The edges, float64; ``count + 1`` of them.
 
-    Raises:
-        ParamsError: If an argument is invalid or ``step`` does not
-            divide the range.
+    Raises
+    ------
+    ParamsError
+        If an argument is invalid or ``step`` does not
+        divide the range.
     """
     low = _number("start", start)
     high = _number("end", end)
@@ -120,19 +124,29 @@ def distribution(
     - Every class appears in every group, zeros included; a group
       without values has zero amounts and NaN fractions.
 
-    Args:
-        images: The images table; the groups come from it.
-        table: A table with ``image``, ``column`` and the ``weights``
-            columns (particle or agglomerate table).
-        column: The column to classify.
-        edges: Increasing class edges (e.g. ``size_classes``).
-        by: As ``metrics.summary``.
-        closed: ``"right"`` or ``"left"``.
-        weights: Column names to weight by, e.g. ``"volume"``; each
-            adds one ``basis``. Its values must be finite wherever the
-            value is counted.
+    Parameters
+    ----------
+    images : DataFrame
+        The images table; the groups come from it.
+    table : DataFrame
+        A table with ``image``, ``column`` and the ``weights``
+        columns (particle or agglomerate table).
+    column : str
+        The column to classify.
+    edges : ArrayLike
+        Increasing class edges (e.g. ``size_classes``).
+    by : str or iterable of str, optional
+        As ``metrics.summary``.
+    closed : str, default "right"
+        ``"right"`` or ``"left"``.
+    weights : str or iterable of str, default ()
+        Column names to weight by, e.g. ``"volume"``; each
+        adds one ``basis``. Its values must be finite wherever the
+        value is counted.
 
-    Returns:
+    Returns
+    -------
+    DataFrame
         A long table: the ``by`` columns, ``left, mid, right, width``,
         ``basis`` (``"number"``, then each weight column), ``amount``
         (count, or the sum of the weight column, per class),
@@ -141,15 +155,20 @@ def distribution(
         fraction / (log10 right - log10 left)`` (dN/dlogD; NaN where
         ``left <= 0``).
 
-    Raises:
-        TableError: If a column is missing or not numeric, a weight is
-            not finite on a counted value, an image is unknown, or a
-            ``by`` column has the name of an output column.
-        ParamsError: If ``edges`` or ``closed`` is invalid, or a weight
-            column is called ``"number"`` (the name of the count basis).
+    Raises
+    ------
+    TableError
+        If a column is missing or not numeric, a weight is
+        not finite on a counted value, an image is unknown, or a
+        ``by`` column has the name of an output column.
+    ParamsError
+        If ``edges`` or ``closed`` is invalid, or a weight
+        column is called ``"number"`` (the name of the count basis).
 
-    Warns:
-        ValuesNotCountedWarning: If values were left out.
+    Warns
+    -----
+    ValuesNotCountedWarning
+        If values were left out.
     """
     check_images(images)
     groups = group_images(images, by)
@@ -239,12 +258,17 @@ def distribution_across_images(
     with the class and basis as keys. An image without counted values
     has NaN fractions: it is left out of the means and of ``n``.
 
-    Args:
-        images, table, column, edges, by, closed, weights: As
-            ``distribution``.
-        confidence: Level of the confidence interval.
+    Parameters
+    ----------
+    images, table, column, edges, by, closed, weights
+        As
+        ``distribution``.
+    confidence : float, default 0.95
+        Level of the confidence interval.
 
-    Returns:
+    Returns
+    -------
+    DataFrame
         A long table: the ``by`` columns, ``left, mid, right, width``,
         ``basis``, ``metric`` (``"fraction"``), ``mean``, ``std``,
         ``n``, ``ci_low``, ``ci_high``.

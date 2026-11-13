@@ -57,17 +57,26 @@ def make_particles(
 ) -> pd.DataFrame:
     """Build a validated particle table from coordinate arrays.
 
-    Args:
-        x: Centre x coordinates in px.
-        y: Centre y coordinates in px.
-        r: Radii in px.
-        ids: Particle ids; ``1..n`` if omitted.
+    Parameters
+    ----------
+    x : ArrayLike
+        Centre x coordinates in px.
+    y : ArrayLike
+        Centre y coordinates in px.
+    r : ArrayLike
+        Radii in px.
+    ids : ArrayLike, optional
+        Particle ids; ``1..n`` if omitted.
 
-    Returns:
+    Returns
+    -------
+    DataFrame
         A new particle table (see the module docstring).
 
-    Raises:
-        ParticleTableError: If the values break the schema.
+    Raises
+    ------
+    ParticleTableError
+        If the values break the schema.
     """
     try:
         columns = {
@@ -104,18 +113,25 @@ def validate_particles(
     extra columns in their original order, and a fresh ``RangeIndex``.
     The input is not modified.
 
-    Args:
-        table: A table with at least the columns in ``PARTICLE_COLUMNS``.
-        warn_duplicates: Warn about near-identical circles
-            (see ``find_duplicates``).
+    Parameters
+    ----------
+    table : DataFrame
+        A table with at least the columns in ``PARTICLE_COLUMNS``.
+    warn_duplicates : bool, default True
+        Warn about near-identical circles
+        (see ``find_duplicates``).
 
-    Returns:
+    Returns
+    -------
+    DataFrame
         The validated copy.
 
-    Raises:
-        ParticleTableError: If a column is missing, not numeric where
-            it must be, not finite, ``r <= 0``, or ids not integral or
-            not unique.
+    Raises
+    ------
+    ParticleTableError
+        If a column is missing, not numeric where
+        it must be, not finite, ``r <= 0``, or ids not integral or
+        not unique.
     """
     missing = [c for c in PARTICLE_COLUMNS if c not in table.columns]
     if missing:
@@ -181,12 +197,18 @@ def find_duplicates(
     depends on the tolerances, whose defaults are first guesses until
     they are calibrated on corrected images.
 
-    Args:
-        table: A particle table (columns ``id, x, y, r``).
-        xy_tol: Largest centre distance in px (inclusive).
-        r_rel_tol: Largest relative radius difference (inclusive).
+    Parameters
+    ----------
+    table : DataFrame
+        A particle table (columns ``id, x, y, r``).
+    xy_tol : float, default _DUPLICATE_XY_TOL
+        Largest centre distance in px (inclusive).
+    r_rel_tol : float, default _DUPLICATE_R_REL_TOL
+        Largest relative radius difference (inclusive).
 
-    Returns:
+    Returns
+    -------
+    list of tuple
         Pairs of ids ``(smaller id, larger id)``, sorted.
     """
     if len(table) < 2:

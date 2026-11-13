@@ -157,9 +157,12 @@ def image_info(stored: str, path: Path) -> ImageInfo:
 
     ``stored`` is the path as the sheet holds it.
 
-    Raises:
-        FileNotFoundError: If the image doesn't exist.
-        FileFormatError: If its header or pixels can't be read.
+    Raises
+    ------
+    FileNotFoundError
+        If the image doesn't exist.
+    FileFormatError
+        If its header or pixels can't be read.
     """
     meta = read_image_metadata(path)
     stat = path.stat()

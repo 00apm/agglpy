@@ -60,9 +60,12 @@ class Image:
 
         Read on each access.
 
-        Raises:
-            FileNotFoundError: If the image file is missing.
-            FileFormatError: If OpenCV can't decode it.
+        Raises
+        ------
+        FileNotFoundError
+            If the image file is missing.
+        FileFormatError
+            If OpenCV can't decode it.
         """
         return read_image(self._path())
 
@@ -77,22 +80,31 @@ class Image:
         warning: what ``detect()`` would warn is in ``p.warnings``.
         Works for every image of the sheet, excluded ones too.
 
-        Args:
-            params: The params to use, e.g. another image's
-                (``col["other"].params``) or another preview's
-                (``p.params``); None for this image's params in
-                ``agglpy.yml``. Change them with the preview's change
-                methods.
-            progress: Show a progress bar of the steps.
+        Parameters
+        ----------
+        params : ImageParams, optional
+            The params to use, e.g. another image's
+            (``col["other"].params``) or another preview's
+            (``p.params``); None for this image's params in
+            ``agglpy.yml``. Change them with the preview's change
+            methods.
+        progress : bool, default True
+            Show a progress bar of the steps.
 
-        Returns:
+        Returns
+        -------
+        Preview
             The preview.
 
-        Raises:
-            ParamsError: If ``params`` is not an ``ImageParams`` or
-                ``agglpy.yml`` has problems.
-            FileNotFoundError: If the image file is missing.
-            FileFormatError: If OpenCV can't decode it.
+        Raises
+        ------
+        ParamsError
+            If ``params`` is not an ``ImageParams`` or
+            ``agglpy.yml`` has problems.
+        FileNotFoundError
+            If the image file is missing.
+        FileFormatError
+            If OpenCV can't decode it.
         """
         return make(self._collection, self._name, params, progress)
 
@@ -120,8 +132,10 @@ class Image:
     def particles(self) -> pd.DataFrame:
         """The particle table (px) of the set in use.
 
-        Raises:
-            NoParticleSetError: If the image has no particles yet.
+        Raises
+        ------
+        NoParticleSetError
+            If the image has no particles yet.
         """
         used = self.particle_set
         if used is None:

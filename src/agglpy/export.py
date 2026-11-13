@@ -87,34 +87,48 @@ def write_results(
     sheet and ``csv/units.csv`` (``table | column | unit``). A write
     that fails part-way removes the files it wrote.
 
-    Args:
-        folder: The folder to write into.
-        tables: ``{name: table}``; names of letters, digits, ``_`` and
-            ``-``, at most 31 characters (Excel's sheet limit), not
-            ``info`` or ``units``.
-        record: What the results were made from, e.g. ``{"params":
-            ..., "particle_set": {"D7-017": "corrected"}}``: text,
-            numbers, bools, None, lists, dicts with text keys, and
-            dataclasses such as the params (written as dicts).
-        units: ``{table: {column: unit}}``, e.g. ``{"particles": {"D":
-            "m"}}``; columns without an entry are not listed.
-        overwrite: Replace an earlier export in ``folder``. Only
-            ``results.xlsx``, ``record.yml`` and ``csv/`` are removed;
-            other files are never touched.
+    Parameters
+    ----------
+    folder : path-like
+        The folder to write into.
+    tables : mapping
+        ``{name: table}``; names of letters, digits, ``_`` and
+        ``-``, at most 31 characters (Excel's sheet limit), not
+        ``info`` or ``units``.
+    record : mapping, optional
+        What the results were made from, e.g. ``{"params":
+        ..., "particle_set": {"D7-017": "corrected"}}``: text,
+        numbers, bools, None, lists, dicts with text keys, and
+        dataclasses such as the params (written as dicts).
+    units : mapping, optional
+        ``{table: {column: unit}}``, e.g. ``{"particles": {"D":
+        "m"}}``; columns without an entry are not listed.
+    overwrite : bool, default False
+        Replace an earlier export in ``folder``. Only
+        ``results.xlsx``, ``record.yml`` and ``csv/`` are removed;
+        other files are never touched.
 
-    Returns:
+    Returns
+    -------
+    Path
         The folder.
 
-    Raises:
-        TableError: If a name is not allowed, a table is not a
-            DataFrame or has MultiIndex columns, or ``units`` names a
-            table or column that is not there.
-        ParamsError: If ``record`` has its own ``agglpy`` entry.
-        TypeError: If a record value or a unit is of another type.
-        OutputExistsError: If ``folder`` holds an export and
-            ``overwrite`` is False (nothing is written).
-        OutputLockedError: If a file of the earlier export can't be
-            removed, e.g. open in Excel (nothing is changed).
+    Raises
+    ------
+    TableError
+        If a name is not allowed, a table is not a
+        DataFrame or has MultiIndex columns, or ``units`` names a
+        table or column that is not there.
+    ParamsError
+        If ``record`` has its own ``agglpy`` entry.
+    TypeError
+        If a record value or a unit is of another type.
+    OutputExistsError
+        If ``folder`` holds an export and
+        ``overwrite`` is False (nothing is written).
+    OutputLockedError
+        If a file of the earlier export can't be
+        removed, e.g. open in Excel (nothing is changed).
     """
     _check_names(tables)
     written = {name: _with_index(table) for name, table in tables.items()}

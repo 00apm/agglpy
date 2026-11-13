@@ -68,9 +68,10 @@ def setup_notebook_logger(
     It checks if the logger config yaml file exists at log_cfg_path.
     If not, it creates the file with a default configuration and applies it.
 
-    Args:
-        log_cfg_path (Path): Path to the logger config yaml file.
-        logs_path (Path): Path where the log file should be created.
+    Parameters
+    ----------
+    log_cfg_path (Path): Path to the logger config yaml file.
+    logs_path (Path): Path where the log file should be created.
     """
 
     config: dict[str, Any]

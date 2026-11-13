@@ -34,8 +34,10 @@ _TOP_KEYS = ("defaults", "images")
 class ConfigFile:
     """The loaded ``agglpy.yml``.
 
-    Attributes:
-        path: The file it was read from.
+    Attributes
+    ----------
+    path : Path
+        The file it was read from.
     """
 
     def __init__(self, path: Path, doc: Any) -> None:

@@ -62,15 +62,22 @@ def read_image(path: PathLike) -> NDArray[np.uint8]:
     paths with characters outside the system code page. The file is
     opened read-only.
 
-    Args:
-        path: The image file.
+    Parameters
+    ----------
+    path : path-like
+        The image file.
 
-    Returns:
+    Returns
+    -------
+    ndarray
         The grey image, shape ``(height, width)``.
 
-    Raises:
-        FileNotFoundError: If the file doesn't exist.
-        FileFormatError: If OpenCV can't decode the file.
+    Raises
+    ------
+    FileNotFoundError
+        If the file doesn't exist.
+    FileFormatError
+        If OpenCV can't decode the file.
     """
     path = Path(path)
     # imdecode on the bytes: cv2.imread fails on Windows for paths
@@ -86,13 +93,18 @@ def read_image(path: PathLike) -> NDArray[np.uint8]:
 class ImageMetadata:
     """What ``read_image_metadata`` found in an image file.
 
-    Attributes:
-        pixel_size: Length of one pixel in metres, or ``None`` when no
-            reader finds it (a normal value, not an error).
-        pixel_size_source: Where ``pixel_size`` came from, for the
-            record of an analysis, or ``None``.
-        width: Width of the whole file in px (a data bar included).
-        height: Height of the whole file in px.
+    Parameters
+    ----------
+    pixel_size : float or None
+        Length of one pixel in metres, or ``None`` when no
+        reader finds it (a normal value, not an error).
+    pixel_size_source : str or None
+        Where ``pixel_size`` came from, for the
+        record of an analysis, or ``None``.
+    width : int
+        Width of the whole file in px (a data bar included).
+    height : int
+        Height of the whole file in px.
     """
 
     pixel_size: float | None
@@ -111,20 +123,29 @@ def read_image_metadata(path: PathLike) -> ImageMetadata:
     never used on its own. Other formats are decoded once for their
     size and have no pixel size.
 
-    Args:
-        path: The image file.
+    Parameters
+    ----------
+    path : path-like
+        The image file.
 
-    Returns:
+    Returns
+    -------
+    ImageMetadata
         The size in px and the pixel size in metres (or ``None``).
 
-    Raises:
-        FileNotFoundError: If the file doesn't exist.
-        FileFormatError: If the TIFF header can't be read, or another
-            format can't be decoded.
+    Raises
+    ------
+    FileNotFoundError
+        If the file doesn't exist.
+    FileFormatError
+        If the TIFF header can't be read, or another
+        format can't be decoded.
 
-    Warns:
-        PixelSizeWarning: If the Zeiss text field and raw value differ
-            by more than 1 %, or the pixels are not square.
+    Warns
+    -----
+    PixelSizeWarning
+        If the Zeiss text field and raw value differ
+        by more than 1 %, or the pixels are not square.
     """
     path = Path(path)
     with path.open("rb") as fh:
@@ -337,26 +358,38 @@ def read_particles(path: PathLike, *, format: str = "auto") -> pd.DataFrame:
     ``id, x, y, r``, and any other column in the file is ignored. A
     file with a header and no rows gives an empty table.
 
-    Args:
-        path: The particle file (UTF-8, a byte order mark is fine).
-        format: ``"auto"`` (default) recognises the format from the
-            header; a format name skips that and requires its columns.
+    Parameters
+    ----------
+    path : path-like
+        The particle file (UTF-8, a byte order mark is fine).
+    format : str, default "auto"
+        ``"auto"`` (default) recognises the format from the
+        header; a format name skips that and requires its columns.
 
-    Returns:
+    Returns
+    -------
+    DataFrame
         A validated particle table.
 
-    Raises:
-        FileNotFoundError: If the file doesn't exist.
-        FileFormatError: If no format or more than one matches, a
-            column is missing or a value breaks the particle table
-            schema.
-        ParamsError: If ``format`` is not a known format name.
+    Raises
+    ------
+    FileNotFoundError
+        If the file doesn't exist.
+    FileFormatError
+        If no format or more than one matches, a
+        column is missing or a value breaks the particle table
+        schema.
+    ParamsError
+        If ``format`` is not a known format name.
 
-    Warns:
-        NonCircularParticlesWarning: If ImageJ shapes were approximated
-            or dropped.
-        DuplicateParticlesWarning: If the file holds near-identical
-            circles (see ``agglpy.tables.find_duplicates``).
+    Warns
+    -----
+    NonCircularParticlesWarning
+        If ImageJ shapes were approximated
+        or dropped.
+    DuplicateParticlesWarning
+        If the file holds near-identical
+        circles (see ``agglpy.tables.find_duplicates``).
     """
     path = Path(path)
     if format != "auto" and format not in _FORMATS:
@@ -416,10 +449,13 @@ def particle_format(path: PathLike) -> str:
     result can be ``"agglpy_v04"`` or ``"agglpy_v00"``: files written
     by older agglpy versions.
 
-    Raises:
-        FileNotFoundError: If the file doesn't exist.
-        FileFormatError: If no format or more than one matches, or the
-            file is not a UTF-8 CSV table.
+    Raises
+    ------
+    FileNotFoundError
+        If the file doesn't exist.
+    FileFormatError
+        If no format or more than one matches, or the
+        file is not a UTF-8 CSV table.
     """
     path = Path(path)
     try:
@@ -543,17 +579,25 @@ def write_particles(
     shortest decimal that reads back to the same value:
     ``read_particles`` returns the table exactly.
 
-    Args:
-        particles: A particle table.
-        path: The file to write.
-        overwrite: Replace an existing file. By default an existing
-            file is never touched.
+    Parameters
+    ----------
+    particles : DataFrame
+        A particle table.
+    path : path-like
+        The file to write.
+    overwrite : bool, default False
+        Replace an existing file. By default an existing
+        file is never touched.
 
-    Raises:
-        ParticleTableError: If the table breaks the schema (nothing is
-            written).
-        FileExistsError: If the file exists and ``overwrite`` is False.
-        FileNotFoundError: If the folder doesn't exist.
+    Raises
+    ------
+    ParticleTableError
+        If the table breaks the schema (nothing is
+        written).
+    FileExistsError
+        If the file exists and ``overwrite`` is False.
+    FileNotFoundError
+        If the folder doesn't exist.
     """
     table = validate_particles(particles, warn_duplicates=False)
     table = table.loc[:, list(PARTICLE_COLUMNS)]
