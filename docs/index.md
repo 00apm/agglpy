@@ -1,12 +1,21 @@
 # agglpy documentation
 
-> **Status: incomplete.** agglpy is under active development. Usage and API documentation will be added here as the
-> library's public interface stabilises (version 0.5 redesign).
+agglpy detects spherical primary particles on microscope (SEM/TEM) images with the Hough Circle Transform, groups
+touching particles into agglomerates and measures both: sizes, shapes, contacts, structure and population metrics.
+These pages describe agglpy 0.5 (development version); the parameters of every function are in its docstring
+(`help(col.detect)`).
 
-agglpy detects spherical primary particles on microscopic (SEM/TEM) images and classifies them into agglomerates, then computes particle-size-distribution (PSD) statistics.
+- [Getting started](getting-started.md) — install, then one walk-through from images to exported results.
+- [Collection](collection.md) — the folder agglpy works in: the image sheet, `agglpy.yml`, particle sets, status
+  labels, correcting in Fiji, which calls write files.
+- [Results](results.md) — what `col.analyze()` returns: the tables, their columns and units, metrics, size
+  distributions, subsets, drawings, export.
+- [Methodology](methodology.md) — the method: preprocessing, detection, manual correction, connectivity, hidden
+  particles, sizes and population metrics.
+- [Structure of agglomerates](agglomerate-structure.md) — cores, links, loops, dangling ends, branches and the
+  longest chain of each agglomerate (`res.with_structure()`).
 
-- [Methodology](methodology.md) — the semi-automatic detection method (preprocessing, edge/circle detection, connectivity, agglomerate classification) and how it maps to the codebase.
-- [Structure of agglomerates](agglomerate-structure.md) — cores, links, loops, dangling ends, branches and the longest chain of each agglomerate (`res.with_structure()`).
+Recipes (tested scripts in [`examples/`](../examples)): agglomerate types, distribution plots, structure averages.
 
 For contributors:
 
