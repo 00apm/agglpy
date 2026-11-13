@@ -210,10 +210,12 @@ def image(
     alpha: float = 1.0,
     origin: tuple[float, float] = (0, 0),
 ) -> AxesImage:
-    """Draw an image array on pixel axes, without contrast stretch.
+    """Draw an image array on pixel axes.
 
-    A 2-D ``uint8`` image is grey as it is (0 black, 255 white); RGB or
-    RGBA arrays are drawn as they are. The axes' limits are kept.
+    A 2-D ``uint8`` image is grey without contrast stretch (0 black,
+    255 white); other 2-D arrays are scaled from their minimum to their
+    maximum; RGB or RGBA arrays are drawn as they are. The axes' limits
+    are kept.
 
     Parameters
     ----------
@@ -295,8 +297,9 @@ def particles(
         The particles to colour, on the table's index; None selects
         all. Unselected particles are drawn as `others`.
     image : ndarray, optional
-        The image underneath: grey ``uint8`` without contrast stretch
-        (0 black, 255 white), RGB / RGBA as they are.
+        The image underneath, drawn as by
+        `agglpy.draw.image`: grey ``uint8``
+        without contrast stretch, RGB / RGBA as they are.
     image_alpha : float, default 1.0
         Opacity of `image`, 0-1. Below 1 the figure's background shows
         through (darker on black, lighter on white), so circles stand

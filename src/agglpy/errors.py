@@ -112,10 +112,13 @@ class SheetError(AgglpyError, ValueError):
 
 
 class OutputExistsError(AgglpyError, FileExistsError):
-    """A folder already holds an export and overwrite is off.
+    """A file to be written exists and may not be replaced.
 
-    The message names the files of the earlier export; nothing is
-    written.
+    Raised by an export without ``overwrite=True``, by
+    `Collection.create` in a folder that already has a sheet or
+    ``agglpy.yml``, and where a person's correction would be replaced or
+    removed without ``force=True``. The message names the files; nothing
+    is written.
     """
 
 
