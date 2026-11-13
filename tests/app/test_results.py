@@ -14,6 +14,7 @@ from agglpy.app import Collection
 from agglpy.app._results import Results
 from agglpy.core import distributions, metrics
 from agglpy.core.distributions import size_classes
+from agglpy.core.structure import AGGLOMERATE_COLUMNS, PARTICLE_COLUMNS
 from agglpy.errors import (
     MissingImagesWarning,
     OutputExistsError,
@@ -370,3 +371,129 @@ def test_export_folders_default_relative_and_guard(
         assert not bad.joinpath("results.xlsx").exists()
         assert not bad.joinpath("D7-017.png").exists()
     assert not (work / "x").exists() and not (work / "y").exists()
+
+
+# ---------------------------------------------------------------------
+# structure
+# ---------------------------------------------------------------------
+
+
+def test_with_structure_columns(res: Results) -> None:
+    s = res.with_structure()
+    assert s is not res and "segment_type" not in res.particles
+    assert list(s.particles.columns) == [
+        *res.particles.columns,
+        *PARTICLE_COLUMNS,
+    ]
+    assert list(s.agglomerates.columns) == [
+        *res.agglomerates.columns,
+        *AGGLOMERATE_COLUMNS,
+    ]
+    assert set(s.particles.segment_type) == {"no core"}
+    pair = s.agglomerates[s.agglomerates.member_count == 2].iloc[0]
+    members = s.particles[
+        (s.particles.image == pair.image)
+        & (s.particles.agglomerate_id == pair.agglomerate_id)
+    ]
+    assert pair.longest_chain == 1 and pair.branch_count == 1
+    # in m, like the diameters
+    assert pair.longest_chain_length == pytest.approx(members.D.sum())
+    # the rows stay where they were
+    assert s.particles[["image", "id"]].equals(res.particles[["image", "id"]])
+    assert s.images is res.images and s.contacts is res.contacts
+
+
+def test_structure_dtypes_with_a_blank_image(res: Results) -> None:
+    for s in (
+        res.with_structure(),
+        res.subset(images="D7-019").with_structure(),
+    ):
+        dtypes = s.particles.dtypes
+        assert dtypes["segment_type"] == np.dtype(object)
+        assert dtypes["segment_id"] == np.int64
+        assert dtypes["branch_depth"] == np.int64
+        assert dtypes["tip"] == np.dtype(bool)
+        assert s.agglomerates.dtypes["longest_chain"] == np.int64
+    assert len(res.subset(images="D7-019").with_structure().particles) == 0
+
+
+def _segments(r: Results) -> set[frozenset[tuple[str, int]]]:
+    """The particles of each segment, by (image, id)."""
+    keys = r.particles.groupby(["image", "segment_id"]).id
+    return {frozenset((image, i) for i in ids) for (image, _), ids in keys}
+
+
+def test_with_structure_again_and_around_subset(res: Results) -> None:
+    s = res.with_structure()
+    again = s.with_structure()
+    assert list(again.particles.columns) == list(s.particles.columns)
+    assert list(again.agglomerates.columns) == list(s.agglomerates.columns)
+
+    mask = res.agglomerates.member_count >= 2
+    first = res.subset(agglomerates=mask).with_structure()
+    after = s.subset(agglomerates=mask)
+    for table in ("particles", "agglomerates"):
+        pd.testing.assert_frame_equal(
+            getattr(first, table).drop(columns="segment_id", errors="ignore"),
+            getattr(after, table).drop(columns="segment_id", errors="ignore"),
+        )
+    assert _segments(first) == _segments(after)
+
+
+def test_with_structure_refuses_min_core_members(res: Results) -> None:
+    with pytest.raises(ParamsError, match="min_core_members"):
+        res.with_structure(min_core_members=2)
+
+
+def test_structure_export_units_and_record(
+    res: Results, tmp_path: Path
+) -> None:
+    s = res.with_structure(min_core_members=8)
+    out = s.export(tmp_path / "out")
+    rows = pd.read_csv(out / "csv" / "units.csv").values.tolist()
+    assert ["particles", "branch_length", "m"] in rows
+    assert ["particles", "dangling_end_length", "m"] in rows
+    assert ["agglomerates", "longest_chain_length", "m"] in rows
+    assert ["agglomerates", "branch_length_max", "m"] in rows
+    listed = {(table, column) for table, column, _ in rows}
+    assert ("agglomerates", "longest_chain") not in listed
+    assert ("particles", "branch_depth") not in listed
+    structure = {
+        "min_core_members": 8,
+        "base": "largest member, ties: lower id",
+    }
+    rec = _yaml.load(out / "record.yml")
+    assert rec["structure"] == structure
+    assert list(rec)[-1] == "structure"
+    plain = _yaml.load(res.export(tmp_path / "plain") / "record.yml")
+    assert "structure" not in plain
+    # after subset: the key stays, the step is listed
+    rec = _yaml.load(
+        s.subset(images="D7-018", label="one").export(tmp_path / "sub")
+        / "record.yml"
+    )
+    assert rec["structure"] == structure
+    assert [step["label"] for step in rec["subset"]] == ["one"]
+
+
+@pytest.mark.parametrize("call", ["summary", "summary_across_images"])
+def test_structure_summary_needs_the_columns(res: Results, call: str) -> None:
+    with pytest.raises(TableError, match=r"with_structure\(\)"):
+        getattr(res, call)(metrics="structure")
+    with pytest.raises(TableError, match=r"with_structure\(\)"):
+        getattr(res, call)(metrics=["counts", "structure"])
+    assert "N_cores" not in res.summary().columns
+    assert "N_cores" in res.with_structure().summary().columns
+
+
+def test_draw_by_segment_type(res: Results) -> None:
+    fig = res.with_structure().draw(what="particles", color_by="segment_type")[
+        "D7-018"
+    ]
+    texts = [
+        t.get_text()
+        for ax in fig.axes
+        if ax.get_legend()
+        for t in ax.get_legend().get_texts()
+    ]
+    assert "no core" in texts
