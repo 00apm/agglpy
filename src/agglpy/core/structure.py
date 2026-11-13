@@ -25,16 +25,46 @@ Definitions, per agglomerate:
   agglomerate without a core the rest is its *small core*.
 - An agglomerate with nothing left (a tree, a single particle) is
   ``no core`` throughout.
+- The *base* is the largest member (equal radii: the lower id). A
+  particle's *branch depth* is the fewest contacts from the base, its
+  *branch length* the smallest sum of diameters over a path from the
+  base, the base excluded. A *tip* has no neighbour deeper than itself;
+  every tip ends one branch (branches share their stems).
+- The *longest chain* is the largest, over all pairs of members, of
+  the fewest contacts between them; its length the largest, over all
+  pairs, of the smallest sum of diameters over a path, both ends
+  included.
 
-Particle columns: ``segment_type`` (one of the labels above) and
+A length sums diameters because touching spheres are ``r_a + r_b``
+apart whatever the view, so each step is exact. Lengths are in the
+units of ``r``.
+
+Particle columns: ``segment_type`` (one of the labels above),
 ``segment_id`` (each core, link, loop, dangling end, small core and
 no-core agglomerate is one segment; numbered from 0 within the image by
-each segment's smallest particle id). Agglomerate columns:
-``core_count``, ``core_member_count``, ``small_core_member_count``,
-``link_count``, ``dangling_end_count``, ``dangling_end_member_count``
-(0 when there is none).
+each segment's smallest particle id), ``branch_depth`` (0 at the base),
+``branch_length`` (0 at the base), ``tip`` (never the base, so never a
+single particle), ``dangling_end_depth`` and ``dangling_end_length``
+(on dangling-end particles only, NaN elsewhere: counted inside the end
+from the particle it hangs on, which is excluded; the end's first
+particle has depth 1).
 
-Kind of number in a 2D projection: ``core_member_count`` and
+Agglomerate columns: ``longest_chain`` (0 for a single particle),
+``longest_chain_length`` (a single particle: its diameter),
+``branch_count`` (tips), ``branch_depth_max``, ``branch_length_max``,
+``core_count``, ``core_member_count``, ``small_core_member_count``,
+``link_count``, ``dangling_end_count``, ``dangling_end_member_count``,
+``dangling_end_depth_max``, ``dangling_end_length_max``. Counts are 0
+when there is none; each ``_max`` is the largest value of the particle
+column over the agglomerate, NaN when there is nothing to take (no
+branch in a single particle, no dangling end). ``branch_length_max``
+is the particle farthest from the base by length, which need not be a
+tip.
+
+Kind of number in a 2D projection: the longest chain, its length and
+the branch and dangling-end maxima are lower bounds (a projection can
+only add contacts, which shorten paths; rarely broken by true contacts
+that the pruning of nested pairs drops); ``core_member_count`` and
 ``small_core_member_count`` are upper bounds (overlapping circles need
 not touch, so a projection reads denser than the agglomerate is);
 ``dangling_end_member_count`` is a lower bound where the agglomerate
@@ -78,14 +108,29 @@ SEGMENT_TYPES = (
 )
 _CORE, _SMALL, _LINK, _LOOP, _DANGLING, _NO_CORE = range(len(SEGMENT_TYPES))
 
-PARTICLE_COLUMNS = ("segment_type", "segment_id")
+PARTICLE_COLUMNS = (
+    "segment_type",
+    "segment_id",
+    "branch_depth",
+    "branch_length",
+    "tip",
+    "dangling_end_depth",
+    "dangling_end_length",
+)
 AGGLOMERATE_COLUMNS = (
+    "longest_chain",
+    "longest_chain_length",
+    "branch_count",
+    "branch_depth_max",
+    "branch_length_max",
     "core_count",
     "core_member_count",
     "small_core_member_count",
     "link_count",
     "dangling_end_count",
     "dangling_end_member_count",
+    "dangling_end_depth_max",
+    "dangling_end_length_max",
 )
 
 
@@ -96,7 +141,7 @@ def structure_properties(
     *,
     min_core_members: int = 7,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Label the segments of every agglomerate of one image.
+    """Segments, branches and longest chains of one image's agglomerates.
 
     Args:
         particles: One image's particle table with ``id``, ``r`` and
@@ -120,20 +165,48 @@ def structure_properties(
     m = _min_core_members(min_core_members)
     _require(particles, ("id", "r", "agglomerate_id"))
     pairs = _check_contacts(particles, contacts)
-    _radii(particles)
+    r = _radii(particles)
     labels = _whole(particles, "agglomerate_id", "particles")
-    groups, agg = np.unique(labels, return_inverse=True)
+    groups, inverse = np.unique(labels, return_inverse=True)
+    agg = inverse.reshape(-1).astype(np.intp)
+    count = len(groups)
     rows = _agglomerate_rows(agglomerates, groups)
     at = _contact_rows(pairs.ids, pairs.id_a, pairs.id_b)
     g = _graph.graph(len(pairs.ids), at.larger, at.smaller)
-    kind, segment = _segments(g, pairs.ids, agg.astype(np.intp), m)
+    kind, segment = _segments(g, pairs.ids, agg, m)
+
+    columns: dict[str, NDArray[np.generic]] = {
+        "segment_type": np.array(SEGMENT_TYPES, dtype=object)[kind],
+        "segment_id": segment,
+        **_branches(g, pairs.ids, r, agg, count),
+        **_dangling(g, r, kind, segment),
+    }
+    found = {
+        "longest_chain": _graph.diameters(g, agg, count, r=None).astype(
+            np.int64
+        ),
+        "longest_chain_length": _graph.diameters(g, agg, count, r=r),
+        **_counts(kind, segment, agg, count),
+    }
+    size = np.bincount(agg, minlength=count)
+    found["branch_count"] = np.bincount(
+        agg, weights=columns["tip"], minlength=count
+    ).astype(np.int64)
+    several = size[agg] >= 2
+    dangling = kind == _DANGLING
+    for stem, rows_used in (("branch", several), ("dangling_end", dangling)):
+        for measure in ("depth", "length"):
+            values = columns[f"{stem}_{measure}"]
+            found[f"{stem}_{measure}_max"] = _group_max(
+                values, agg, count, rows_used
+            )
 
     p = particles.copy()
-    p["segment_type"] = np.array(SEGMENT_TYPES, dtype=object)[kind]
-    p["segment_id"] = segment
+    for column in PARTICLE_COLUMNS:
+        p[column] = columns[column]
     a = agglomerates.copy()
-    for column, values in _counts(kind, segment, agg, len(groups)).items():
-        a[column] = values[rows]
+    for column in AGGLOMERATE_COLUMNS:
+        a[column] = found[column][rows]
     return p, a
 
 
@@ -270,6 +343,74 @@ def _cores_touched(
         ends.append(np.stack([run[x[touch]], core_group[y[touch]]], axis=1))
     touched = np.unique(np.concatenate(ends), axis=0)
     return np.bincount(touched[:, 0], minlength=g.n)
+
+
+def _branches(
+    g: _graph.Graph,
+    ids: NDArray[np.int64],
+    r: NDArray[np.float64],
+    agg: NDArray[np.intp],
+    count: int,
+) -> dict[str, NDArray[np.generic]]:
+    """Branch depth, length and tips, from each agglomerate's base."""
+    # The base: the largest member, equal radii the lower id.
+    order = np.lexsort((ids, -r, agg))
+    _, first = np.unique(agg[order], return_index=True)
+    bases = order[first]
+    depth = _graph.distances(g.matrix, bases, unweighted=True)
+    dist = _graph.distances(_graph.weighted(g, r), bases, unweighted=False)
+    # A path's weight counts each end's radius once: add the far end's,
+    # take away the base's.
+    length = dist + r - r[bases][agg]
+    deeper = np.zeros(g.n, dtype=bool)
+    deeper[g.a[depth[g.b] > depth[g.a]]] = True
+    deeper[g.b[depth[g.a] > depth[g.b]]] = True
+    tip = ~deeper
+    tip[bases] = False
+    return {
+        "branch_depth": depth.astype(np.int64),
+        "branch_length": length,
+        "tip": tip,
+    }
+
+
+def _dangling(
+    g: _graph.Graph,
+    r: NDArray[np.float64],
+    kind: NDArray[np.intp],
+    segment: NDArray[np.int64],
+) -> dict[str, NDArray[np.generic]]:
+    """Depth and length inside each dangling end; NaN off the ends."""
+    end = kind == _DANGLING
+    depth = np.full(g.n, np.nan)
+    length = np.full(g.n, np.nan)
+    if end.any():
+        # Each end hangs by one contact; its particle there is the root.
+        one = end[g.a] != end[g.b]
+        roots = np.unique(np.where(end[g.a[one]], g.a[one], g.b[one]))
+        inside = _graph.graph(g.n, *_within(g, end))
+        hops = _graph.distances(inside.matrix, roots, unweighted=True)
+        dist = _graph.distances(
+            _graph.weighted(inside, r), roots, unweighted=False
+        )
+        root_r = pd.Series(r[roots], index=segment[roots])
+        r_root = root_r.reindex(segment[end]).to_numpy(dtype=np.float64)
+        depth[end] = hops[end] + 1
+        length[end] = dist[end] + r[end] + r_root
+    return {"dangling_end_depth": depth, "dangling_end_length": length}
+
+
+def _group_max(
+    values: NDArray[np.generic],
+    agg: NDArray[np.intp],
+    count: int,
+    used: NDArray[np.bool_],
+) -> NDArray[np.float64]:
+    """Per agglomerate: the largest of ``values[used]``; NaN for none."""
+    out = np.full(count, -np.inf)
+    np.maximum.at(out, agg[used], values[used].astype(np.float64))
+    out[np.isneginf(out)] = np.nan
+    return out
 
 
 def _counts(
