@@ -1,19 +1,10 @@
 """Drawing the detection: particles and agglomerates (the draw edge).
 
-Static figures with matplotlib, in px: ``x, y, r`` of the particle
-table and the image share pixel coordinates, pixel centres at integers,
-y pointing down. ``figure`` makes a figure whose image area has exactly
-the image's size in file pixels; ``particles`` colours each particle by
-a column of the particle table, ``agglomerates`` each agglomerate by a
-column of the agglomerate table. Both take the whole tables and a
-``select=`` mask; unselected particles are drawn as thin outlines.
-``figure_pair`` gives two areas zoomed together, ``image`` draws an
-array (also a region at its place), ``legend`` labels given colours.
-
-Figures are made without pyplot: nothing is kept in a global registry,
-so a loop over many images holds no figures in memory. In Jupyter, a
-figure from ``figure`` / ``figure_pair`` or a ``Drawing`` as the last
-expression of a cell shows itself, with no ``%matplotlib inline``.
+Static matplotlib figures in px: the particle table's ``x, y, r`` and
+the image share pixel coordinates, pixel centres at integers, y down.
+Figures are made without pyplot, so a loop over many images holds no
+figures in memory; in Jupyter a figure from `figure` / `figure_pair`
+or a `Drawing` as the last expression of a cell shows itself.
 """
 
 import copy
@@ -67,24 +58,23 @@ _PALETTE = "tab10"
 
 @dataclass(frozen=True)
 class Drawing:
-    """What a draw function added to the axes, for restyling or layout.
+    """The artists a draw function added, for restyling or layout.
 
     Attributes
     ----------
     fills : Collection or None
-        The coloured shapes: the filled particle circles with
-        their outlines (``particles``), or one filled shape per
-        agglomerate (``agglomerates``).
+        The coloured shapes: the filled particle circles with their
+        outlines (`particles`), or one filled shape per agglomerate
+        (`agglomerates`).
     outlines : Collection or None
-        The agglomerates' outer outlines; None for
-        ``particles``.
+        The agglomerates' outer outlines; None for `particles`.
     others : Collection or None
-        The thin outlines of the unselected particles; None
-        when there are none or ``others=None``.
+        The thin outlines of the unselected particles; None when there
+        are none or with ``others=None``.
     colorbar : Colorbar or None
-        The colorbar of a numeric ``color_by``, if drawn.
+        The colorbar of a numeric `color_by`, if drawn.
     legend : Legend or None
-        The legend of a label ``color_by``, if drawn.
+        The legend of a label `color_by`, if drawn.
     """
 
     fills: Collection | None
@@ -137,32 +127,33 @@ def figure(
     Parameters
     ----------
     shape : sequence of int
-        The image's ``(height, width)``, e.g. ``image.shape``; a
-        third entry (colour channels) is ignored.
+        The image's ``(height, width)``, e.g. ``image.shape``; a third
+        entry (colour channels) is ignored.
     legend : bool, default True
-        Leave a strip to the right of the image for the
-        colorbar or legend of the draw functions.
-    background : ColorType or None, default "white"
-        Any matplotlib colour; None for a transparent
-        figure (a PNG keeps the transparency). An image drawn with
-        ``image=`` covers it.
-    origin : tuple, default (0, 0)
-        Where the area's top-left pixel centre lies, ``(x, y)``
-        in px: a figure of a region shows it in the coordinates of
-        the whole image.
+        Leave a strip right of the image for the colorbar or legend of
+        the draw functions.
+    background : colour or None, default "white"
+        Any matplotlib colour; None for a transparent figure (a PNG
+        keeps the transparency). An image drawn with ``image=`` covers
+        it.
+    origin : tuple of float, default (0, 0)
+        ``(x, y)`` in px of the area's top-left pixel centre: a figure
+        of a region shows it in the coordinates of the whole image.
 
     Returns
     -------
-    tuple
-        The figure and its image axes. The figure is not managed by
-        pyplot: save it with ``fig.savefig``; in Jupyter it shows as the
-        last expression of a cell or with ``display(fig)``.
+    fig : Figure
+        The figure, not managed by pyplot: save it with
+        ``fig.savefig``; in Jupyter it shows as the last expression of
+        a cell or with ``display(fig)``.
+    ax : Axes
+        The image axes.
 
     Raises
     ------
     ParamsError
-        If ``shape`` does not start with two integers
-        >= 1 or ``origin`` is not two finite numbers.
+        If `shape` does not start with two integers >= 1 or `origin` is
+        not two finite numbers.
     """
     fig, (ax,) = _panels(shape, 1, legend, background, origin)
     return fig, ax
@@ -177,35 +168,36 @@ def figure_pair(
 ) -> tuple[Figure, Axes, Axes]:
     """Make a figure of two image areas side by side, zoomed together.
 
-    Each area is laid out as the one of ``figure``: ``width x height``
+    Each area is laid out as the one of `figure`: ``width x height``
     file pixels, pixel centres at integer coordinates, y down. The two
     axes share x and y, so zooming or panning one moves the other.
 
     Parameters
     ----------
     shape : sequence of int
-        The image's ``(height, width)``; a third entry is
-        ignored.
+        As in `figure`.
     legend : bool, default True
-        Leave a strip right of the second area for a legend,
-        as wide as the strip of ``figure`` for one area.
-    background : ColorType or None, default "white"
-        Any matplotlib colour; None for transparent.
-    origin : tuple, default (0, 0)
-        Where each area's top-left pixel centre lies, as for
-        ``figure``.
+        Leave a strip right of the second area for a legend, as wide as
+        the strip of `figure` for one area.
+    background : colour or None, default "white"
+        As in `figure`.
+    origin : tuple of float, default (0, 0)
+        As in `figure`, for each area.
 
     Returns
     -------
-    tuple
-        The figure, the left axes and the right axes; not managed by
-        pyplot.
+    fig : Figure
+        The figure, not managed by pyplot.
+    left : Axes
+        The left image axes.
+    right : Axes
+        The right image axes.
 
     Raises
     ------
     ParamsError
-        If ``shape`` does not start with two integers
-        >= 1 or ``origin`` is not two finite numbers.
+        If `shape` does not start with two integers >= 1 or `origin` is
+        not two finite numbers.
     """
     fig, (left, right) = _panels(shape, 2, legend, background, origin)
     return fig, left, right
@@ -226,15 +218,14 @@ def image(
     Parameters
     ----------
     ax : Axes
-        The axes, usually from ``figure``.
+        The axes, usually from `figure`.
     image : ndarray
-        The array.
+        The image: 2-D grey, RGB or RGBA.
     alpha : float, default 1.0
         Its opacity, 0-1.
-    origin : tuple, default (0, 0)
-        Where its top-left pixel's centre lies, ``(x, y)`` in
-        px: a region cut from a larger image is drawn at the
-        region's place.
+    origin : tuple of float, default (0, 0)
+        ``(x, y)`` in px of its top-left pixel centre: a region cut
+        from a larger image is drawn at the region's place.
 
     Returns
     -------
@@ -244,7 +235,7 @@ def image(
     Raises
     ------
     ParamsError
-        If ``alpha`` is not within 0-1.
+        If `alpha` is not within 0-1.
     """
     if isinstance(alpha, bool) or not 0 <= alpha <= 1:
         raise ParamsError(f"alpha must be within 0-1, got {alpha!r}")
@@ -287,81 +278,80 @@ def particles(
 ) -> Drawing:
     """Draw each particle as a circle coloured by a particle column.
 
-    Each selected particle is a filled circle (``alpha``) with an opaque
+    Each selected particle is a filled circle (`alpha`) with an opaque
     outline in the same colour, largest first: a small particle on a
     larger one stays visible.
 
     Parameters
     ----------
     ax : Axes
-        The axes to draw into, e.g. from ``figure``.
+        The axes to draw into, e.g. from `figure`.
     particles : DataFrame
-        The image's particle table, in px (``x, y, r``).
-    color_by : Hashable
-        The column that gives the colours: numbers through a
-        colormap, or labels (text, ``category``, bool) one colour
-        each.
-    select : Series, optional
-        A boolean Series on the particle table's index; None
-        selects all. Unselected particles are drawn as ``others``.
+        The image's particle table with ``x, y, r`` in px.
+    color_by : hashable
+        The column that gives the colours: numbers through a colormap,
+        labels (text, ``category``, bool) one colour each.
+    select : Series of bool, optional
+        The particles to colour, on the table's index; None selects
+        all. Unselected particles are drawn as `others`.
     image : ndarray, optional
-        The image to draw underneath (a 2-D grey ``uint8``
-        image is shown 0 = black to 255 = white, without contrast
-        stretching; RGB / RGBA arrays as they are).
+        The image underneath: grey ``uint8`` without contrast stretch
+        (0 black, 255 white), RGB / RGBA as they are.
     image_alpha : float, default 1.0
-        Opacity of ``image``, 0 to 1. Below 1 the figure's
-        background shows through: on black the image is darkened,
-        on white lightened, so the circles stand out.
-    others : ColorType or None, default "grey"
-        Colour of the thin outlines of unselected particles,
-        and of particles without a value; None hides them.
+        Opacity of `image`, 0-1. Below 1 the figure's background shows
+        through (darker on black, lighter on white), so circles stand
+        out.
+    others : colour or None, default "grey"
+        Colour of the thin outlines of unselected particles and of
+        particles without a value; None hides them.
     cmap : str or Colormap, optional
-        Colormap of a numeric column (a name or a ``Colormap``);
-        matplotlib's default when None.
+        Colormap of a numeric column; matplotlib's default when None.
     norm : Normalize, optional
-        A ``Normalize`` of a numeric column, e.g. ``LogNorm``;
-        not modified. Not together with ``vmin`` / ``vmax``.
+        Scaling of a numeric column, e.g. ``LogNorm()``; not modified.
+        Not together with `vmin` / `vmax`.
     vmin : float, optional
-        Value of the colormap's lower end; the smallest selected
-        value when None.
+        Value of the colormap's lower end; None takes the smallest
+        selected value.
     vmax : float, optional
-        Value of the colormap's upper end; the largest selected
-        value when None.
+        Value of the colormap's upper end; None takes the largest
+        selected value.
     colors : mapping, optional
-        ``{label: colour}`` for a label column; it must give
-        every drawn label. Without it, the ``tab10`` colours go to
-        the categories of a ``category`` column, to False and True
-        of a bool column, else to the sorted labels.
+        ``{label: colour}`` for a label column, every drawn label
+        included. Without it the ``tab10`` colours go to the
+        categories of a ``category`` column, to False and True of a
+        bool column, else to the sorted labels.
     alpha : float, default 0.5
         Opacity of the fill, 0 (outlines only) to 1.
     linewidth : float, default 1.0
-        Width of the outlines in points, others half of it;
-        on a ``figure`` one point is one pixel of the file.
+        Width of the outlines in points, others half of it; on a
+        `figure` one point is one file pixel.
     legend : bool or str, default True
-        Add a colorbar (numbers) or a legend (labels): into
-        the strip of ``figure`` if there is one. True titles it with
-        the column name, a string sets the title, False adds none.
-        Without a strip, a colorbar takes its room from the image:
-        on ``figure(..., legend=False)`` pass False here too.
+        Add a colorbar (numbers) or a legend (labels), in the strip of
+        `figure` if there is one: True titles it with the column name,
+        a string sets the title, False adds none.
 
     Returns
     -------
     Drawing
-        The ``Drawing`` with the added artists.
+        The added artists.
 
     Raises
     ------
     TableError
-        If ``x, y, r`` or ``color_by`` is missing or ``x, y,
-        r`` is not finite with ``r > 0``; ``select`` is not a
-        boolean Series on the table's index; a label has no colour
-        (more than 10 labels need ``colors=``).
+        If ``x, y, r`` or the `color_by` column is missing, ``x, y, r``
+        are not finite with ``r > 0``, `select` is not a boolean Series
+        on the table's index, or a label has no colour (more than 10
+        labels need `colors`).
     ParamsError
-        If an option does not fit the column (``colors``
-        for numbers, ``cmap`` / ``norm`` / ``vmin`` / ``vmax`` for
-        labels), ``norm`` comes with ``vmin`` / ``vmax``, ``alpha``
-        or ``image_alpha`` is not within 0-1 or ``linewidth`` is
-        negative.
+        If an option does not fit the column (`colors` for numbers,
+        `cmap` / `norm` / `vmin` / `vmax` for labels), `norm` comes
+        with `vmin` / `vmax`, `alpha` or `image_alpha` is not within
+        0-1, or `linewidth` is negative.
+
+    Notes
+    -----
+    Without a strip, a colorbar takes its room from the image: on
+    ``figure(..., legend=False)`` pass ``legend=False`` here too.
     """
     x, y, r = _geometry(particles)
     values = _column(particles, color_by)
@@ -421,7 +411,7 @@ def agglomerates(
     """Draw each agglomerate as one shape coloured by its column.
 
     The member circles of a selected agglomerate are filled together
-    (``alpha``; overlaps are filled once) and the agglomerate's outer
+    (`alpha`; overlaps are filled once) and the agglomerate's outer
     outline is drawn opaque: the outline arcs of its members, the edge
     of a hole inside a ring of particles included. Inner circle lines
     are not drawn; enclosed particles lie under the fill.
@@ -429,41 +419,59 @@ def agglomerates(
     Parameters
     ----------
     ax : Axes
-        The axes to draw into, e.g. from ``figure``.
+        As in `particles`.
     particles : DataFrame
-        The image's particle table, in px (``id, x, y, r``,
-        ``agglomerate_id``).
+        The image's particle table with ``id, x, y, r`` in px and
+        ``agglomerate_id``.
     agglomerates : DataFrame
-        The image's agglomerate table
-        (``agglomerate_id`` and ``color_by``).
+        The image's agglomerate table with ``agglomerate_id`` and the
+        `color_by` column.
     contacts : DataFrame
-        The image's contact pairs (``find_agglomerates``),
-        all of them; they give the outline: only circles of a pair
-        cover each other.
-    color_by : Hashable
-        The agglomerate column that gives the colours (see
-        ``particles``).
-    select : Series, optional
-        A boolean Series on the agglomerate table's index; None
-        selects all. Members of unselected agglomerates, and
-        particles whose agglomerate is not in the table, are drawn
-        as ``others``.
-    image, image_alpha, others, cmap, norm, vmin, vmax, colors,
-        alpha, linewidth, legend: As for ``particles``.
+        All the image's contact pairs, from
+        `agglpy.core.agglomerates.find_agglomerates`; they give the
+        outline: only circles of a pair cover each other.
+    color_by : hashable
+        The agglomerate column that gives the colours, as in
+        `particles`.
+    select : Series of bool, optional
+        The agglomerates to colour, on the agglomerate table's index;
+        None selects all. Members of unselected agglomerates, and
+        particles whose agglomerate is not in the table, are drawn as
+        `others`.
+    image : ndarray, optional
+        As in `particles`.
+    image_alpha : float, default 1.0
+        As in `particles`.
+    others : colour or None, default "grey"
+        As in `particles`.
+    cmap : str or Colormap, optional
+        As in `particles`.
+    norm : Normalize, optional
+        As in `particles`.
+    vmin, vmax : float, optional
+        As in `particles`.
+    colors : mapping, optional
+        As in `particles`.
+    alpha : float, default 0.5
+        As in `particles`.
+    linewidth : float, default 1.0
+        As in `particles`.
+    legend : bool or str, default True
+        As in `particles`.
 
     Returns
     -------
     Drawing
-        The ``Drawing`` with the added artists.
+        The added artists.
 
     Raises
     ------
     TableError
-        As for ``particles``; also if ``agglomerate_id`` is
-        missing from either table or repeated in the agglomerate
-        table, or ``contacts`` are not pairs of these particles.
+        If a table check of `particles` fails, ``agglomerate_id`` is
+        missing from either table or repeated in the agglomerate table,
+        or `contacts` are not pairs of these particles.
     ParamsError
-        As for ``particles``.
+        If an option is wrong, as in `particles`.
     """
     x, y, r = _geometry(particles)
     members = _ids(particles, "particle")
@@ -529,20 +537,25 @@ def color_scale(
     vmax: float | None = None,
     colors: Mapping[Any, ColorType] | None = None,
 ) -> dict[str, Any]:
-    """The colour options that give ``values`` one scale.
+    """Return the colour options that give `values` one scale.
 
-    Pass them to ``particles`` / ``agglomerates`` for each of several
-    images, so a value or label has the same colour on all, e.g.
-    ``scale = color_scale(all_images.D)`` and then ``particles(ax, p,
-    color_by="D", **scale)`` per image.
+    Pass them to `particles` / `agglomerates` for each of several
+    images, so a value or label has the same colour on all:
+    ``scale = color_scale(all_images.D)``, then
+    ``particles(ax, p, color_by="D", **scale)`` per image.
 
     Parameters
     ----------
     values : Series
-        The ``color_by`` values of every image to be drawn.
-    cmap, norm, vmin, vmax, colors
-        As for ``particles``; an unset
-        range is taken from ``values``. ``norm`` is not modified.
+        The `color_by` values of every image to be drawn.
+    cmap : str or Colormap, optional
+        As in `particles`.
+    norm : Normalize, optional
+        As in `particles`; not modified.
+    vmin, vmax : float, optional
+        As in `particles`; None takes the end from `values`.
+    colors : mapping, optional
+        As in `particles`.
 
     Returns
     -------
@@ -553,11 +566,9 @@ def color_scale(
     Raises
     ------
     TableError
-        If a label has no colour (more than 10 labels need
-        ``colors=``).
+        If a label has no colour (more than 10 labels need `colors`).
     ParamsError
-        If an option does not fit the values, as for
-        ``particles``.
+        If an option does not fit the values, as in `particles`.
     """
     palette = _palette(values, cmap, norm, vmin, vmax, colors)
     if palette.labels is not None:
@@ -572,7 +583,7 @@ def color_scale(
 
 
 class _Palette:
-    """Colours of one ``color_by`` column: a colormap or label colours."""
+    """Colours of one `color_by` column: a colormap or label colours."""
 
     def __init__(
         self,
@@ -607,7 +618,7 @@ def _palette(
     vmax: float | None,
     colors: Mapping[Any, ColorType] | None,
 ) -> _Palette:
-    """Colours for the selected ``values`` of one call."""
+    """Return the colours for the selected `values` of one call."""
     numeric = pd.api.types.is_numeric_dtype(
         values
     ) and not pd.api.types.is_bool_dtype(values)
@@ -725,7 +736,7 @@ def _union_paths(
     r: NDArray[np.float64],
     k: int,
 ) -> list[Path]:
-    """One compound path of all member circles per agglomerate.
+    """Return one compound path of the member circles per agglomerate.
 
     Every circle runs the same way round, so the nonzero fill rule
     fills each overlap once.
@@ -757,7 +768,7 @@ def _outline_paths(
     pairs: _Contacts,
     k: int,
 ) -> list[Path]:
-    """One path of the outer outline arcs per agglomerate."""
+    """Return one path of the outer outline arcs per agglomerate."""
     circle, start, end = _outline_arcs(x, y, r, pairs)
     arcs: list[list[Path]] = [[] for _ in range(k)]
     for c, a, b in zip(
@@ -785,7 +796,7 @@ def _fit(
     r: NDArray[np.float64],
     image: NDArray[Any] | None,
 ) -> None:
-    """Fit axes without set limits to the circles; y down, equal aspect."""
+    """Fit autoscaled axes to the circles; y down, equal aspect."""
     if (
         image is None
         and len(r)
@@ -868,18 +879,19 @@ def _legend(
 def legend(
     ax: Axes, colors: Mapping[str, ColorType], *, title: str | None = None
 ) -> Legend:
-    """A legend of labels with given colours, one line per label.
+    """Add a legend of labels with given colours, one line per label.
 
     For drawings not coloured by a column (comparisons, passes). Placed
-    in the strip of ``ax``'s figure when there is one, sized like the
-    legends of ``particles``; else inside ``ax``.
+    in the strip of `ax`'s figure when there is one, sized like the
+    legends of `particles`; else inside `ax`.
 
     Parameters
     ----------
     ax : Axes
         The image axes.
     colors : mapping
-        Label -> any matplotlib colour, in legend order.
+        ``{label: colour}`` with any matplotlib colour, in legend
+        order.
     title : str, optional
         The legend's title; None for none.
 
@@ -974,7 +986,7 @@ def _panels(
     background: ColorType | None,
     origin: tuple[float, float],
 ) -> tuple[Figure, list[Axes]]:
-    """``count`` image areas side by side, then the strip if asked."""
+    """Make `count` image areas side by side, then the strip if set."""
     height, width = _shape(shape)
     x, y = _origin(origin)
     strip = round(_STRIP * width) if legend else 0

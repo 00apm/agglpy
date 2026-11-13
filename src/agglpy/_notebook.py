@@ -26,7 +26,8 @@ from matplotlib.axis import Axis, Tick
 from matplotlib.figure import Figure
 from matplotlib.text import Text
 
-# Names of the ipympl backend (``%matplotlib widget``), as ipympl lists them.
+# Names of the ipympl backend (``%matplotlib widget``), as ipympl
+# lists them.
 _WIDGET_BACKENDS = ("widget", "ipympl", "module://ipympl.backend_nbagg")
 # Width in CSS px a canvas opens at before the browser has measured the
 # cell, and keeps without anywidget.
@@ -88,7 +89,7 @@ class ShownFigure(Figure):
         return bundle
 
     def savefig(self, *args: Any, **kwargs: Any) -> None:
-        """As ``Figure.savefig``, at full size after a fit to a cell."""
+        """Save as ``Figure.savefig`` does, at full size after a fit."""
         fit = getattr(self.canvas, "_agglpy_fit", None)
         if fit is None:
             super().savefig(*args, **kwargs)
@@ -98,7 +99,7 @@ class ShownFigure(Figure):
 
 
 def widget(figure: Figure) -> Any:
-    """The figure on an ipympl canvas that fits the cell's width.
+    """Return the figure on an ipympl canvas fitting the cell's width.
 
     A box with the width probe and the canvas; the canvas alone, at
     ``FALLBACK_WIDTH``, without anywidget. Made once per figure and
@@ -133,7 +134,7 @@ _WHICH: tuple[_Which, ...] = ("major", "minor")
 
 
 class _Fit:
-    """Resizes a figure to a width in CSS px, its fonts with it.
+    """Fit of a figure to a width in CSS px, its fonts with it.
 
     Never above the full size the figure was made at. Fonts are sized
     in points, which a smaller figure does not shrink: each text and
@@ -167,7 +168,7 @@ class _Fit:
 
     @contextmanager
     def full_size(self) -> Iterator[None]:
-        """The figure at full size inside the block, then fitted again."""
+        """Set the figure to full size inside the block, then refit."""
         scale = self._scale
         self._apply(1.0)
         self._figure.set_size_inches(self._size, forward=False)
@@ -211,7 +212,7 @@ class _Fit:
 
 @functools.cache
 def _probe_class() -> type:
-    """The width probe's widget class; ImportError without anywidget."""
+    """Return the width probe's widget class (needs anywidget)."""
     import anywidget
     import traitlets
 
@@ -223,7 +224,7 @@ def _probe_class() -> type:
 
 
 def png(figure: Figure) -> bytes:
-    """The figure as PNG bytes, at its own dpi."""
+    """Return the figure as PNG bytes, at its own dpi."""
     buffer = io.BytesIO()
     figure.savefig(buffer, format="png")
     return buffer.getvalue()

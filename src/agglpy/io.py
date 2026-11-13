@@ -1,17 +1,11 @@
 """Reading and writing the files agglpy works with (the io edge).
 
-Images with their pixel size, and particle files in and out. Every
-quirk of a file format is absorbed here (palette TIFFs, vendor tags,
-ImageJ's pixel edges and ids, byte order marks, float parsing); below
-this module the core sees only arrays and particle tables in px.
-
-io knows file formats, not the collection layout: every function takes
-a path and reads or writes that one file. Names like
-``particles_corrected.csv`` belong to the application.
-
-Import the names (``from agglpy.io import read_image``), not the
-module: ``from agglpy import io`` would hide the standard library's
-``io`` in your script.
+Images with their pixel size, and particle files in and out; each
+function reads or writes the one file it is given. The quirks of a
+format (palette TIFFs, vendor tags, ImageJ's pixel edges and ids, byte
+order marks) stay here: the result is an array or a particle table in
+px. Import the names (``from agglpy.io import read_image``):
+``from agglpy import io`` would hide the standard library's ``io``.
 """
 
 import math
@@ -54,17 +48,13 @@ PathLike = str | os.PathLike[str]
 def read_image(path: PathLike) -> NDArray[np.uint8]:
     """Read an image as a 2-D grey ``uint8`` array.
 
-    Any format OpenCV decodes (TIFF, PNG, JPEG, BMP). Palette and
-    colour images become grey with the BT.601 weights, 16-bit images
-    keep their top byte, an alpha channel is dropped and a multipage
-    TIFF gives its first page: the same array as
-    ``cv2.cvtColor(cv2.imread(path), cv2.COLOR_BGR2GRAY)``, also for
-    paths with characters outside the system code page. The file is
-    opened read-only.
+    Any format OpenCV decodes (TIFF, PNG, JPEG, BMP). The array is the
+    one ``cv2.cvtColor(cv2.imread(path), cv2.COLOR_BGR2GRAY)`` gives,
+    also for paths with characters outside the system code page.
 
     Parameters
     ----------
-    path : path-like
+    path : str or Path
         The image file.
 
     Returns
@@ -78,6 +68,13 @@ def read_image(path: PathLike) -> NDArray[np.uint8]:
         If the file doesn't exist.
     FileFormatError
         If OpenCV can't decode the file.
+
+    Notes
+    -----
+    Palette and colour images become grey with the BT.601 weights,
+    16-bit images keep their top byte, an alpha channel is dropped and
+    a multipage TIFF gives its first page. The file is opened
+    read-only.
     """
     path = Path(path)
     # imdecode on the bytes: cv2.imread fails on Windows for paths
@@ -91,16 +88,16 @@ def read_image(path: PathLike) -> NDArray[np.uint8]:
 
 @dataclass(frozen=True)
 class ImageMetadata:
-    """What ``read_image_metadata`` found in an image file.
+    """Size and pixel size of an image file, from `read_image_metadata`.
 
     Attributes
     ----------
     pixel_size : float or None
-        Length of one pixel in metres, or ``None`` when no
-        reader finds it (a normal value, not an error).
+        Length of one pixel in m; None when no reader finds it (a
+        normal value, not an error).
     pixel_size_source : str or None
-        Where ``pixel_size`` came from, for the
-        record of an analysis, or ``None``.
+        Where `pixel_size` came from, for the record of an analysis;
+        None without a pixel size.
     width : int
         Width of the whole file in px (a data bar included).
     height : int
@@ -116,36 +113,40 @@ class ImageMetadata:
 def read_image_metadata(path: PathLike) -> ImageMetadata:
     """Read an image's size and, from its tags, the pixel size.
 
-    TIFF files are read from their headers only (first page of a
-    multipage file). The pixel size comes from the first of these that
-    the file carries: Zeiss ``CZ_SEM``, Thermo/FEI ``[Scan]
-    PixelWidth``, an ImageJ calibration. The plain TIFF resolution is
-    never used on its own. Other formats are decoded once for their
-    size and have no pixel size.
+    TIFF files are read from their headers only (the first page of a
+    multipage file). Other formats are decoded once for their size and
+    have no pixel size.
 
     Parameters
     ----------
-    path : path-like
+    path : str or Path
         The image file.
 
     Returns
     -------
     ImageMetadata
-        The size in px and the pixel size in metres (or ``None``).
+        The size in px and the pixel size in m (or None).
 
     Raises
     ------
     FileNotFoundError
         If the file doesn't exist.
     FileFormatError
-        If the TIFF header can't be read, or another
-        format can't be decoded.
+        If the TIFF header can't be read, or another format can't be
+        decoded.
 
     Warns
     -----
     PixelSizeWarning
-        If the Zeiss text field and raw value differ
-        by more than 1 %, or the pixels are not square.
+        If the Zeiss text field and raw value differ by more than 1 %,
+        or the pixels are not square.
+
+    Notes
+    -----
+    The pixel size comes from the first of these that the file
+    carries: Zeiss ``CZ_SEM``, Thermo/FEI ``[Scan] PixelWidth``, an
+    ImageJ calibration. The plain TIFF resolution is never used on its
+    own.
     """
     path = Path(path)
     with path.open("rb") as fh:
@@ -214,7 +215,7 @@ def _zeiss(
     if not isinstance(sem, dict):
         return None
     # The raw value is the pixel size at a 1024-px reference width,
-    # whatever the stored width (item 2.2 Findings, D-050).
+    # whatever the stored width.
     raw = _positive(_item(sem.get(""), 3))
     if raw is None:
         return None
@@ -264,7 +265,7 @@ def _imagej_calibration(
     return factor / x_res, f"ImageJ calibration (unit={unit})"
 
 
-# First hit wins (D-050). A new vendor comes with a real sample file.
+# First hit wins. A new vendor comes with a real sample file.
 _PIXEL_SIZE_READERS: tuple[
     Callable[[tifffile.TiffFile, int, Path], tuple[float, str] | None], ...
 ] = (_zeiss, _thermo_fei, _imagej_calibration)
@@ -277,7 +278,7 @@ def _item(values: object, index: int) -> object:
 
 
 def _positive(value: object) -> float | None:
-    """``value`` as a finite float > 0, else None (bools excluded)."""
+    """Return `value` as a finite float > 0, else None (no bools)."""
     if isinstance(value, bool) or not isinstance(value, int | float):
         return None
     number = float(value)
@@ -305,16 +306,16 @@ def _check_square(x: float, y: float | None, path: Path) -> None:
 # Particle files
 # ---------------------------------------------------------------------
 
-# Header columns that recognise each format (all present, case-sensitive).
+# Header columns that recognise each format (all present,
+# case-sensitive).
 _FORMATS: dict[str, tuple[str, ...]] = {
     "agglpy": ("id", "x", "y", "r"),
     "imagej": ("Index", "Type", "X", "Y", "Width", "Height"),
-    # Internal: files of earlier agglpy versions, kept so the author's
-    # old data still reads. Found by auto-detection and accepted by
-    # format=, but not documented: v0.4 HCT_multi output (0-based ids)
-    # and the format before it, whose ids restart at 0 for each HCT
-    # range, so its rows are numbered 0..n-1 instead (author,
-    # 2026-10-12).
+    # Internal: kept so files written by earlier agglpy versions still
+    # read. Found by auto-detection and accepted by format=, but not
+    # documented: v0.4 HCT_multi output (0-based ids) and the format
+    # before it, whose ids restart at 0 for each HCT range, so its rows
+    # are numbered 0..n-1 instead.
     "agglpy_v04": ("ID", "X", "Y", "R"),
     "agglpy_v00": ("ID", "X (pixels)", "Y (pixels)", "Radius (pixels)"),
 }
@@ -341,55 +342,53 @@ _ROUNDING_PX = 0.01
 def read_particles(path: PathLike, *, format: str = "auto") -> pd.DataFrame:
     """Read a particle file into a particle table (px).
 
-    Formats, recognised by their header columns:
-
-    - ``"agglpy"``: ``id, x, y, r``, written by ``write_particles``;
-      read unchanged, ids included.
-    - ``"imagej"``: the CSV of Fiji's ROI Manager (``Index, Type, X,
-      Y, Width, Height``). Converted to pixel centres
-      (``x = X + Width/2 - 0.5``), ``r = (Width + Height)/4`` and
-      ``id = Index + 1``, the number Fiji shows. Ovals with
-      ``|Width - Height| <= 1`` px are read as circles; other shapes
-      are dropped. Either gives one ``NonCircularParticlesWarning``,
-      except for differences up to 0.01 px (ImageJ's float32
-      rounding).
-
-    Only the geometry is read: the result has exactly the columns
-    ``id, x, y, r``, and any other column in the file is ignored. A
-    file with a header and no rows gives an empty table.
+    Two formats, recognised by their header columns: ``"agglpy"``
+    (``id, x, y, r``, written by `write_particles`, read unchanged)
+    and ``"imagej"`` (the CSV of Fiji's ROI Manager: ``Index, Type, X,
+    Y, Width, Height``). Only the geometry is read; other columns in
+    the file are ignored.
 
     Parameters
     ----------
-    path : path-like
+    path : str or Path
         The particle file (UTF-8, a byte order mark is fine).
-    format : str, default "auto"
-        ``"auto"`` (default) recognises the format from the
-        header; a format name skips that and requires its columns.
+    format : {"auto", "agglpy", "imagej"}, default "auto"
+        The file format; ``"auto"`` recognises it from the header, a
+        format name requires its columns.
 
     Returns
     -------
     DataFrame
-        A validated particle table.
+        A validated particle table with exactly ``id, x, y, r`` in px,
+        pixel centres at integers; empty for a header without rows.
 
     Raises
     ------
     FileNotFoundError
         If the file doesn't exist.
     FileFormatError
-        If no format or more than one matches, a
-        column is missing or a value breaks the particle table
-        schema.
+        If the file is not a UTF-8 CSV table, no format or more than
+        one matches, a column is missing or a value breaks the
+        particle table schema.
     ParamsError
-        If ``format`` is not a known format name.
+        If `format` is not a known format name.
 
     Warns
     -----
     NonCircularParticlesWarning
-        If ImageJ shapes were approximated
-        or dropped.
+        If ImageJ shapes were read as circles or dropped.
     DuplicateParticlesWarning
-        If the file holds near-identical
-        circles (see ``agglpy.tables.find_duplicates``).
+        If the file holds near-identical circles (see
+        `agglpy.tables.find_duplicates`).
+
+    Notes
+    -----
+    An ImageJ file is shifted to pixel centres, with
+    ``r = (Width + Height)/4`` and ``id = Index + 1`` (the number Fiji
+    shows). Ovals with ``|Width - Height| <= 1`` px are read as
+    circles, other shapes are dropped; differences up to 0.01 px
+    (ImageJ's float32 rounding) are not warned. See *Methodology*
+    (``docs/methodology.md``), section *4. Manual correction*.
     """
     path = Path(path)
     if format != "auto" and format not in _FORMATS:
@@ -443,19 +442,28 @@ def read_particles(path: PathLike, *, format: str = "auto") -> pd.DataFrame:
 
 
 def particle_format(path: PathLike) -> str:
-    """The format ``read_particles(path)`` recognises in a file.
+    """Return the format `read_particles` recognises in a file.
 
-    Reads only the header. Besides ``"agglpy"`` and ``"imagej"``, the
-    result can be ``"agglpy_v04"`` or ``"agglpy_v00"``: files written
-    by older agglpy versions.
+    Reads only the header.
+
+    Parameters
+    ----------
+    path : str or Path
+        The particle file.
+
+    Returns
+    -------
+    str
+        ``"agglpy"`` or ``"imagej"``; ``"agglpy_v04"`` or
+        ``"agglpy_v00"`` for files written by older agglpy versions.
 
     Raises
     ------
     FileNotFoundError
         If the file doesn't exist.
     FileFormatError
-        If no format or more than one matches, or the
-        file is not a UTF-8 CSV table.
+        If no format or more than one matches, or the file is not a
+        UTF-8 CSV table.
     """
     path = Path(path)
     try:
@@ -509,7 +517,7 @@ def _from_imagej(raw: pd.DataFrame, path: Path) -> pd.DataFrame:
     keep = oval & (gap <= _NEAR_CIRCLE_PX)
     if near.any() or not keep.all():
         _warn_shapes(raw, ids, near, ~keep, path)
-    # ImageJ counts from pixel edges, agglpy from pixel centres (D-051)
+    # ImageJ counts from pixel edges, agglpy from pixel centres
     return pd.DataFrame(
         {
             "id": ids[keep],
@@ -560,7 +568,7 @@ def _warn_shapes(
 
 
 def _listed(labels: list[str]) -> str:
-    """Labels joined by commas, cut after ``_MAX_LISTED``."""
+    """Join labels by commas, cut after ``_MAX_LISTED``."""
     more = len(labels) - _MAX_LISTED
     tail = f" and {more} more" if more > 0 else ""
     return ", ".join(labels[:_MAX_LISTED]) + tail
@@ -571,33 +579,36 @@ def write_particles(
 ) -> None:
     """Write a particle table as an agglpy particle file.
 
-    Writes exactly the columns ``id, x, y, r`` (px), in that order:
-    extra columns in memory are not written. One header row, comma
-    separated, ``.`` as decimal mark, UTF-8 without a byte order mark,
-    LF line endings on every OS, so ImageJ can open the file and the
-    same table always gives the same bytes. Floats are written as the
-    shortest decimal that reads back to the same value:
-    ``read_particles`` returns the table exactly.
+    Writes exactly the columns ``id, x, y, r`` (px), in that order;
+    other columns are not written. `read_particles` returns the table
+    exactly.
 
     Parameters
     ----------
     particles : DataFrame
-        A particle table.
-    path : path-like
+        A particle table with ``id, x, y, r`` in px.
+    path : str or Path
         The file to write.
     overwrite : bool, default False
-        Replace an existing file. By default an existing
-        file is never touched.
+        Replace an existing file. By default an existing file is never
+        touched.
 
     Raises
     ------
     ParticleTableError
-        If the table breaks the schema (nothing is
-        written).
+        If the table breaks the schema (nothing is written).
     FileExistsError
-        If the file exists and ``overwrite`` is False.
+        If the file exists and `overwrite` is False.
     FileNotFoundError
         If the folder doesn't exist.
+
+    Notes
+    -----
+    One header row, comma separated, ``.`` as decimal mark, UTF-8
+    without a byte order mark, LF line endings on every OS: ImageJ can
+    open the file and the same table always gives the same bytes.
+    Floats are written as the shortest decimal that reads back to the
+    same value.
     """
     table = validate_particles(particles, warn_duplicates=False)
     table = table.loc[:, list(PARTICLE_COLUMNS)]

@@ -1,11 +1,10 @@
-"""Writing result tables with their record to a folder (the export edge).
+"""Writing result tables with their record (the export edge).
 
-``write_results`` writes ``results.xlsx`` (one sheet per table, then
-``units`` and ``info``), every table as ``csv/<name>.csv`` and the
-record as ``record.yml``. It knows nothing about images or collections:
-the caller passes the tables, what to record (params, which particle
-set was used) and the unit of each column; the edge adds the versions
-of agglpy and its main dependencies to every export.
+The edge knows nothing about images or collections: the caller passes
+the tables, what to record (params, which particle set was used) and
+the unit of each column; the edge adds the versions of agglpy and its
+main dependencies. See *Results* (``docs/results.md``), section
+*Export*.
 """
 
 import dataclasses
@@ -68,45 +67,33 @@ def write_results(
 ) -> Path:
     """Write result tables, their units and a record into a folder.
 
-    Writes into ``folder`` (created with its parents if missing):
-
-    - ``results.xlsx``: one sheet per table in the given order, then
-      ``units`` (with ``units=``) and ``info`` (the record as
-      ``key | value`` rows, e.g. ``params.hct.ranges.0.d_min | 3``). A
-      table longer than Excel's 1,048,575 rows is written as CSV only;
-      the info sheet lists it.
-    - ``csv/<name>.csv`` for every table, and ``csv/units.csv``: UTF-8,
-      comma separated, ``.`` as decimal mark, a header row and no index
-      column. A table whose index is not the default ``0 … n-1``
-      (e.g. a ``groupby`` result) is written with its index as columns.
-    - ``record.yml``: the record, under ``agglpy`` the agglpy version,
-      the date and time, the versions of the main dependencies and the
-      tables written.
-
-    Column names stay as in the tables; units go into the ``units``
-    sheet and ``csv/units.csv`` (``table | column | unit``). A write
-    that fails part-way removes the files it wrote.
+    Writes ``results.xlsx`` (one sheet per table, then ``units`` and
+    ``info``), ``csv/<name>.csv`` for every table (and
+    ``csv/units.csv``) and ``record.yml``; `folder` is created with its
+    parents if missing. A write that fails part-way removes the files
+    it wrote.
 
     Parameters
     ----------
-    folder : path-like
+    folder : str or Path
         The folder to write into.
-    tables : mapping
-        ``{name: table}``; names of letters, digits, ``_`` and
-        ``-``, at most 31 characters (Excel's sheet limit), not
-        ``info`` or ``units``.
+    tables : mapping of str to DataFrame
+        ``{name: table}``; names of letters, digits, ``_`` and ``-``,
+        at most 31 characters (Excel's sheet limit), not ``info`` or
+        ``units``.
     record : mapping, optional
-        What the results were made from, e.g. ``{"params":
-        ..., "particle_set": {"D7-017": "corrected"}}``: text,
-        numbers, bools, None, lists, dicts with text keys, and
-        dataclasses such as the params (written as dicts).
+        What the results were made from, e.g. ``{"params": ...,
+        "particle_set": {"D7-017": "corrected"}}``: text, numbers,
+        bools, None, lists, dicts with text keys, and dataclasses such
+        as the params (written as dicts).
     units : mapping, optional
-        ``{table: {column: unit}}``, e.g. ``{"particles": {"D":
-        "m"}}``; columns without an entry are not listed.
+        ``{table: {column: unit}}``, e.g.
+        ``{"particles": {"D": "m"}}``; columns without an entry are not
+        listed.
     overwrite : bool, default False
-        Replace an earlier export in ``folder``. Only
-        ``results.xlsx``, ``record.yml`` and ``csv/`` are removed;
-        other files are never touched.
+        Replace an earlier export in `folder`. Only ``results.xlsx``,
+        ``record.yml`` and ``csv/`` are removed; other files are never
+        touched.
 
     Returns
     -------
@@ -116,19 +103,26 @@ def write_results(
     Raises
     ------
     TableError
-        If a name is not allowed, a table is not a
-        DataFrame or has MultiIndex columns, or ``units`` names a
-        table or column that is not there.
+        If a name is not allowed, a table is not a DataFrame or has
+        MultiIndex columns, or `units` names a table or column that is
+        not there.
     ParamsError
-        If ``record`` has its own ``agglpy`` entry.
+        If `record` has its own ``agglpy`` entry.
     TypeError
         If a record value or a unit is of another type.
     OutputExistsError
-        If ``folder`` holds an export and
-        ``overwrite`` is False (nothing is written).
+        If `folder` holds an export and `overwrite` is False (nothing
+        is written).
     OutputLockedError
-        If a file of the earlier export can't be
-        removed, e.g. open in Excel (nothing is changed).
+        If a file of the earlier export can't be removed, e.g. open in
+        Excel (nothing is changed).
+
+    Notes
+    -----
+    A table longer than Excel's 1,048,575 rows is written as CSV only.
+    A table whose index is not the default ``0 … n-1`` (e.g. a
+    ``groupby`` result) is written with its index as columns. See
+    *Results* (``docs/results.md``), section *Export*.
     """
     _check_names(tables)
     written = {name: _with_index(table) for name, table in tables.items()}
@@ -245,7 +239,7 @@ def _unit_rows(
 
 
 def _plain(value: object, key: str) -> Any:
-    """``value`` as plain YAML types; ``key`` names it in errors."""
+    """Convert `value` to plain YAML types; `key` names it in errors."""
     if dataclasses.is_dataclass(value) and not isinstance(value, type):
         value = dataclasses.asdict(value)
     # NumPy numbers and arrays as Python numbers and lists; checked
@@ -271,7 +265,7 @@ def _plain(value: object, key: str) -> Any:
 
 
 def _info(record: Mapping[str, Any]) -> pd.DataFrame:
-    """The record as ``key | value`` rows, dotted keys, list positions."""
+    """Flatten the record into ``key | value`` rows (``a.b.0``)."""
     rows: list[tuple[str, object]] = []
 
     def walk(value: object, key: str) -> None:
@@ -291,7 +285,7 @@ def _info(record: Mapping[str, Any]) -> pd.DataFrame:
 
 
 def _dependency_versions() -> dict[str, str | None]:
-    """The installed version of each dependency in ``_VERSIONS``."""
+    """Return the installed version of each dependency in _VERSIONS."""
     return {key: _version(names) for key, names in _VERSIONS.items()}
 
 
@@ -339,7 +333,7 @@ def _check_replaceable(paths: Sequence[Path]) -> None:
 
 
 def _export_items(folder: Path) -> list[Path]:
-    """The files and folder of an export present in ``folder``."""
+    """Return the files and folder of an export present in `folder`."""
     return [
         folder / n for n in (_XLSX, _RECORD, _CSV) if (folder / n).exists()
     ]
