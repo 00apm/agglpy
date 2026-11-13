@@ -1,79 +1,7 @@
-"""Structure of agglomerates: cores, links, loops and dangling ends.
+"""Structure of agglomerates: segments, branches and longest chains.
 
-``structure_properties`` reads one image's particle, agglomerate and
-contacts tables (``agglomerates.find_agglomerates``,
-``properties.agglomerate_properties``) and labels every particle with
-the part of its agglomerate it belongs to. The particles are the nodes
-of a graph and the contacts its edges (the *possible* contacts, see
-``agglpy.core.agglomerates``).
-
-Definitions, per agglomerate:
-
-- A contact is *tight* when its two particles share a neighbour: they
-  are two sides of a triangle. A *core* is a connected group of
-  ``min_core_members`` or more particles joined by tight contacts: a
-  dense, triangulated part.
-- A *dangling end* is a connected group of particles that hangs on the
-  rest by one contact and holds no core particle: a thread, or a thread
-  carrying a small loop. Found on the contacts whose removal would split
-  the agglomerate: the groups left after cutting all of them form a
-  tree, whose leaves are cut off again and again unless they hold a
-  core particle (or, in an agglomerate without a core, 3 or more
-  particles, i.e. a loop).
-- The rest, split into connected runs: a run touching two or more
-  cores is a *link*, a run touching one core a *loop*. In an
-  agglomerate without a core the rest is its *small core*.
-- An agglomerate with nothing left (a tree, a single particle) is
-  ``no core`` throughout.
-- The *base* is the largest member (equal radii: the lower id). A
-  particle's *branch depth* is the fewest contacts from the base, its
-  *branch length* the smallest sum of diameters over a path from the
-  base, the base excluded. A *tip* has no neighbour deeper than itself;
-  every tip ends one branch (branches share their stems).
-- The *longest chain* is the largest, over all pairs of members, of
-  the fewest contacts between them; its length the largest, over all
-  pairs, of the smallest sum of diameters over a path, both ends
-  included.
-
-A length sums diameters because touching spheres are ``r_a + r_b``
-apart whatever the view, so each step is exact. Lengths are in the
-units of ``r``.
-
-Particle columns: ``segment_type`` (one of the labels above),
-``segment_id`` (each core, link, loop, dangling end, small core and
-no-core agglomerate is one segment; numbered from 0 within the image by
-each segment's smallest particle id), ``branch_depth`` (0 at the base),
-``branch_length`` (0 at the base), ``tip`` (never the base, so never a
-single particle), ``dangling_end_depth`` and ``dangling_end_length``
-(on dangling-end particles only, NaN elsewhere: counted inside the end
-from the particle it hangs on, which is excluded; the end's first
-particle has depth 1).
-
-Agglomerate columns: ``longest_chain`` (0 for a single particle),
-``longest_chain_length`` (a single particle: its diameter),
-``branch_count`` (tips), ``branch_depth_max``, ``branch_length_max``,
-``core_count``, ``core_member_count``, ``small_core_member_count``,
-``link_count``, ``dangling_end_count``, ``dangling_end_member_count``,
-``dangling_end_depth_max``, ``dangling_end_length_max``. Counts are 0
-when there is none; each ``_max`` is the largest value of the particle
-column over the agglomerate, NaN when there is nothing to take (no
-branch in a single particle, no dangling end). ``branch_length_max``
-is the particle farthest from the base by length, which need not be a
-tip.
-
-Kind of number in a 2D projection: the longest chain, its length and
-the branch and dangling-end maxima are lower bounds (a projection can
-only add contacts, which shorten paths; rarely broken by true contacts
-that the pruning of nested pairs drops); ``core_member_count`` and
-``small_core_member_count`` are upper bounds (overlapping circles need
-not touch, so a projection reads denser than the agglomerate is);
-``dangling_end_member_count`` is a lower bound where the agglomerate
-truly has a core; the other counts and every single label describe one
-image and can change with one extra contact: compare totals, not
-single agglomerates.
-
-The result does not depend on the row order or on the particle ids,
-except the numbering of ``segment_id``.
+``structure_properties`` adds the structure columns to one image's
+particle and agglomerate tables (``docs/agglomerate-structure.md``).
 """
 
 import numpy as np
@@ -143,6 +71,10 @@ def structure_properties(
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Segments, branches and longest chains of one image's agglomerates.
 
+    The contacts are the edges of a graph; the base of an agglomerate is
+    its largest member (equal radii: the lower id). Lengths are sums of
+    diameters, in the units of ``r``.
+
     Args:
         particles: One image's particle table with ``id``, ``r`` and
             ``agglomerate_id``.
@@ -153,9 +85,9 @@ def structure_properties(
             core; an integer of 3 or more.
 
     Returns:
-        Copies of ``particles`` and ``agglomerates`` with the structure
-        columns (module docstring), replacing any from an earlier run;
-        every other column, the row order and the index are kept.
+        Copies of ``particles`` and ``agglomerates`` with the columns
+        ``PARTICLE_COLUMNS`` and ``AGGLOMERATE_COLUMNS``, replacing any
+        from an earlier run; other columns, row order and index kept.
 
     Raises:
         ParamsError: If ``min_core_members`` is not an integer >= 3.
