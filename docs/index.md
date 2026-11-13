@@ -7,3 +7,7 @@ agglpy detects spherical primary particles on microscopic (SEM/TEM) images and c
 
 - [Methodology](methodology.md) — the semi-automatic detection method (preprocessing, edge/circle detection, connectivity, agglomerate classification) and how it maps to the codebase.
 - [Structure of agglomerates](agglomerate-structure.md) — cores, links, loops, dangling ends, branches and the longest chain of each agglomerate (`res.with_structure()`).
+
+For contributors:
+
+- [Docstring standard](contributing/docstrings.md) — numpydoc and the rules agglpy adds.
