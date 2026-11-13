@@ -38,7 +38,9 @@ from agglpy.params import _positive
 # Length exponent of each property column: 0 count, ratio or flag,
 # 1 length (px), 2 area (px²), 3 volume (px³). D, area and volume mean
 # the same for a particle and an agglomerate. ``coordination`` is the
-# particle column of find_agglomerates; the rest are in table order.
+# particle column of find_agglomerates; then the columns of this module
+# in table order; last those of ``structure.structure_properties``
+# (particle columns, then agglomerate columns).
 DIMENSIONS: MappingProxyType[str, int] = MappingProxyType(
     {
         "coordination": 0,
@@ -66,6 +68,13 @@ DIMENSIONS: MappingProxyType[str, int] = MappingProxyType(
         "D_feret_y": 1,
         "D_feret_max": 1,
         "touches_edge": 0,
+        "segment_id": 0,
+        "core_count": 0,
+        "core_member_count": 0,
+        "small_core_member_count": 0,
+        "link_count": 0,
+        "dangling_end_count": 0,
+        "dangling_end_member_count": 0,
     }
 )
 
