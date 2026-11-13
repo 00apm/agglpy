@@ -127,10 +127,8 @@ ignore = [
 "src/agglpy/app/_detect.py" = ["D"]
 "src/agglpy/app/_files.py" = ["D"]
 "src/agglpy/app/_image.py" = ["D"]
-"src/agglpy/app/_preview.py" = ["D"]
 "src/agglpy/app/_records.py" = ["D"]
 "src/agglpy/app/_report.py" = ["D"]
-"src/agglpy/app/_results.py" = ["D"]
 "src/agglpy/app/_sheet.py" = ["D"]
 "src/agglpy/app/_sheet_writer.py" = ["D"]
 "src/agglpy/app/_sources.py" = ["D"]
@@ -187,10 +185,8 @@ exclude_files = [
     "src/agglpy/app/_detect.py",
     "src/agglpy/app/_files.py",
     "src/agglpy/app/_image.py",
-    "src/agglpy/app/_preview.py",
     "src/agglpy/app/_records.py",
     "src/agglpy/app/_report.py",
-    "src/agglpy/app/_results.py",
     "src/agglpy/app/_sheet.py",
     "src/agglpy/app/_sheet_writer.py",
     "src/agglpy/app/_sources.py",

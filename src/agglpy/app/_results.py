@@ -1,4 +1,4 @@
-"""``Results``: what ``Collection.analyze`` found, as plain tables."""
+"""`Results`: what `Collection.analyze` found, as plain tables."""
 
 import base64
 import dataclasses
@@ -55,7 +55,7 @@ __all__ = ["Drawings", "Origin", "Results"]
 
 @dataclass(frozen=True)
 class Origin:
-    """What a ``Results`` was made from, for its export record.
+    """What a `Results` was made from, for its export record.
 
     Attributes
     ----------
@@ -77,7 +77,7 @@ class Origin:
     names : tuple of str
         Every image of the sheet.
     structure : mapping, optional
-        The settings of ``Results.with_structure``, or None.
+        The settings of `Results.with_structure`, or None.
     """
 
     analyzed: str
@@ -106,35 +106,19 @@ _IMAGES_UNITS = {
 class Results:
     """The particles and agglomerates of a collection, in SI units.
 
-    Lengths are in m, areas in m², volumes in m³; ``pixel_size`` is in
-    m per pixel. For other units add a column, e.g.
-    ``res.particles["d_um"] = res.particles.D * 1e6``.
+    Made by `Collection.analyze`, `subset` and `with_structure`; not
+    created directly. Lengths are in m, areas in m², volumes in m³,
+    ``pixel_size`` in m per pixel. The tables are the stored frames,
+    not copies: columns added to them are seen by the methods, `draw`
+    and `subset`; rows and agglpy's columns are not changed by hand
+    (a `subset` leaves images or agglomerates out).
 
-    The statistics methods take the tables as they are and group
-    images by columns of ``images`` (``by="series"``, ``by="image"``):
-    a sheet column groups images directly.
-
-    The tables are the stored frames, not copies: add your own
-    columns to them, and the methods, ``draw`` and ``subset`` see
-    them. Don't change rows or agglpy's columns by hand; take a
-    ``subset`` to leave images or agglomerates out.
-
-    With pandas:
-
-    - each particle with its agglomerate's properties:
-      ``res.particles.merge(res.agglomerates, on=["image",
-      "agglomerate_id"], suffixes=("", "_agglomerate"))``;
-    - user columns onto particle rows:
-      ``res.particles.merge(res.images[["image", "series"]],
-      on="image")``;
-    - the share of agglomerates touching the edge, per image:
-      ``res.agglomerates.groupby("image").touches_edge.mean()``;
-    - leaving them out:
-      ``res.subset(agglomerates=~res.agglomerates.touches_edge)``.
-
-    ``with_structure()`` returns new results with the structure of each
-    agglomerate: segments (cores, links, loops, dangling ends),
-    branches and the longest chain (``docs/agglomerate-structure.md``).
+    Parameters
+    ----------
+    images, particles, agglomerates, contacts : DataFrame
+        The tables, kept as the attributes of the same names.
+    origin : Origin
+        What the results were made from, for the export record.
 
     Attributes
     ----------
@@ -150,10 +134,17 @@ class Results:
     contacts : DataFrame
         One row per possible contact: ``image``,
         ``agglomerate_id``, the particle ids ``id_a`` (the larger)
-        and ``id_b``, ``inside`` (``id_b`` lies inside ``id_a``);
-        an agglomerate has ``contact_count`` rows
-        (``agglpy.core.agglomerates.find_agglomerates``). Pairs per
-        image: ``res.contacts.groupby("image").size()``.
+        and ``id_b``, ``inside`` (``id_b`` lies inside ``id_a``).
+
+    See Also
+    --------
+    agglpy.Collection.analyze : Make the results of a collection.
+
+    Notes
+    -----
+    See *Results* (``docs/results.md``), sections *Units and keys*,
+    *Images table*, *Particle table*, *Agglomerate table* and
+    *Contacts table*.
     """
 
     def __init__(
@@ -164,8 +155,6 @@ class Results:
         contacts: pd.DataFrame,
         origin: Origin,
     ) -> None:
-        """Made by ``Collection.analyze`` and ``subset``; not called
-        directly."""
         self.images = images
         self.particles = particles
         self.agglomerates = agglomerates
@@ -186,9 +175,37 @@ class Results:
         *,
         metrics: str | Iterable[str] | None = None,
     ) -> pd.DataFrame:
-        """Built-in metrics of each group of images, pooled.
+        """Compute the built-in metrics of each group of images, pooled.
 
-        As ``agglpy.core.metrics.summary`` on these tables.
+        `agglpy.core.metrics.summary` on these tables.
+
+        Parameters
+        ----------
+        by : str or iterable of str, optional
+            ``"image"``, a column of `images` (a sheet column groups
+            images directly) or a list of them; None gives one row.
+        metrics : str or iterable of str, optional
+            Family names; None gives every family, ``"structure"``
+            only when the tables have its columns.
+
+        Returns
+        -------
+        DataFrame
+            One row per group: the `by` columns, ``n_images``, then
+            the metrics.
+
+        Raises
+        ------
+        TableError
+            If ``"structure"`` is chosen on results without the
+            structure columns (`with_structure` adds them), or a `by`
+            column is missing or has the name of an output column.
+        ParamsError
+            If a family name is unknown.
+
+        See Also
+        --------
+        agglpy.core.metrics.summary : The computation and the metrics.
         """
         metrics = self._check_structure(metrics)
         return self._core(
@@ -207,10 +224,40 @@ class Results:
         metrics: str | Iterable[str] | None = None,
         confidence: float = 0.95,
     ) -> pd.DataFrame:
-        """The built-in metrics per image, then mean ± CI over images.
+        """Compute the metrics per image, then mean ± CI over images.
 
-        As ``agglpy.core.metrics.summary_across_images`` on these
-        tables.
+        `agglpy.core.metrics.summary_across_images` on these tables.
+        Each image weighs equally.
+
+        Parameters
+        ----------
+        by : str or iterable of str, optional
+            As in `summary`.
+        metrics : str or iterable of str, optional
+            As in `summary`.
+        confidence : float, default 0.95
+            Level of the confidence interval, between 0 and 1.
+
+        Returns
+        -------
+        DataFrame
+            A long table: the `by` columns, ``metric``, ``mean``,
+            ``std``, ``n``, ``ci_low``, ``ci_high``; one row per group
+            and metric.
+
+        Raises
+        ------
+        TableError
+            If ``"structure"`` is chosen on results without the
+            structure columns, or a `by` column is missing or has the
+            name of an output column.
+        ParamsError
+            If a family name is unknown or `confidence` is not
+            between 0 and 1.
+
+        See Also
+        --------
+        agglpy.core.metrics.summary_across_images : The computation.
         """
         metrics = self._check_structure(metrics)
         return self._core(
@@ -232,10 +279,52 @@ class Results:
         values: str | Iterable[str] | None = None,
         confidence: float = 0.95,
     ) -> pd.DataFrame:
-        """Mean, std, n and confidence interval of per-image values.
+        """Compute mean, std, n and a confidence interval over images.
 
-        As ``agglpy.core.metrics.values_across_images`` with
-        ``images``.
+        `agglpy.core.metrics.values_across_images` with `images`.
+        Each image weighs equally.
+
+        Parameters
+        ----------
+        per_image : DataFrame
+            ``image``, the `keys` columns and the value columns; one
+            row per image (and key).
+        by : str or iterable of str, optional
+            As in `summary`.
+        keys : str or iterable of str, default ()
+            Columns that tell several values of one image apart
+            (e.g. size class and basis); kept in the output.
+        values : str or iterable of str, optional
+            The value columns; None takes every other column of
+            `per_image` not in `images`.
+        confidence : float, default 0.95
+            Level of the confidence interval, between 0 and 1.
+
+        Returns
+        -------
+        DataFrame
+            A long table: the `by` columns, the `keys`, ``metric``
+            (the value column's name), ``mean``, ``std``, ``n``,
+            ``ci_low``, ``ci_high``.
+
+        Raises
+        ------
+        TableError
+            If `per_image` lacks a column, names an unknown image,
+            repeats an image (and key) or has a value column that is
+            not numeric, or a `by` column is missing or has the name
+            of an output column.
+        ParamsError
+            If `confidence` is not between 0 and 1.
+
+        Warns
+        -----
+        MissingImagesWarning
+            If images of `images` have no row in `per_image`.
+
+        See Also
+        --------
+        agglpy.core.metrics.values_across_images : The computation.
         """
         return self._core(
             _metrics.values_across_images,
@@ -257,15 +346,54 @@ class Results:
         closed: str = "right",
         weights: str | Iterable[str] = (),
     ) -> pd.DataFrame:
-        """Distribution of ``column`` of a table over size classes.
+        """Compute the distribution of a column over size classes.
 
-        As ``agglpy.core.distributions.distribution``; ``table`` is
-        ``"particles"`` or ``"agglomerates"``.
+        `agglpy.core.distributions.distribution` on `images` and one
+        of the tables.
+
+        Parameters
+        ----------
+        table : {"particles", "agglomerates"}
+            The table that holds `column`.
+        column : str
+            The column to classify, e.g. ``"D"`` (m).
+        edges : array_like
+            Increasing class edges, in the unit of `column` (e.g.
+            `agglpy.size_classes`).
+        by : str or iterable of str, optional
+            As in `summary`.
+        closed : {"right", "left"}, default "right"
+            Classes ``(a, b]`` or ``[a, b)``.
+        weights : str or iterable of str, default ()
+            Columns to weight by, e.g. ``"volume"``; each adds one
+            ``basis``.
+
+        Returns
+        -------
+        DataFrame
+            A long table: the `by` columns, ``left, mid, right,
+            width``, ``basis``, ``amount``, ``fraction``,
+            ``cumulative``, ``density``, ``log_density``.
 
         Raises
         ------
         ParamsError
-            If ``table`` is another name.
+            If `table` is another name, `edges` or `closed` is
+            invalid, or a weight column is called ``"number"``.
+        TableError
+            If a column is missing or not numeric, a weight is not
+            finite on a counted value, or a `by` column has the name
+            of an output column.
+
+        Warns
+        -----
+        ValuesNotCountedWarning
+            If values were left out (outside the classes or NaN).
+
+        See Also
+        --------
+        agglpy.core.distributions.distribution : The computation and
+            the output columns.
         """
         return self._core(
             distributions.distribution,
@@ -289,15 +417,56 @@ class Results:
         weights: str | Iterable[str] = (),
         confidence: float = 0.95,
     ) -> pd.DataFrame:
-        """The fraction of each class per image, then mean ± CI.
+        """Compute each class's fraction per image, then mean ± CI.
 
-        As ``agglpy.core.distributions.distribution_across_images``;
-        ``table`` is ``"particles"`` or ``"agglomerates"``.
+        `agglpy.core.distributions.distribution_across_images` on
+        `images` and one of the tables. An image without counted
+        values is left out of the means and of ``n``.
+
+        Parameters
+        ----------
+        table : {"particles", "agglomerates"}
+            As in `distribution`.
+        column : str
+            As in `distribution`.
+        edges : array_like
+            As in `distribution`.
+        by : str or iterable of str, optional
+            As in `summary`.
+        closed : {"right", "left"}, default "right"
+            As in `distribution`.
+        weights : str or iterable of str, default ()
+            As in `distribution`.
+        confidence : float, default 0.95
+            Level of the confidence interval, between 0 and 1.
+
+        Returns
+        -------
+        DataFrame
+            A long table: the `by` columns, ``left, mid, right,
+            width``, ``basis``, ``metric`` (``"fraction"``), ``mean``,
+            ``std``, ``n``, ``ci_low``, ``ci_high``.
 
         Raises
         ------
         ParamsError
-            If ``table`` is another name.
+            If `table` is another name, `edges` or `closed` is
+            invalid, a weight column is called ``"number"``, or
+            `confidence` is not between 0 and 1.
+        TableError
+            If a column is missing or not numeric, a weight is not
+            finite on a counted value, or a `by` column has the name
+            of an output column.
+
+        Warns
+        -----
+        ValuesNotCountedWarning
+            If values were left out (outside the classes or NaN).
+
+        See Also
+        --------
+        agglpy.core.distributions.distribution_across_images : The
+            computation.
         """
         return self._core(
             distributions.distribution_across_images,
@@ -318,32 +487,36 @@ class Results:
         agglomerates: pd.Series | None = None,
         label: str | None = None,
     ) -> "Results":
-        """A part of the results, with this step kept for the export.
+        """Return a part of the results, the step kept for the export.
 
-        ``images`` keeps those images with their particles,
-        agglomerates and contacts; ``agglomerates`` keeps those
-        agglomerates with their member particles and contacts, and every
-        image (an image with nothing left counts as zeros). Both: one
-        step, images first. The tables of the new results are
-        renumbered from 0; ``self`` stays as it is.
+        `images` keeps those images with their particles, agglomerates
+        and contacts; `agglomerates` keeps those agglomerates with
+        their member particles and contacts, and every image (an image
+        with nothing left counts as zeros). Both: one step, images
+        first. The results it is called on stay as they are.
 
         Parameters
         ----------
-        images : Series or str or sequence of str, optional
-            A True / False Series on ``images``' index, e.g.
+        images : Series of bool or str or sequence of str, optional
+            A True / False Series on the index of `images`, e.g.
             ``res.images.series == "a"``, or a name or list of
             names (kept in the order of the results).
-        agglomerates : Series, optional
-            A True / False Series on ``agglomerates``'
-            index, e.g. ``~res.agglomerates.touches_edge``.
+        agglomerates : Series of bool, optional
+            A True / False Series on the index of `agglomerates`,
+            e.g. ``~res.agglomerates.touches_edge``.
         label : str, optional
             Names the step in the export record.
+
+        Returns
+        -------
+        Results
+            New results, their tables renumbered from 0.
 
         Raises
         ------
         ParamsError
-            If neither is given, a name is not in these
-            results, or no image is left.
+            If neither `images` nor `agglomerates` is given, a name
+            is not in these results, or no image is left.
         TableError
             If a mask is not a True / False Series on its
             table's index.
@@ -399,26 +572,40 @@ class Results:
         )
 
     def with_structure(self, *, min_core_members: int = 7) -> "Results":
-        """New results with the structure columns added, image by image.
+        """Return new results with the structure columns added.
 
-        Particles get ``PARTICLE_COLUMNS``, agglomerates
-        ``AGGLOMERATE_COLUMNS`` of ``agglpy.core.structure`` (lengths in
-        m), replacing any from an earlier call; ``self`` stays as it is.
-        ``subset`` keeps whole agglomerates, so the columns stay valid
-        after it; ``segment_id`` then keeps its numbers, while
-        ``subset`` first numbers them from 0. Draw the segments with
-        ``draw(what="particles", color_by="segment_type")``.
+        Particles get ``PARTICLE_COLUMNS`` and agglomerates
+        ``AGGLOMERATE_COLUMNS`` of `agglpy.core.structure`, image by
+        image; lengths are in m. Columns from an earlier call are
+        replaced; the results it is called on stay as they are.
 
         Parameters
         ----------
         min_core_members : int, default 7
-            Particles a group of triangles needs to
-            be a core; an integer of 3 or more.
+            Particles a group of triangles needs to be a core; 3 or
+            more.
+
+        Returns
+        -------
+        Results
+            New results with the structure columns.
 
         Raises
         ------
         ParamsError
-            If ``min_core_members`` is not an integer >= 3.
+            If `min_core_members` is not an integer of 3 or more.
+
+        See Also
+        --------
+        agglpy.core.structure.structure_properties : The computation.
+
+        Notes
+        -----
+        `subset` keeps whole agglomerates, so the columns stay valid
+        after it; ``segment_id`` then keeps its numbers, while `subset`
+        first numbers them from 0. Draw the segments with
+        ``draw(what="particles", color_by="segment_type")``. See
+        *Structure of agglomerates* (``docs/agglomerate-structure.md``).
         """
         particles: list[pd.DataFrame] = []
         aggls: list[pd.DataFrame] = []
@@ -459,31 +646,28 @@ class Results:
         tables: Mapping[str, pd.DataFrame] | None = None,
         overwrite: bool = False,
     ) -> Path:
-        """Write the tables, their units and a record into ``folder``.
+        """Write the tables, their units and a record into a folder.
 
         Writes ``results.xlsx`` (the sheets ``images``,
         ``agglomerates``, ``particles``, ``contacts``, the extra
-        ``tables``, then ``units`` and ``info``), ``csv/`` (one CSV per
-        table and ``units.csv``) and ``record.yml``: per image the
-        particle set, pixel size, region and the detection or correction
-        the numbers come from, the rows with ``include`` false and the
-        subset steps. Drawings of the same results fit in a folder next
-        to it (``Drawings.export``).
+        `tables`, then ``units`` and ``info``), ``csv/`` (one CSV per
+        table and ``units.csv``) and ``record.yml``, the record of
+        where the numbers come from.
 
         Parameters
         ----------
-        folder : path-like, optional
+        folder : str or Path, optional
             The folder to write into; created if missing. A
             folder named for each export is the recommended way;
             None gives ``exports/results`` in the collection, where
             a repeated export needs ``overwrite=True``. A relative
             path is taken from the current working directory.
-        tables : mapping, optional
+        tables : mapping of str to DataFrame, optional
             Extra tables made from these results, e.g.
             ``{"summary": res.summary(by="series")}``; written
             after the four, without units.
         overwrite : bool, default False
-            Replace an earlier export in ``folder``.
+            Replace an earlier export in `folder`.
 
         Returns
         -------
@@ -495,14 +679,22 @@ class Results:
         ParamsError
             If an extra table is called ``images``,
             ``agglomerates``, ``particles`` or ``contacts``, or
-            ``folder`` lies in the collection's work folder
+            `folder` lies in the collection's work folder
             ``agglpy/``.
         OutputExistsError
-            If ``folder`` has an export and
-            ``overwrite`` is False.
+            If `folder` has an export and `overwrite` is False.
         OutputLockedError
-            If a file to replace is open in another
-            program.
+            If a file to replace is open in another program.
+
+        See Also
+        --------
+        agglpy.export.write_results : The writer.
+        Drawings.export : Drawings of the same results, for a folder
+            next to this one.
+
+        Notes
+        -----
+        See *Results* (``docs/results.md``), section *Export*.
         """
         folder = export_folder(self._origin.collection, folder, "results")
         extra = dict(tables or {})
@@ -571,12 +763,10 @@ class Results:
         """Draw the particles or agglomerates of each image, in px.
 
         One colour scale for all drawn images: numbers share one
-        ``vmin`` / ``vmax`` over the selected values of every image
+        `vmin` / `vmax` over the selected values of every image
         (unless given), labels one label → colour mapping, so a series
         compares at a glance (draw one with ``res.subset(images=...)``
-        first). The figures are made when looked at (``d[name]``) or
-        exported, not held: a figure changed by hand is saved with
-        ``fig.savefig``.
+        first).
 
         Parameters
         ----------
@@ -584,15 +774,15 @@ class Results:
             A name or list of names; None draws every image.
         what : {"particles", "agglomerates"}, default "agglomerates"
             ``"particles"`` (each particle coloured by a column
-            of ``particles``) or ``"agglomerates"`` (each
-            agglomerate by a column of ``agglomerates``).
+            of `particles`) or ``"agglomerates"`` (each
+            agglomerate by a column of `agglomerates`).
         color_by : Hashable
             The column of that table that gives the colours.
-            A column of ``images`` has to be merged onto the table
+            A column of `images` has to be merged onto the table
             first.
-        select : Series, optional
+        select : Series of bool, optional
             A True / False Series on that table's index; the
-            others are drawn as thin ``others`` outlines.
+            others are drawn as thin `others` outlines.
         image : bool, default True
             Draw the image file underneath, read when a figure
             is made.
@@ -601,13 +791,29 @@ class Results:
             background shows through, e.g. ``background="black",
             image_alpha=0.4`` darkens the image so the circles
             stand out.
-        background : ColorType or None, default "white"
+        background : color or None, default "white"
             The figure's colour, under the image: any
             matplotlib colour (``"white"``, ``"#FF000033"``, ``(0,
             1, 0, 0.47)`` with values in 0-1) or None for a
             transparent figure.
-        others, cmap, norm, vmin, vmax, colors, alpha, linewidth
-            As for ``agglpy.draw.particles``.
+        others : color or None, default "grey"
+            As in `agglpy.draw.particles`.
+        cmap : str or Colormap, optional
+            As in `agglpy.draw.particles`.
+        norm : Normalize, optional
+            As in `agglpy.draw.particles`.
+        vmin : float, optional
+            As in `agglpy.draw.particles`; the smallest selected
+            value of all drawn images when None.
+        vmax : float, optional
+            As in `agglpy.draw.particles`; the largest selected
+            value of all drawn images when None.
+        colors : mapping, optional
+            As in `agglpy.draw.particles`.
+        alpha : float, default 0.5
+            As in `agglpy.draw.particles`.
+        linewidth : float, default 1.0
+            As in `agglpy.draw.particles`.
         legend : bool or str, default True
             A colorbar or legend in a strip right of the image;
             a string titles it; False draws the figure without the
@@ -620,21 +826,32 @@ class Results:
         Returns
         -------
         Drawings
-            The ``Drawings``: image name → figure.
+            The figures: image name → figure.
 
         Raises
         ------
         ParamsError
             If no image or a name not in these results is
-            given, ``what`` is
-            another name, ``color_by`` is a column of ``images``
-            only, ``image`` or ``full_image`` is not True / False,
-            ``alpha`` /
-            ``image_alpha`` is not within 0-1, ``linewidth`` is
-            negative, or an option does not fit the column.
+            given, `what` is another name, `color_by` is a column
+            of `images` only, `image` or `full_image` is not True /
+            False, `alpha` / `image_alpha` is not within 0-1,
+            `linewidth` is negative, or an option does not fit the
+            column.
         TableError
-            If ``color_by`` is not a column of the table or
-            ``select`` not a True / False Series on its index.
+            If `color_by` is not a column of the table or
+            `select` not a True / False Series on its index.
+
+        See Also
+        --------
+        agglpy.draw.particles : Draw one image's particles.
+        agglpy.draw.agglomerates : Draw one image's agglomerates.
+
+        Notes
+        -----
+        The figures are made when looked at (``d[name]``) or
+        exported, not held: a figure changed by hand is saved with
+        ``fig.savefig``. See *Results* (``docs/results.md``), section
+        *Drawings*.
         """
         names = (
             list(self.images.image)
@@ -716,7 +933,7 @@ class Results:
         color_by: Hashable,
         chosen: pd.Series,
     ) -> "_Sheet":
-        """What ``Drawings`` needs of one image, copied, back in px."""
+        """Copy what `Drawings` needs of one image, back in px."""
         row = self.images[self.images.image == name].iloc[0]
         size = float(row.pixel_size)
         mine = self.particles.image == name
@@ -752,7 +969,7 @@ class Results:
     def _image_mask(
         self, images: pd.Series | str | Sequence[str]
     ) -> pd.Series:
-        """``images=`` of ``subset`` as a mask on ``self.images``."""
+        """Turn ``images=`` of `subset` into a mask on `images`."""
         if isinstance(images, pd.Series):
             if (
                 not images.index.equals(self.images.index)
@@ -780,8 +997,11 @@ class Results:
     def _check_structure(
         self, metrics: str | Iterable[str] | None
     ) -> list[str] | None:
-        """The family names, read once; refuse the family structure on
-        results without its columns."""
+        """Read the family names once.
+
+        Refuse the family ``"structure"`` on results without its
+        columns.
+        """
         if metrics is None:
             return None
         chosen = [metrics] if isinstance(metrics, str) else list(metrics)
@@ -807,7 +1027,7 @@ class Results:
     def _core(
         function: Callable[..., pd.DataFrame], *args: object, **kwargs: object
     ) -> pd.DataFrame:
-        """Call a core function; its warnings point at the user's line."""
+        """Call a core function, its warnings at the user's line."""
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             out = function(*args, **kwargs)
@@ -816,7 +1036,7 @@ class Results:
         return out
 
 
-# Figures a notebook shows inline; a whole collection would be tens of MB.
+# Figures a notebook shows inline; all of a collection: tens of MB.
 _THUMBNAILS = 4
 # The colour column of the tables ``Drawings`` holds.
 _VALUES = "agglpy color_by"
@@ -839,10 +1059,32 @@ class _Sheet:
 class Drawings(Mapping[str, Figure]):
     """Figures of results, one per image, made when looked at.
 
-    A read-only mapping image name → matplotlib ``Figure``, in the
-    order of the results: ``d["D7-017"]``, ``list(d)``, ``len(d)``.
-    Each access makes a new figure from the rows copied at
-    ``res.draw``; with ``image=True`` the image file is read then.
+    Made by `Results.draw`; not created directly. A read-only mapping
+    image name → matplotlib ``Figure``, in the order of the results:
+    ``d["D7-017"]``, ``list(d)``, ``len(d)``. Each access makes a new
+    figure from the rows copied at `Results.draw`; with ``image=True``
+    the image file is read then.
+
+    Parameters
+    ----------
+    sheets : mapping
+        Per image name, its rows in px, its size, file and region.
+    image : bool
+        Draw the image file underneath.
+    full_image : bool
+        Draw the whole image instead of the analysed region.
+    background : color or None
+        The figure's colour; None for transparent.
+    collection : Path
+        The collection folder: the default export folder lies in
+        it, and its work folder is refused.
+    options : mapping
+        The drawing options of `agglpy.draw.particles` /
+        `agglpy.draw.agglomerates`, the colour scale included.
+
+    See Also
+    --------
+    Results.draw : Make the drawings.
     """
 
     def __init__(
@@ -855,7 +1097,6 @@ class Drawings(Mapping[str, Figure]):
         collection: Path,
         options: Mapping[str, Any],
     ) -> None:
-        """Made by ``Results.draw``; not called directly."""
         self._sheets = dict(sheets)
         self._image = image
         self._full_image = full_image
@@ -865,12 +1106,12 @@ class Drawings(Mapping[str, Figure]):
         self._options = dict(options)
 
     def __getitem__(self, name: str) -> Figure:
-        """A new figure of image ``name``.
+        """Make a new figure of image `name`.
 
         Raises
         ------
         KeyError
-            If ``name`` was not drawn.
+            If `name` was not drawn.
         FileNotFoundError
             If the image file is gone
             (``image=True``).
@@ -922,7 +1163,7 @@ class Drawings(Mapping[str, Figure]):
         return len(self._sheets)
 
     def __contains__(self, name: object) -> bool:
-        # Mapping's own answers through d[name]: a figure and a file read
+        # Mapping's default calls d[name]: a figure and a file read
         return name in self._sheets
 
     def __repr__(self) -> str:
@@ -935,17 +1176,17 @@ class Drawings(Mapping[str, Figure]):
     def export(
         self, folder: PathLike | None = None, *, overwrite: bool = False
     ) -> list[Path]:
-        """Write one ``<image>.png`` per image into ``folder``.
+        """Write one ``<image>.png`` per image into a folder.
 
         Each PNG has 72 dpi and the figure's size: with
         ``legend=False`` it lies pixel for pixel over the analysed
         region (over the image with ``full_image=True``). No record is
-        written: export next to ``res.export`` of the same
+        written: export next to `Results.export` of the same
         results, whose record covers the drawings.
 
         Parameters
         ----------
-        folder : path-like, optional
+        folder : str or Path, optional
             The folder to write into; created with its parents.
             None gives ``exports/drawings`` in the collection, where
             a repeated export needs ``overwrite=True``. A relative
@@ -961,11 +1202,11 @@ class Drawings(Mapping[str, Figure]):
         Raises
         ------
         ParamsError
-            If ``folder`` lies in the collection's work
+            If `folder` lies in the collection's work
             folder ``agglpy/``.
         OutputExistsError
             If a PNG of a drawn image is there and
-            ``overwrite`` is False; nothing is written.
+            `overwrite` is False; nothing is written.
         OutputLockedError
             If a PNG to replace is open in another
             program; nothing is changed.
@@ -1011,7 +1252,7 @@ class Drawings(Mapping[str, Figure]):
         return paths
 
     def _repr_html_(self) -> str:
-        """The first figures for a notebook, and how to see the rest."""
+        """Show the first figures in a notebook, and how to see more."""
         names = list(self)
         parts = []
         for name in names[:_THUMBNAILS]:
@@ -1033,7 +1274,7 @@ class Drawings(Mapping[str, Figure]):
 
 
 def _image(sheet: _Sheet) -> Any:
-    """The image file of ``sheet``, checked against the analysed size."""
+    """Read the image file of `sheet`; check its size."""
     _check_file(sheet)
     image = read_image(sheet.path)
     height, width = image.shape
@@ -1055,7 +1296,7 @@ def _check_size(sheet: _Sheet, width: int, height: int) -> None:
 
 
 def _in_order(parts: list[pd.DataFrame], of: pd.DataFrame) -> pd.DataFrame:
-    """``parts`` (row subsets of ``of``) joined in the rows' order."""
+    """Join `parts` (row subsets of `of`) in the rows' order."""
     joined = pd.concat(parts)
     # The index of each part is the rows' index in ``of``.
     position = of.index.get_indexer(joined.index)
@@ -1067,7 +1308,7 @@ def _kept(table: pd.DataFrame, of: pd.DataFrame) -> dict[str, int]:
 
 
 def _si_units(table: pd.DataFrame) -> dict[str, str]:
-    """``m`` / ``m²`` / ``m³`` for agglpy's columns present in ``table``."""
+    """Return the SI unit of each of agglpy's columns in `table`."""
     dimensions = {**_GEOMETRY, **DIMENSIONS}
     return {
         column: _SI[dimensions[column]]

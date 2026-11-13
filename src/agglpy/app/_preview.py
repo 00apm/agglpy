@@ -1,4 +1,4 @@
-"""``Preview``: one image's detection in memory, for tuning params."""
+"""`Preview`: one image's detection in memory, for tuning params."""
 
 import dataclasses
 import html
@@ -118,7 +118,7 @@ class _Prepared:
 
 @dataclass(frozen=True)
 class _Pass:
-    """One HCT pass: its range, its circles (region frame, read-only)."""
+    """One HCT pass: its range and circles (region frame, read-only)."""
 
     hct: HCTRange
     circles: NDArray[np.float32]
@@ -166,11 +166,21 @@ class _State:
 class Preview:
     """One image's detection with given params, held in memory.
 
-    Made by ``col[name].preview()`` and the change methods; not called
-    directly. Nothing on a preview changes after it is made: a change
-    returns a new preview and leaves this one as it was, and reruns
-    only what it touches. A preview writes no file. HCT ranges are
-    numbered from 1, as in ``p.change_hct(range=1, ...)``.
+    Made by ``col[name].preview()`` and by the change methods; not
+    created directly. Nothing on a preview changes after it is made: a
+    change returns a new preview, leaves this one as it was and reruns
+    only what it touches. Making or changing a preview writes no file.
+    HCT ranges are numbered from 1: ``p.change_hct(range=1, ...)``.
+
+    Parameters
+    ----------
+    state : _State
+        Everything the preview holds: the image read, cut and
+        preprocessed, the HCT passes and the particle table.
+
+    See Also
+    --------
+    agglpy.Image.preview : Make the first preview of an image.
     """
 
     def __init__(self, state: _State) -> None:
@@ -183,7 +193,7 @@ class Preview:
 
     @property
     def params(self) -> ImageParams:
-        """The params of this preview; ``hct`` is None with no ranges."""
+        """The params of this preview; ``hct`` None with no ranges."""
         return self._state.params
 
     @property
@@ -205,15 +215,26 @@ class Preview:
         return self._state.warnings
 
     def change_region(self, **fields: object) -> "Preview":
-        """A new preview with changed ``RegionParams`` fields.
+        """Return a new preview with changed `RegionParams` fields.
 
-        E.g. ``bottom_fraction=0.1``. Reruns preprocessing and every
-        pass (the file is not read again).
+        Reruns preprocessing and every pass (the file is not read
+        again).
+
+        Parameters
+        ----------
+        **fields
+            New values of `agglpy.params.RegionParams` fields, e.g.
+            ``bottom_fraction=0.1``.
+
+        Returns
+        -------
+        Preview
+            The new preview.
 
         Raises
         ------
         ParamsError
-            For an unknown field or an invalid value.
+            If a field is unknown or a value is invalid.
         """
         region = _with_fields(
             RegionParams, self.params.region, fields, "region"
@@ -221,19 +242,29 @@ class Preview:
         return self._changed(region=region)
 
     def change_preprocess(self, **fields: object) -> "Preview":
-        """A new preview with changed ``PreprocessParams`` fields.
+        """Return a new preview with changed `PreprocessParams` fields.
 
-        ``rolling_ball`` and ``clahe`` take a mapping merged into the
-        current value (``rolling_ball={"radius": 40}``), a params object
-        that replaces it, or None to switch the step off; so does
-        ``median_blur=None``. Reruns from the first changed step on,
-        then every pass.
+        Reruns from the first changed step on, then every pass.
+
+        Parameters
+        ----------
+        **fields
+            New values of `agglpy.params.PreprocessParams` fields.
+            ``rolling_ball`` and ``clahe`` take a mapping merged into
+            the current value (``rolling_ball={"radius": 40}``), a
+            params object that replaces it, or None to switch the step
+            off; so does ``median_blur=None``.
+
+        Returns
+        -------
+        Preview
+            The new preview.
 
         Raises
         ------
         ParamsError
-            For an unknown field, a missing required field
-            of a step switched on, or an invalid value.
+            If a field is unknown, a required field of a step
+            switched on is missing, or a value is invalid.
         """
         current = self.params.preprocess
         _check_names(PreprocessParams, fields, "preprocess")
@@ -258,16 +289,28 @@ class Preview:
         return self._changed(preprocess=preprocess)
 
     def change_hct(self, *, range: int, **fields: object) -> "Preview":
-        """A new preview with changed ``HCTRange`` fields of one range.
+        """Return a new preview with changed fields of one HCT range.
 
         E.g. ``p.change_hct(range=1, canny_threshold=180)``. Reruns that
         range's pass only.
 
+        Parameters
+        ----------
+        range : int
+            The range to change, numbered from 1.
+        **fields
+            New values of `agglpy.params.HCTRange` fields.
+
+        Returns
+        -------
+        Preview
+            The new preview.
+
         Raises
         ------
         ParamsError
-            If range ``range`` does not exist, for an
-            unknown field or an invalid value.
+            If range `range` does not exist, a field is unknown or a
+            value is invalid.
         """
         ranges = list(_ranges_of(self.params))
         i = self._index(range)
@@ -277,18 +320,31 @@ class Preview:
     def set_ranges(
         self, bounds: Sequence[tuple[int, int]], **shared: object
     ) -> "Preview":
-        """A new preview with new ranges, one per ``(d_min, d_max)``.
+        """Return a new preview with new ranges, one per pair.
 
-        ``shared`` fields (``canny_threshold=180``, ...) apply to every
-        range; the others take the ``HCTRange`` defaults. Reruns only
-        the passes that differ from this preview's.
+        Reruns only the passes that differ from this preview's.
+
+        Parameters
+        ----------
+        bounds : sequence of (int, int)
+            One ``(d_min, d_max)`` pair per range: the smallest and
+            largest circle diameter searched, in px.
+        **shared
+            `agglpy.params.HCTRange` fields for every range
+            (``canny_threshold=180``, ...); the others take the
+            defaults.
+
+        Returns
+        -------
+        Preview
+            The new preview.
 
         Raises
         ------
         ParamsError
-            For no pair, a pair that is not two values,
-            ``d_min`` / ``d_max`` among ``shared``, an unknown field
-            or an invalid value.
+            If no pair is given, a pair is not two values,
+            ``d_min`` / ``d_max`` is among `shared`, a field is
+            unknown or a value is invalid.
         """
         for key in ("d_min", "d_max"):
             if key in shared:
@@ -322,15 +378,29 @@ class Preview:
         return self._changed(hct=HCTParams(tuple(ranges)))
 
     def add_range(self, d_min: int, d_max: int, **fields: object) -> "Preview":
-        """A new preview with one more range, after the others.
+        """Return a new preview with one more range, after the others.
 
-        Fields not given take the ``HCTRange`` defaults. Runs the new
-        range's pass only.
+        Runs the new range's pass only.
+
+        Parameters
+        ----------
+        d_min : int
+            Smallest circle diameter searched, in px.
+        d_max : int
+            Largest circle diameter searched, in px.
+        **fields
+            Other `agglpy.params.HCTRange` fields; those not given
+            take the defaults.
+
+        Returns
+        -------
+        Preview
+            The new preview.
 
         Raises
         ------
         ParamsError
-            For an unknown field or an invalid value.
+            If a field is unknown or a value is invalid.
         """
         ranges = _ranges_of(self.params)
         new = _with_fields(
@@ -342,27 +412,38 @@ class Preview:
         return self._changed(hct=HCTParams((*ranges, new)))
 
     def remove_range(self, k: int) -> "Preview":
-        """A new preview without range ``k``; the rest renumbered.
+        """Return a new preview without range `k`, the rest renumbered.
 
         Runs no pass. Removing the last range gives a preview with no
         ranges.
 
+        Parameters
+        ----------
+        k : int
+            The range to remove, numbered from 1.
+
+        Returns
+        -------
+        Preview
+            The new preview.
+
         Raises
         ------
         ParamsError
-            If range ``k`` does not exist.
+            If range `k` does not exist.
         """
         ranges = list(_ranges_of(self.params))
         del ranges[self._index(k)]
         return self._changed(hct=HCTParams(tuple(ranges)) if ranges else None)
 
     def keep(self) -> None:
-        """Write this preview's params into ``agglpy.yml``, for its image.
+        """Write this preview's params into ``agglpy.yml``.
 
-        The region, preprocessing and HCT ranges replace the image's
-        entry (only what differs from the defaults is stored), whatever
-        the file holds now. ``col.detect()`` then runs with them;
-        ``col.status()`` shows ``params changed`` until it does.
+        The region, preprocessing and HCT ranges replace the entry of
+        the previewed image (only what differs from the defaults is
+        stored), whatever the file holds now. ``col.detect()`` then
+        runs with them; ``col.status()`` shows ``params changed`` until
+        it does.
 
         Raises
         ------
@@ -414,7 +495,7 @@ class Preview:
 
         Parameters
         ----------
-        folder : path-like, optional
+        folder : str or Path, optional
             The folder to write into; created with its parents.
             None gives ``exports/tuning`` in the collection, where a
             repeated export needs ``overwrite=True``. A relative
@@ -433,12 +514,12 @@ class Preview:
         Raises
         ------
         ParamsError
-            If ``folder`` lies in the collection's work
-            folder ``agglpy/`` or ``full_image`` is not True /
+            If `folder` lies in the collection's work
+            folder ``agglpy/`` or `full_image` is not True /
             False.
         OutputExistsError
             If one of the files is there and
-            ``overwrite`` is False; nothing is written.
+            `overwrite` is False; nothing is written.
         OutputLockedError
             If a file to replace is open in another
             program; nothing is changed.
@@ -487,8 +568,8 @@ class Preview:
     def _export_views(
         self, full_image: bool
     ) -> dict[str, Callable[[], Figure]]:
-        """File name ending -> the view that draws it, in export order."""
-        # the image view is whole by default: it shows where the region is
+        """Map each file name ending to the view that draws it."""
+        # image() is whole by default: it shows where the region lies
         views: dict[str, Callable[[], Figure]] = {"image.png": self.image}
         for stage in self._state.prepared.stages:
             views[f"stage {stage.name}.png"] = partial(
@@ -508,7 +589,7 @@ class Preview:
         return views
 
     def _export_record(self, full_image: bool) -> dict[str, Any]:
-        """The content of ``preview.yml``."""
+        """Return the content of ``preview.yml``."""
         state = self._state
         agglpy_version, dependencies = versions()
         params = plain(self.params, "params")
@@ -541,7 +622,7 @@ class Preview:
     # -----------------------------------------------------------------
 
     def image(self, *, full_image: bool = True) -> Figure:
-        """The raw image, the analysed region outlined in yellow.
+        """Draw the raw image, the analysed region outlined in yellow.
 
         One figure pixel per image pixel; the outline lies on the
         region's outermost pixels and is drawn only when the region is
@@ -552,6 +633,11 @@ class Preview:
         full_image : bool, default True
             The whole image; False shows the raw region
             only, without the outline.
+
+        Returns
+        -------
+        Figure
+            A new figure.
 
         Raises
         ------
@@ -572,33 +658,38 @@ class Preview:
         side_by_side: bool = False,
         full_image: bool = False,
     ) -> Figure:
-        """The region after a preprocessing step.
+        """Draw the region after a preprocessing step.
 
-        ``name`` is a step that ran: ``"median"``, ``"rolling ball"``,
-        ``"clahe"``; or ``"preprocessed"``, the image HCT runs on (the
-        last step's, the raw region when none ran). With ``compare``,
-        two panels zoomed together: ``compare``'s step left, this one's
-        right (two grey images do not overlay, so always side by side).
+        With `compare`, two panels zoomed together: `compare`'s step
+        left, this one's right (two grey images do not overlay, so
+        always side by side).
 
         Parameters
         ----------
         name : str
-            The step.
-        compare : Preview or None, optional
+            A step that ran: ``"median"``, ``"rolling ball"``,
+            ``"clahe"``; or ``"preprocessed"``, the image HCT runs on
+            (the last step's, the raw region when none ran).
+        compare : Preview, optional
             Another preview of this image that ran the step.
         side_by_side : bool, default False
-            Without ``compare``, two panels zoomed
+            Without `compare`, two panels zoomed
             together: the raw image left, the step right.
         full_image : bool, default False
             The whole image's area: the region at its place
             and outlined, the rest black.
 
+        Returns
+        -------
+        Figure
+            A new figure.
+
         Raises
         ------
         ParamsError
             If no step of that name ran (in either
-            preview), ``compare`` is not a preview of this image or
-            ``full_image`` is not True / False.
+            preview), `compare` is not a preview of this image or
+            `full_image` is not True / False.
         """
         _check_full_image(full_image)
         mine = self._stage_image(name)
@@ -633,38 +724,43 @@ class Preview:
         image_alpha: float = 1.0,
         full_image: bool = False,
     ) -> Figure:
-        """The edges HoughCircles sees in range ``k``.
+        """Draw the edges HoughCircles sees in range `k`.
 
-        ``core.detect.hct_edges`` on the preprocessed region: white on
-        black, or yellow over ``image``. With ``compare``, the edges of
-        both previews' range ``k``: green only in this one (new),
-        red only in ``compare`` (gone), white in both.
+        `agglpy.core.detect.hct_edges` on the preprocessed region:
+        white on black, or yellow over `image`. With `compare`, the
+        edges of both previews' range `k`: green only in this one
+        (new), red only in `compare` (gone), white in both.
 
         Parameters
         ----------
         k : int
             The range, numbered from 1.
-        compare : Preview or None, optional
+        compare : Preview, optional
             Another preview of this image.
         side_by_side : bool, default False
-            Two panels zoomed together: ``compare``'s
-            edges left, these right; without ``compare`` the image
-            left (raw when ``image`` is None), the edges on black
+            Two panels zoomed together: `compare`'s
+            edges left, these right; without `compare` the image
+            left (raw when `image` is None), the edges on black
             right.
-        image : Underlay, optional
+        image : {"raw", "preprocessed"}, optional
             The image underneath: ``"raw"``, ``"preprocessed"``
             (the region) or None.
         image_alpha : float, default 1.0
             Its opacity, 0-1.
         full_image : bool, default False
             The whole image, the region outlined; False
-            shows the region (both regions with ``compare``).
+            shows the region (both regions with `compare`).
+
+        Returns
+        -------
+        Figure
+            A new figure.
 
         Raises
         ------
         ParamsError
-            If range ``k`` does not exist (in either
-            preview), ``compare`` is not a preview of this image or
+            If range `k` does not exist (in either
+            preview), `compare` is not a preview of this image or
             an option is invalid.
         """
         _check_full_image(full_image)
@@ -729,32 +825,33 @@ class Preview:
         linewidth: float = 1.0,
         full_image: bool = False,
     ) -> Figure:
-        """The circles of range ``k``, or of every range by range.
+        """Draw the circles of range `k`, or of every range by range.
 
         Outlines over the raw image by default, so each circle is
         judged against what the eye sees; one colour per range, the
-        legend with the counts. With ``compare``: green the circles
-        only in this preview (new), red those only in ``compare``
+        legend with the counts. With `compare`: green the circles
+        only in this preview (new), red those only in `compare`
         (gone), grey those in both, matched with the tolerances of
-        ``tables.find_duplicates`` (a circle that moved is gone + new).
+        `agglpy.tables.find_duplicates` (a circle that moved is both
+        gone and new).
 
         Parameters
         ----------
         k : int, optional
             The range, numbered from 1; None for every range.
-        compare : Preview or None, optional
+        compare : Preview, optional
             Another preview of this image.
         side_by_side : bool, default False
-            Two panels zoomed together: ``compare``'s
-            circles left, these right; without ``compare`` the
-            image left (raw when ``image`` is None), the circles on
-            ``background`` right.
-        image : Underlay, default "raw"
+            Two panels zoomed together: `compare`'s
+            circles left, these right; without `compare` the
+            image left (raw when `image` is None), the circles on
+            `background` right.
+        image : {"raw", "preprocessed"} or None, default "raw"
             The image underneath: ``"raw"``, ``"preprocessed"``
             (the region) or None (the background).
         image_alpha : float, default 1.0
             Its opacity, 0-1.
-        background : ColorType or None, default "black"
+        background : color or None, default "black"
             The figure's colour; None for transparent.
         alpha : float, default 0.0
             Opacity of the fill, 0 (outlines only) to 1.
@@ -763,13 +860,18 @@ class Preview:
         full_image : bool, default False
             The whole image, the region outlined, circles
             drawn whole; False shows the region (both regions with
-            ``compare``), circles cut at its edge.
+            `compare`), circles cut at its edge.
+
+        Returns
+        -------
+        Figure
+            A new figure.
 
         Raises
         ------
         ParamsError
-            If range ``k`` does not exist (in either
-            preview), ``compare`` is not a preview of this image or
+            If range `k` does not exist (in either
+            preview), `compare` is not a preview of this image or
             an option is invalid.
         """
         _check_full_image(full_image)
@@ -838,8 +940,11 @@ class Preview:
     def _by_range(
         self, chosen: Sequence[int]
     ) -> tuple[pd.DataFrame, dict[str, ColorType]]:
-        """The circles of passes ``chosen`` (0-based), labelled in
-        column ``range``, and the colour of each label."""
+        """Return the circles of passes `chosen` (0-based), labelled.
+
+        The label is in column ``range``; the colour of each label
+        comes with the table.
+        """
         passes = self._state.passes
         labels = {
             i: f"range {i + 1} ({len(passes[i].circles)})" for i in chosen
@@ -855,7 +960,7 @@ class Preview:
         return table.assign(range=table["range"].map(labels)), colours
 
     def _edge_mask(self, i: int) -> NDArray[np.bool_]:
-        """Pass ``i``'s (0-based) edge pixels in the raw image's frame."""
+        """Return pass `i`'s (0-based) edge pixels in the raw frame."""
         held = self._state.prepared
         x, y = (round(v) for v in self._origin())
         edges = hct_edges(held.final, _ranges_of(self.params)[i]) > 0
@@ -864,7 +969,7 @@ class Preview:
         return mask
 
     def _compared(self, compare: object, k: int | None) -> "Preview":
-        """``compare`` checked: a preview of this image with range ``k``."""
+        """Check that `compare` is a preview of this image with `k`."""
         if not isinstance(compare, Preview):
             raise ParamsError(
                 "compare must be another Preview, got "
@@ -935,8 +1040,11 @@ class Preview:
         return fig, ax
 
     def _area(self, other: "Preview | None", full_image: bool) -> Bounds:
-        """What a view shows: the whole image, the region, or the
-        smallest rectangle holding both previews' regions."""
+        """Return the area a view shows.
+
+        The whole image, the region, or the smallest rectangle holding
+        both previews' regions.
+        """
         if full_image:
             height, width = self._state.prepared.raw.shape
             return Bounds(-0.5, -0.5, width - 0.5, height - 0.5)
@@ -954,8 +1062,10 @@ class Preview:
     def _outline_regions(
         self, ax: Axes, area: Bounds, other: "Preview | None"
     ) -> None:
-        """Outline the regions that differ from the area shown; a
-        region filling it ends at the figure's edge anyway."""
+        """Outline the regions that differ from the area shown.
+
+        A region filling the area ends at the figure's edge anyway.
+        """
         regions = [self._state.prepared.bounds]
         if other is not None:
             regions.append(other._state.prepared.bounds)
@@ -979,7 +1089,7 @@ class Preview:
         )
 
     def _origin(self) -> tuple[float, float]:
-        """Where the region's top-left pixel centre lies in the image."""
+        """Return where the region's top-left pixel centre lies."""
         b = self._state.prepared.bounds
         return b.x_min + 0.5, b.y_min + 0.5
 
@@ -995,7 +1105,7 @@ class Preview:
             )
 
     def __repr__(self) -> str:
-        """The card as text: the same lines as in a notebook."""
+        """Return the card as text: the same lines as in a notebook."""
         card = self._card()
         parts = ["\n".join(card.header)]
         if card.table:
@@ -1010,7 +1120,7 @@ class Preview:
         return "\n\n".join(parts)
 
     def _repr_html_(self) -> str:
-        """The card for a notebook: the lines and tables, no figures."""
+        """Return the card for a notebook: lines, tables, no figures."""
         card = self._card()
         parts = ["<div>" + "<br>".join(map(_escape, card.header)) + "</div>"]
         if card.table:
@@ -1103,8 +1213,11 @@ class Preview:
         )
 
     def _info_lines(self) -> list[str]:
-        """Per pass and pair of passes, what a person tuning would ask:
-        a pass with no circles, circles two passes both found."""
+        """Return the notes per pass and pair of passes.
+
+        What a person tuning would ask: a pass with no circles, circles
+        two passes both found.
+        """
         state = self._state
         final = state.prepared.final
         lines = [
@@ -1186,7 +1299,7 @@ class Preview:
         return calls
 
     def _index(self, k: object) -> int:
-        """The list index of range ``k`` (numbered from 1)."""
+        """Return the list index of range `k` (numbered from 1)."""
         if isinstance(k, bool) or not isinstance(k, numbers.Integral):
             raise ParamsError(
                 f"range must be an int (numbered from 1), got {k!r}"
@@ -1215,7 +1328,7 @@ def make(
     params: ImageParams | None,
     progress: bool,
 ) -> Preview:
-    """The preview of ``img.preview()``: read, preprocess, detect."""
+    """Make the preview of `Image.preview`: read, preprocess, detect."""
     stored = collection.params(name)
     if params is None:
         params = stored
@@ -1254,7 +1367,7 @@ def make(
 
 
 def _derive(parent: _State, params: ImageParams) -> Preview:
-    """A preview of the parent's image with new params.
+    """Make a preview of the parent's image with new params.
 
     Stages are taken from the parent while the region is unchanged and
     the steps match from the first one; a pass is taken when the image
@@ -1308,7 +1421,7 @@ def _new(
     progress: bool,
     start: float,
 ) -> Preview:
-    """Number the circles, gather the warnings, log the new preview."""
+    """Make the preview: number circles, gather warnings, log it."""
     particles, assembly = _assemble(prepared, passes)
     preview = Preview(
         _State(
@@ -1343,8 +1456,11 @@ def _prepare(
     preprocess: PreprocessParams,
     on_step: Callable[[str], None],
 ) -> _Prepared:
-    """Read, cut and preprocess the image: the only way a fresh preview
-    does, so a cache can wrap this one function later."""
+    """Read, cut and preprocess the image.
+
+    The only way a fresh preview does, so a cache can wrap this one
+    function later.
+    """
     start = perf_counter()
     with warnings.catch_warnings(record=True) as read:
         warnings.simplefilter("always")
@@ -1375,7 +1491,7 @@ def _restage(
     same_region: bool,
     on_step: Callable[[str], None],
 ) -> _Prepared:
-    """Preprocess again from stage ``kept`` on; the raw image is kept."""
+    """Preprocess again from stage `kept` on; keep the raw image."""
     start = perf_counter()
     if same_region:
         bounds, cut = held.bounds, held.cut
@@ -1407,8 +1523,11 @@ def _run_passes(
     reuse: Sequence[_Pass],
     on_step: Callable[[str], None],
 ) -> tuple[_Pass, ...]:
-    """One pass per range; a range equal to one in ``reuse`` is taken
-    from there (``reuse`` must have run on the same ``image``)."""
+    """Run one pass per range.
+
+    A range equal to one in `reuse` is taken from there (`reuse` must
+    have run on the same `image`).
+    """
     passes: list[_Pass] = []
     reported = False
     for hct in ranges:
@@ -1429,7 +1548,7 @@ def _run_passes(
 def _assemble(
     prepared: _Prepared, passes: Sequence[_Pass]
 ) -> tuple[pd.DataFrame, tuple[str, ...]]:
-    """The particle table of the passes and the warnings it raised."""
+    """Return the particle table of the passes and its warnings."""
     if not passes:
         return _no_particles(), ()
     with warnings.catch_warnings(record=True) as caught:
@@ -1454,7 +1573,7 @@ def _no_particles() -> pd.DataFrame:
 
 
 def _pass_colour(i: int) -> tuple[float, float, float, float]:
-    """The colour of pass ``i`` (0-based) in the views."""
+    """Return the colour of pass `i` (0-based) in the views."""
     colour: tuple[float, float, float, float] = mpl.colormaps[_PASS_COLOURS](
         i % 10
     )
@@ -1474,7 +1593,7 @@ def _area_shape(area: Bounds) -> tuple[int, int]:
 
 
 def _outline(ax: Axes, bounds: Bounds) -> None:
-    """A region's outline in yellow, on its outermost pixels."""
+    """Draw a region's outline in yellow, on its outermost pixels."""
     ax.add_patch(
         Rectangle(
             (bounds.x_min + 0.5, bounds.y_min + 0.5),
@@ -1495,8 +1614,10 @@ def _paint(
     ax: Axes,
     layers: Mapping[str, tuple[NDArray[np.bool_], tuple[float, ...]]],
 ) -> None:
-    """Pixel masks (raw image frame) in their colours, as one image;
-    transparent elsewhere."""
+    """Draw pixel masks (raw image frame) in their colours.
+
+    One image, transparent elsewhere.
+    """
     first = next(iter(layers.values()))[0]
     rgba = np.zeros((*first.shape, 4), np.uint8)
     for mask, colour in layers.values():
@@ -1526,8 +1647,11 @@ def _circles(
 def _matched(
     mine: pd.DataFrame, theirs: pd.DataFrame
 ) -> tuple[NDArray[np.bool_], NDArray[np.bool_]]:
-    """Which circles of each table have a near-identical one in the
-    other, by ``find_duplicates``' tolerances."""
+    """Mark the circles of each table with a match in the other.
+
+    A match is a near-identical circle by `find_duplicates`'
+    tolerances.
+    """
     # one table for find_duplicates: the second's ids after the first's
     offset = len(mine)
     both = pd.concat(
@@ -1547,7 +1671,7 @@ def _matched(
 
 
 def _label(ax: Axes, text: str) -> None:
-    """A panel's label in its top-left corner, white on dark grey."""
+    """Write a panel's label in its top-left corner, white on grey."""
     fig = ax.get_figure()
     assert isinstance(fig, Figure)
     width = ax.get_position().width * fig.get_figwidth() * fig.dpi
@@ -1586,7 +1710,7 @@ def _region_text(region: RegionParams) -> str:
 
 
 def _preprocess_text(preprocess: PreprocessParams) -> str:
-    """The steps switched on, in run order: ``median 3 → CLAHE``."""
+    """Return the steps switched on, in order: ``median 3 → CLAHE``."""
     steps = []
     if preprocess.median_blur is not None:
         steps.append(f"median {preprocess.median_blur}")
@@ -1598,7 +1722,7 @@ def _preprocess_text(preprocess: PreprocessParams) -> str:
 
 
 def _differences(old: ImageParams, new: ImageParams) -> list[str]:
-    """What changed from ``old`` to ``new``, one text per value.
+    """Return what changed from `old` to `new`, one text per value.
 
     ``preprocess.rolling_ball.radius 50 → 40``; ranges numbered from 1
     (``ranges[2].canny_threshold 220 → 180``), a different number of
@@ -1619,7 +1743,7 @@ def _differences(old: ImageParams, new: ImageParams) -> list[str]:
 
 
 def _changes(old: Any, new: Any, path: str) -> list[str]:
-    """The leaves that differ between two plain values, as texts."""
+    """Return the leaves that differ between two plain values."""
     if isinstance(old, dict) and isinstance(new, dict):
         changes = []
         for key in old:
@@ -1663,9 +1787,11 @@ def _check_names(
 def _with_fields(
     cls: type, current: Any, fields: Mapping[str, object], where: str
 ) -> Any:
-    """``current`` with ``fields`` replaced, or a new ``cls`` from
-    ``fields`` alone when ``current`` is None; the class checks the
-    values."""
+    """Return `current` with `fields` replaced.
+
+    A new `cls` from `fields` alone when `current` is None; the class
+    checks the values.
+    """
     _check_names(cls, fields, where)
     if current is not None:
         return dataclasses.replace(current, **fields)
