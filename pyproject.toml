@@ -61,7 +61,11 @@ typing = [
     "types-pyyaml >= 6.0.12.20240917",
     "types-tqdm >= 4.66.0.20240417",
 ]
-lint = ["ruff >= 0.7.0, < 1", "import-linter >= 2.15, < 3"]
+lint = [
+    "ruff >= 0.7.0, < 1",
+    "import-linter >= 2.15, < 3",
+    "numpydoc >= 1.11, < 2",
+]
 dist = ["tox >= 4.21.0, < 5"]
 dev = ["agglpy[test,typing,lint,dist,notebook]"]
 
@@ -90,6 +94,8 @@ select = [
     "N",    # pep8-naming
     "RUF",  # ruff-specific rules
     "T20",  # no print() in library code
+    "D",    # docstrings: docs/contributing/docstrings.md
+    "D417", # every parameter documented (off in the numpy convention)
 ]
 ignore = [
     # Postponed to the docstring rewrite (roadmap 7.1): long strings,
@@ -106,7 +112,55 @@ ignore = [
 # The golden runner is rewritten on the new pipeline in 2.8.
 "tests/golden/test_golden.py" = ["N"]
 # Recipes are notebook-style scripts for users (D-045); they may print.
-"examples/*" = ["T20"]
+"examples/*" = ["T20", "D"]
+# Test functions get no docstrings (pytest prints their names).
+"tests/**" = ["D"]
+"src/agglpy/_legacy/**" = ["D"]
+# Transitional, while the docstrings are converted to numpydoc: a module
+# leaves this list when its docstrings follow the standard.
+"src/agglpy/__init__.py" = ["D"]
+"src/agglpy/_notebook.py" = ["D"]
+"src/agglpy/_yaml.py" = ["D"]
+"src/agglpy/app/__init__.py" = ["D"]
+"src/agglpy/app/_analyze.py" = ["D"]
+"src/agglpy/app/_collection.py" = ["D"]
+"src/agglpy/app/_config.py" = ["D"]
+"src/agglpy/app/_config_file.py" = ["D"]
+"src/agglpy/app/_correction.py" = ["D"]
+"src/agglpy/app/_detect.py" = ["D"]
+"src/agglpy/app/_files.py" = ["D"]
+"src/agglpy/app/_image.py" = ["D"]
+"src/agglpy/app/_preview.py" = ["D"]
+"src/agglpy/app/_records.py" = ["D"]
+"src/agglpy/app/_report.py" = ["D"]
+"src/agglpy/app/_results.py" = ["D"]
+"src/agglpy/app/_sheet.py" = ["D"]
+"src/agglpy/app/_sheet_writer.py" = ["D"]
+"src/agglpy/app/_sources.py" = ["D"]
+"src/agglpy/app/_status.py" = ["D"]
+"src/agglpy/app/_work.py" = ["D"]
+"src/agglpy/core/__init__.py" = ["D"]
+"src/agglpy/core/_graph.py" = ["D"]
+"src/agglpy/core/_grey_image.py" = ["D"]
+"src/agglpy/core/_images.py" = ["D"]
+"src/agglpy/core/agglomerates.py" = ["D"]
+"src/agglpy/core/detect.py" = ["D"]
+"src/agglpy/core/distributions.py" = ["D"]
+"src/agglpy/core/metrics.py" = ["D"]
+"src/agglpy/core/preprocess.py" = ["D"]
+"src/agglpy/core/properties.py" = ["D"]
+"src/agglpy/core/region.py" = ["D"]
+"src/agglpy/core/structure.py" = ["D"]
+"src/agglpy/draw.py" = ["D"]
+"src/agglpy/errors.py" = ["D"]
+"src/agglpy/export.py" = ["D"]
+"src/agglpy/io.py" = ["D"]
+"src/agglpy/logger.py" = ["D"]
+"src/agglpy/params.py" = ["D"]
+"src/agglpy/pipeline/__init__.py" = ["D"]
+"src/agglpy/pipeline/_analysis.py" = ["D"]
+"src/agglpy/pipeline/_detection.py" = ["D"]
+"src/agglpy/tables.py" = ["D"]
 
 [tool.ruff.lint.pycodestyle]
 max-doc-length = 72         # PEP 8: 72 for comments and docstrings (W505)
@@ -117,7 +171,70 @@ max-doc-length = 72         # PEP 8: 72 for comments and docstrings (W505)
 known-local-folder = ["support", "examples"]
 
 [tool.ruff.lint.pydocstyle]
-convention = "google"
+convention = "numpy"
+
+# `numpydoc lint` (CI lint job): numpydoc's checks on the public API.
+[tool.numpydoc_validation]
+checks = [
+    "all",
+    "ES01",  # extended summary: optional
+    "SA01",  # See Also: optional
+    "EX01",  # Examples: the recipes in examples/ are the examples
+]
+exclude = [
+    '\._',  # private names, dunders; __init__ (params in the class)
+    # names in private modules, except the ones a package exports
+    '^_\w+\.(?!(Collection|Drawings|Image|ImageParams|Preview|Results|ImageResult|analyze|detect_particles)\b)',
+]
+# Properties have a noun-phrase summary and no Returns section.
+override_RT01 = ['^(The|A|An|Whether) ']
+exclude_files = [
+    '.*_legacy',
+    # Transitional, like ruff's per-file ignores above.
+    "src/agglpy/__init__.py",
+    "src/agglpy/_notebook.py",
+    "src/agglpy/_yaml.py",
+    "src/agglpy/app/__init__.py",
+    "src/agglpy/app/_analyze.py",
+    "src/agglpy/app/_collection.py",
+    "src/agglpy/app/_config.py",
+    "src/agglpy/app/_config_file.py",
+    "src/agglpy/app/_correction.py",
+    "src/agglpy/app/_detect.py",
+    "src/agglpy/app/_files.py",
+    "src/agglpy/app/_image.py",
+    "src/agglpy/app/_preview.py",
+    "src/agglpy/app/_records.py",
+    "src/agglpy/app/_report.py",
+    "src/agglpy/app/_results.py",
+    "src/agglpy/app/_sheet.py",
+    "src/agglpy/app/_sheet_writer.py",
+    "src/agglpy/app/_sources.py",
+    "src/agglpy/app/_status.py",
+    "src/agglpy/app/_work.py",
+    "src/agglpy/core/__init__.py",
+    "src/agglpy/core/_graph.py",
+    "src/agglpy/core/_grey_image.py",
+    "src/agglpy/core/_images.py",
+    "src/agglpy/core/agglomerates.py",
+    "src/agglpy/core/detect.py",
+    "src/agglpy/core/distributions.py",
+    "src/agglpy/core/metrics.py",
+    "src/agglpy/core/preprocess.py",
+    "src/agglpy/core/properties.py",
+    "src/agglpy/core/region.py",
+    "src/agglpy/core/structure.py",
+    "src/agglpy/draw.py",
+    "src/agglpy/errors.py",
+    "src/agglpy/export.py",
+    "src/agglpy/io.py",
+    "src/agglpy/logger.py",
+    "src/agglpy/params.py",
+    "src/agglpy/pipeline/__init__.py",
+    "src/agglpy/pipeline/_analysis.py",
+    "src/agglpy/pipeline/_detection.py",
+    "src/agglpy/tables.py",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
