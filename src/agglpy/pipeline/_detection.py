@@ -109,7 +109,7 @@ def detect_particles(
 class Stage:
     """One preprocessing step's result on the analysed region.
 
-    Parameters
+    Attributes
     ----------
     field : str
         The ``PreprocessParams`` field of the step.

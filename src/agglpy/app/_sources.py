@@ -38,7 +38,7 @@ PathLike = str | os.PathLike[str]
 class Found:
     """One image file and the text the filename rule sees.
 
-    Parameters
+    Attributes
     ----------
     path : Path
         The file, absolute.

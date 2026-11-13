@@ -93,7 +93,7 @@ def read_image(path: PathLike) -> NDArray[np.uint8]:
 class ImageMetadata:
     """What ``read_image_metadata`` found in an image file.
 
-    Parameters
+    Attributes
     ----------
     pixel_size : float or None
         Length of one pixel in metres, or ``None`` when no

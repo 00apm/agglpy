@@ -57,7 +57,7 @@ __all__ = ["Drawings", "Origin", "Results"]
 class Origin:
     """What a ``Results`` was made from, for its export record.
 
-    Parameters
+    Attributes
     ----------
     analyzed : str
         When ``analyze()`` ran (ISO 8601).

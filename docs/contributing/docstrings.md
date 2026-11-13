@@ -59,8 +59,9 @@ format : {"auto", "agglpy", "imagej"}, default "auto"
 - Tables: the description names the columns the function needs and their unit.
 - Physical values always state their unit: px in the core, pipeline and edges, SI (m, m², m³) in `Results`.
 - An argument shared with another function: "As in `particles`." instead of repeating the text.
-- Class constructors (dataclass fields included) are documented in the class docstring's Parameters; `__init__`
-  gets no docstring.
+- Class constructors are documented in the class docstring's Parameters; `__init__` gets no docstring. Fields of
+  a dataclass or NamedTuple are listed under **Attributes** (same entry format): the class has no `__init__` in
+  the source for the validator to compare Parameters with.
 
 **Returns**: the type on its own line, or `name : type` for each element of a returned tuple.
 
@@ -98,7 +99,9 @@ functions: `__all__` and the API reference give it.
 
 ## Properties and constants
 
-Properties: a noun-phrase summary, no sections. Public constants: a docstring right after the assignment.
+Properties: a noun-phrase summary starting with *The*, *A*, *An* or *Whether* ("The particle table in use."), no
+sections; the validator recognises a property by that start, since it cannot see the decorator. Public constants:
+a docstring right after the assignment.
 
 ```python
 SEGMENT_TYPES = ("core", "small core", "link", "loop", "dangling end", "no core")

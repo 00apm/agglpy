@@ -84,7 +84,7 @@ class HCTRange:
     2``, ``param1 = canny_threshold``, ``param2 =
     accumulator_threshold``.
 
-    Parameters
+    Attributes
     ----------
     d_min : int
         Smallest circle diameter searched, in px.
@@ -135,7 +135,7 @@ class HCTRange:
 class HCTParams:
     """All HCT ranges for one image, run one after another.
 
-    Parameters
+    Attributes
     ----------
     ranges : tuple of HCTRange
         The passes, at least one. A list is stored as a tuple.
@@ -159,7 +159,7 @@ class HCTParams:
 class ClaheParams:
     """Contrast Limited Adaptive Histogram Equalization (OpenCV).
 
-    Parameters
+    Attributes
     ----------
     clip_limit : float
         Contrast limit, > 0.
@@ -188,7 +188,7 @@ class RollingBallParams:
     The ball is scikit-image's exact one, so values may differ slightly
     from Fiji's.
 
-    Parameters
+    Attributes
     ----------
     radius : float
         Ball radius in px, > 0. Larger than the largest particle
@@ -221,7 +221,7 @@ class RollingBallParams:
 class RegionParams:
     """The part of an image that is analysed.
 
-    Parameters
+    Attributes
     ----------
     bottom_fraction : float, default 0.0
         Fraction of the image height cut off at the
@@ -245,7 +245,7 @@ class PreprocessParams:
 
     The steps run in the order of the fields; ``None`` skips a step.
 
-    Parameters
+    Attributes
     ----------
     median_blur : int, optional
         Odd kernel size >= 3, or None for no blur.

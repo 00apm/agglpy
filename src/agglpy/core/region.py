@@ -25,7 +25,7 @@ class Bounds:
     Pixel ``i`` covers ``[i - 0.5, i + 0.5)``, so a region of whole
     pixels has its edges at ``k - 0.5``.
 
-    Parameters
+    Attributes
     ----------
     x_min : float
         Left edge.

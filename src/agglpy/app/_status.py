@@ -77,7 +77,7 @@ class ImageFacts:
     Read once by ``image_facts``, so ``status()`` and ``analyze()`` see
     the same facts.
 
-    Parameters
+    Attributes
     ----------
     entry : Entry
         The sheet row.

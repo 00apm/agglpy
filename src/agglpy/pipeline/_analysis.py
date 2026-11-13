@@ -23,7 +23,7 @@ class ImageResult:
     sent to another process. No equality: compare the tables
     themselves.
 
-    Parameters
+    Attributes
     ----------
     particles : DataFrame
         The kept particles: ``id, x, y, r``, any extra

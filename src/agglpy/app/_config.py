@@ -42,7 +42,7 @@ __all__ = [
 class ImageParams:
     """The params of one image.
 
-    Parameters
+    Attributes
     ----------
     region : RegionParams
         The analysed part of the image.
@@ -72,7 +72,7 @@ _SECTION_CLASSES: dict[str, type] = {
 class Problem(NamedTuple):
     """One problem in a params mapping.
 
-    Parameters
+    Attributes
     ----------
     path : str
         Where, like ``"hct.ranges[0]"``; ``""`` for the root.

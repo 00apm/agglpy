@@ -90,7 +90,7 @@ def find_sheet(folder: Path) -> Path:
 class Grid:
     """The cells of a sheet as stored.
 
-    Parameters
+    Attributes
     ----------
     path : Path
         The sheet file.
@@ -111,7 +111,7 @@ class Grid:
 class Entry:
     """One image row of a valid sheet.
 
-    Parameters
+    Attributes
     ----------
     row : int
         Its row number in the sheet.
@@ -143,7 +143,7 @@ class Entry:
 class Sheet:
     """A valid image sheet.
 
-    Parameters
+    Attributes
     ----------
     path : Path
         The sheet file.

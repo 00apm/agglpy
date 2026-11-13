@@ -47,7 +47,7 @@ R = TypeVar("R", DetectionRecord, CorrectionRecord)
 class ParticleFile:
     """A particle CSV against its record.
 
-    Parameters
+    Attributes
     ----------
     state : State
         ``matching``, ``edited by hand`` (its hash differs from

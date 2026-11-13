@@ -69,7 +69,7 @@ _PALETTE = "tab10"
 class Drawing:
     """What a draw function added to the axes, for restyling or layout.
 
-    Parameters
+    Attributes
     ----------
     fills : Collection or None
         The coloured shapes: the filled particle circles with
