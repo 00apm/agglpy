@@ -4,3 +4,6 @@
 
 # style: apply ruff format (79 columns)
 bc154b15dd8dcda7aef4854be97a26df1b6751ec
+
+# style: convert docstring sections to the numpydoc layout
+595d99a4ff9133dcad88e8d1435796b9765ca1c7
