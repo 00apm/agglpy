@@ -6,6 +6,8 @@ through ``find_agglomerates``; ``CASES`` maps a case to its circles and
 its by-eye segments (every particle not listed is ``core``).
 ``CONTACTS`` lists the contacts of the short-named particles that the
 circles are built to give, so a change of the geometry shows.
+``graph_tables`` builds the tables of a contact graph given as an edge
+list; ``G1``, ``G4``, ``G5`` are hand graphs with worked answers.
 
 Equal circles: radius 10 px, neighbours 19 px apart, so neighbours
 overlap by 1 px and second neighbours do not touch.
@@ -367,3 +369,54 @@ def expected_segments(names, by_eye):
             assert name in want, name
             want[name] = segment
     return want
+
+
+def graph_tables(edges, r, aggl=None):
+    """Tables of a contact graph: ids 0 … n-1, the edges as contacts."""
+    n = len(r)
+    labels = [0] * n if aggl is None else list(aggl)
+    particles = pd.DataFrame(
+        {
+            "id": np.arange(n, dtype=np.int64),
+            "r": np.asarray(r, dtype=np.float64),
+            "agglomerate_id": np.asarray(labels, dtype=np.int64),
+        }
+    )
+    a = np.array([e[0] for e in edges], dtype=np.int64)
+    b = np.array([e[1] for e in edges], dtype=np.int64)
+    contacts = pd.DataFrame(
+        {
+            "agglomerate_id": particles["agglomerate_id"].to_numpy()[a],
+            "id_a": a,
+            "id_b": b,
+            "inside": np.zeros(len(a), dtype=bool),
+        }
+    )
+    return particles, agglomerate_table(particles), contacts
+
+
+def agglomerate_table(particles):
+    ids = np.unique(particles["agglomerate_id"].to_numpy(dtype=np.int64))
+    return pd.DataFrame({"agglomerate_id": ids})
+
+
+def wheel(centre, ring):
+    """Edges of a centre joined to every ring particle, the ring cyclic."""
+    ring = list(ring)
+    spokes = [(centre, i) for i in ring]
+    rim = [(ring[k], ring[(k + 1) % len(ring)]) for k in range(len(ring))]
+    return spokes + rim
+
+
+# A core of 7 with two dangling ends: 7-8 on particle 1, 9 on 3.
+G4 = ([*wheel(0, range(1, 7)), (1, 7), (7, 8), (3, 9)], [2.0] + [1.0] * 9)
+# Two cores of 7, a link 14-15 between them, a loop 16-17 on the first.
+G5 = (
+    wheel(0, range(1, 7))
+    + wheel(7, range(8, 14))
+    + [(3, 14), (14, 15), (15, 10)]
+    + [(1, 16), (16, 17), (17, 2)],
+    [2.0] + [1.0] * 17,
+)
+# A tree, base 0.
+G1 = ([(0, 1), (1, 2), (2, 3), (1, 4)], [3.0, 1, 1, 1, 1])

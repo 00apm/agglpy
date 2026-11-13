@@ -1,8 +1,8 @@
 """Structure of agglomerates (``agglpy.core.structure``).
 
 The catalogue (``support.structure_cases``) holds circle sets with
-their segments read by eye; the hand graphs below give the contact
-graph directly, as edge lists of particle ids.
+their segments read by eye; the hand graphs (there and below) give the
+contact graph directly, as edge lists of particle ids.
 """
 
 import itertools
@@ -25,9 +25,15 @@ from agglpy.errors import ParamsError, TableError
 from support.structure_cases import (
     CASES,
     CONTACTS,
+    G1,
+    G4,
+    G5,
+    agglomerate_table,
     expected_segments,
+    graph_tables,
     named_contacts,
     run_case,
+    wheel,
 )
 
 COUNTS = [
@@ -79,55 +85,6 @@ def _assert_columns(p, a):
         assert a[column].dtype == dtype, column
 
 
-def _graph(edges, r, aggl=None):
-    """Tables of a contact graph: ids 0 … n-1, the edges as contacts."""
-    n = len(r)
-    labels = [0] * n if aggl is None else list(aggl)
-    particles = pd.DataFrame(
-        {
-            "id": np.arange(n, dtype=np.int64),
-            "r": np.asarray(r, dtype=np.float64),
-            "agglomerate_id": np.asarray(labels, dtype=np.int64),
-        }
-    )
-    a = np.array([e[0] for e in edges], dtype=np.int64)
-    b = np.array([e[1] for e in edges], dtype=np.int64)
-    contacts = pd.DataFrame(
-        {
-            "agglomerate_id": particles["agglomerate_id"].to_numpy()[a],
-            "id_a": a,
-            "id_b": b,
-            "inside": np.zeros(len(a), dtype=bool),
-        }
-    )
-    return particles, _agglomerates(particles), contacts
-
-
-def _agglomerates(particles):
-    ids = np.unique(particles["agglomerate_id"].to_numpy(dtype=np.int64))
-    return pd.DataFrame({"agglomerate_id": ids})
-
-
-def _wheel(centre, ring):
-    """Edges of a centre joined to every ring particle, the ring cyclic."""
-    ring = list(ring)
-    spokes = [(centre, i) for i in ring]
-    rim = [(ring[k], ring[(k + 1) % len(ring)]) for k in range(len(ring))]
-    return spokes + rim
-
-
-# A core of 7 with two dangling ends: 7-8 on particle 1, 9 on 3.
-G4 = ([*_wheel(0, range(1, 7)), (1, 7), (7, 8), (3, 9)], [2.0] + [1.0] * 9)
-# Two cores of 7, a link 14-15 between them, a loop 16-17 on the first.
-G5 = (
-    _wheel(0, range(1, 7))
-    + _wheel(7, range(8, 14))
-    + [(3, 14), (14, 15), (15, 10)]
-    + [(1, 16), (16, 17), (17, 2)],
-    [2.0] + [1.0] * 17,
-)
-
-
 @pytest.mark.parametrize("name", list(CASES))
 def test_catalogue_contacts(name):
     names, _, contacts = run_case(CASES[name][0])
@@ -138,21 +95,23 @@ def test_catalogue_contacts(name):
 def test_catalogue_segments(name):
     circles, by_eye = CASES[name]
     names, particles, contacts = run_case(circles)
-    p, _ = structure_properties(particles, _agglomerates(particles), contacts)
+    p, _ = structure_properties(
+        particles, agglomerate_table(particles), contacts
+    )
     got = dict(zip(names, p["segment_type"], strict=True))
     assert got == expected_segments(names, by_eye)
     _assert_columns(p, _)
 
 
 def test_core_with_dangling_ends():
-    p, a = structure_properties(*_graph(*G4))
+    p, a = structure_properties(*graph_tables(*G4))
     assert p["segment_type"].tolist() == ["core"] * 7 + ["dangling end"] * 3
     assert p["segment_id"].tolist() == [0] * 7 + [1, 1, 2]
     assert a.iloc[0][COUNTS].tolist() == [1, 7, 0, 0, 2, 3]
 
 
 def test_link_and_loop():
-    p, a = structure_properties(*_graph(*G5))
+    p, a = structure_properties(*graph_tables(*G5))
     assert p["segment_type"].tolist() == (
         ["core"] * 14 + ["link"] * 2 + ["loop"] * 2
     )
@@ -161,8 +120,8 @@ def test_link_and_loop():
 
 
 def test_two_cores_touching_have_no_link():
-    edges = _wheel(0, range(1, 7)) + _wheel(7, range(8, 14)) + [(3, 10)]
-    p, a = structure_properties(*_graph(edges, [1.0] * 14))
+    edges = wheel(0, range(1, 7)) + wheel(7, range(8, 14)) + [(3, 10)]
+    p, a = structure_properties(*graph_tables(edges, [1.0] * 14))
     assert p["segment_type"].tolist() == ["core"] * 14
     assert p["segment_id"].tolist() == [0] * 7 + [1] * 7
     assert a.iloc[0][COUNTS].tolist() == [2, 14, 0, 0, 0, 0]
@@ -175,7 +134,7 @@ def test_two_cores_touching_have_no_link():
         (*G4, 7, ["core"] * 7 + ["dangling end"] * 3),
         (*G4, 8, ["small core"] * 7 + ["dangling end"] * 3),
         # a wheel of 6 is a small core at 7
-        (_wheel(0, range(1, 6)), [1.0] * 6, 7, ["small core"] * 6),
+        (wheel(0, range(1, 6)), [1.0] * 6, 7, ["small core"] * 6),
         # two triangles joined by a chain: one small core of 8
         (
             [
@@ -218,7 +177,7 @@ def test_two_cores_touching_have_no_link():
     ],
 )
 def test_segment_types(edges, r, m, expected):
-    p, a = structure_properties(*_graph(edges, r), min_core_members=m)
+    p, a = structure_properties(*graph_tables(edges, r), min_core_members=m)
     assert p["segment_type"].tolist() == expected
     # a small core and a no-core agglomerate are one segment each
     for label in ("small core", "no core"):
@@ -234,7 +193,7 @@ def test_several_agglomerates_numbered_per_image():
     edges = [*edges, (10, 11)]
     r = [*r, 2.0, 1.0, 1.5]
     aggl = [0] * 10 + [1, 1, 2]
-    particles, agglomerates, contacts = _graph(edges, r, aggl)
+    particles, agglomerates, contacts = graph_tables(edges, r, aggl)
     agglomerates = agglomerates.iloc[::-1].reset_index(drop=True)
     p, a = structure_properties(particles, agglomerates, contacts)
     assert p["segment_id"].tolist() == [0] * 7 + [1, 1, 2, 3, 3, 4]
@@ -247,16 +206,18 @@ def test_several_agglomerates_numbered_per_image():
 @pytest.mark.parametrize("m", [2, 2.0, 7.0, True, "7", None])
 def test_min_core_members_checked(m):
     with pytest.raises(ParamsError, match="min_core_members"):
-        structure_properties(*_graph(*G4), min_core_members=m)
+        structure_properties(*graph_tables(*G4), min_core_members=m)
 
 
 def test_min_core_members_accepts_numpy_integers():
-    p, _ = structure_properties(*_graph(*G4), min_core_members=np.int64(7))
+    p, _ = structure_properties(
+        *graph_tables(*G4), min_core_members=np.int64(7)
+    )
     assert p["segment_type"].tolist()[0] == "core"
 
 
 def test_empty_tables_give_every_column():
-    particles, agglomerates, contacts = _graph([], [])
+    particles, agglomerates, contacts = graph_tables([], [])
     p, a = structure_properties(particles, agglomerates, contacts)
     assert len(p) == 0
     assert len(a) == 0
@@ -290,11 +251,11 @@ def test_empty_tables_give_every_column():
 )
 def test_mismatched_tables_refused(tables, message):
     with pytest.raises(TableError, match=message):
-        structure_properties(*tables(*_graph(*G4)))
+        structure_properties(*tables(*graph_tables(*G4)))
 
 
 def test_earlier_columns_replaced_and_input_untouched():
-    particles, agglomerates, contacts = _graph(*G5)
+    particles, agglomerates, contacts = graph_tables(*G5)
     before = [t.copy() for t in (particles, agglomerates, contacts)]
     p, a = structure_properties(particles, agglomerates, contacts)
     p2, a2 = structure_properties(p, a, contacts)
@@ -307,7 +268,7 @@ def test_earlier_columns_replaced_and_input_untouched():
 
 
 def test_rows_index_and_other_columns_kept():
-    particles, agglomerates, contacts = _graph(*G4)
+    particles, agglomerates, contacts = graph_tables(*G4)
     particles = particles.assign(note="x").iloc[::-1]
     particles.index = range(100, 100 + len(particles))
     p, _ = structure_properties(particles, agglomerates, contacts)
@@ -317,14 +278,12 @@ def test_rows_index_and_other_columns_kept():
     assert p["segment_type"].tolist()[:3] == ["dangling end"] * 3
 
 
-# A tree, base 0.
-G1 = ([(0, 1), (1, 2), (2, 3), (1, 4)], [3.0, 1, 1, 1, 1])
 # A ring of 5 with a large particle (1) off the hop path to 4.
 G2 = ([(0, 1), (1, 4), (0, 2), (2, 3), (3, 4)], [10.0, 8, 1, 1, 1])
 
 
 def test_branches_on_a_tree():
-    p, a = structure_properties(*_graph(*G1))
+    p, a = structure_properties(*graph_tables(*G1))
     assert p["branch_depth"].tolist() == [0, 1, 2, 3, 2]
     assert p["branch_length"].tolist() == [0, 2, 4, 6, 4]
     assert p["tip"].tolist() == [False, False, False, True, True]
@@ -334,7 +293,7 @@ def test_branches_on_a_tree():
 
 
 def test_length_takes_another_path_than_hops():
-    p, a = structure_properties(*_graph(*G2))
+    p, a = structure_properties(*graph_tables(*G2))
     assert p["branch_depth"].tolist() == [0, 1, 1, 2, 2]
     # 4 is reached by 2, 3 (6), not by the large 1 (18)
     assert p["branch_length"].tolist() == [0, 16, 2, 4, 6]
@@ -346,7 +305,7 @@ def test_length_takes_another_path_than_hops():
 
 
 def test_dangling_end_depth_and_length():
-    p, a = structure_properties(*_graph(*G4))
+    p, a = structure_properties(*graph_tables(*G4))
     assert p["dangling_end_depth"].tolist()[7:] == [1, 2, 1]
     assert p["dangling_end_length"].tolist()[7:] == [2, 4, 2]
     assert p["dangling_end_depth"][:7].isna().all()
@@ -362,13 +321,13 @@ def test_dangling_end_depth_and_length():
 
 
 def test_pair_and_single():
-    p, a = structure_properties(*_graph([(0, 1)], [2.0, 1.0]))
+    p, a = structure_properties(*graph_tables([(0, 1)], [2.0, 1.0]))
     assert p["branch_depth"].tolist() == [0, 1]
     assert p["branch_length"].tolist() == [0, 2]
     assert p["tip"].tolist() == [False, True]
     assert a.iloc[0][BRANCHES].tolist() == [1, 1, 2, 1, 6]
 
-    p, a = structure_properties(*_graph([], [1.5]))
+    p, a = structure_properties(*graph_tables([], [1.5]))
     one = p.iloc[0]
     assert (one["branch_depth"], one["branch_length"]) == (0, 0.0)
     assert not one["tip"]
@@ -389,9 +348,9 @@ def test_pair_and_single():
 
 def test_base_tie_takes_the_lower_id():
     ring = [(i, (i + 1) % 4) for i in range(4)]
-    p, _ = structure_properties(*_graph(ring, [1.0] * 4))
+    p, _ = structure_properties(*graph_tables(ring, [1.0] * 4))
     assert p["branch_depth"].tolist() == [0, 1, 2, 1]
-    particles, agglomerates, contacts = _graph(ring, [1.0] * 4)
+    particles, agglomerates, contacts = graph_tables(ring, [1.0] * 4)
     ids = np.array([5, 6, 0, 7])
     particles["id"] = ids
     contacts["id_a"] = ids[contacts["id_a"]]
@@ -402,7 +361,7 @@ def test_base_tie_takes_the_lower_id():
 
 def _case_tables(name):
     _, particles, contacts = run_case(CASES[name][0])
-    return particles, _agglomerates(particles), contacts
+    return particles, agglomerate_table(particles), contacts
 
 
 @pytest.mark.parametrize(
@@ -410,7 +369,7 @@ def _case_tables(name):
     [
         lambda: _case_tables("11 two links, thread with a triangle"),
         lambda: _case_tables("21 Y link between three cores"),
-        lambda: _graph(*G4),
+        lambda: graph_tables(*G4),
     ],
     ids=["case 11", "case 21", "G4"],
 )
@@ -494,7 +453,7 @@ def test_longest_chain_matches_all_pairs(monkeypatch, name, size):
     if size is not None:
         monkeypatch.setattr(graph_module, "_EVERY_PAIR_SIZE", size)
     edges, r = ORACLE[name]
-    _, a = structure_properties(*_graph(edges, r))
+    _, a = structure_properties(*graph_tables(edges, r))
     hops, length = _oracle(edges, r)
     assert a["longest_chain"][0] == hops
     np.testing.assert_allclose(
@@ -528,7 +487,7 @@ def test_csv_round_trip_gives_the_same_columns(tmp_path):
 
 
 def test_chain_path_hand_cases():
-    particles, _, contacts = _graph(*G2)
+    particles, _, contacts = graph_tables(*G2)
     # hops: the lowest end pair (0, 3)
     assert chain_path(particles, contacts, 0) == [0, 2, 3]
     assert chain_path(particles, contacts, 0, by="length") == [0, 1]
@@ -539,7 +498,7 @@ def test_chain_path_hand_cases():
         3,
         4,
     ]
-    square, _, square_contacts = _graph(
+    square, _, square_contacts = graph_tables(
         [(0, 1), (1, 2), (2, 3), (3, 0)], [2.0, 1, 1, 1]
     )
     # two equal paths: through the lower id
@@ -552,13 +511,17 @@ def test_chain_path_hand_cases():
 
 
 def test_chain_path_of_a_single_particle():
-    particles, _, contacts = _graph([], [1.5])
+    particles, _, contacts = graph_tables([], [1.5])
     assert chain_path(particles, contacts, 0) == [0]
     assert chain_path(particles, contacts, 0, by="length") == [0]
 
 
 def _stored_value_tables():
-    out = {"G1": _graph(*G1), "G4": _graph(*G4), "grid": _graph(*_grid())}
+    out = {
+        "G1": graph_tables(*G1),
+        "G4": graph_tables(*G4),
+        "grid": graph_tables(*_grid()),
+    }
     for name in CASES:
         out[name] = _case_tables(name)
     return out
@@ -605,17 +568,17 @@ def test_chain_path_has_the_stored_values(name):
 
 def _g2_and_a_pair():
     edges, r = G2
-    return _graph([*edges, (5, 6)], [*r, 2.0, 1.0], [0] * 5 + [1, 1])
+    return graph_tables([*edges, (5, 6)], [*r, 2.0, 1.0], [0] * 5 + [1, 1])
 
 
 @pytest.mark.parametrize(
     ("tables", "arguments", "message"),
     [
-        (lambda: _graph(*G2), {"by": "width"}, "by"),
-        (lambda: _graph(*G2), {"agglomerate_id": 99}, "99"),
-        (lambda: _graph(*G2), {"to": 1}, "not a tip"),
+        (lambda: graph_tables(*G2), {"by": "width"}, "by"),
+        (lambda: graph_tables(*G2), {"agglomerate_id": 99}, "99"),
+        (lambda: graph_tables(*G2), {"to": 1}, "not a tip"),
         (_g2_and_a_pair, {"to": 6}, "not a tip"),
-        (lambda: _graph([], [1.5]), {"to": 0}, "not a tip"),
+        (lambda: graph_tables([], [1.5]), {"to": 0}, "not a tip"),
     ],
 )
 def test_chain_path_refuses(tables, arguments, message):

@@ -24,9 +24,11 @@ from agglpy.core.properties import (
     particle_properties,
     to_physical,
 )
+from agglpy.core.structure import structure_properties
 from agglpy.errors import MissingImagesWarning, ParamsError, TableError
 from agglpy.tables import make_particles
 
+from support.structure_cases import G1, G4, G5, graph_tables
 from support.synthetic.adapters import (
     ADAPTERS,
     REAL_PIXEL_SIZE,
@@ -767,3 +769,108 @@ def test_summary_across_images_warns_about_nothing():
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         summary_across_images(*_scene({**RA_EXAMPLE, "blank": []}))
+
+
+STRUCTURE = [
+    "N_cores",
+    "N_small_cores",
+    "N_links",
+    "N_dangling_ends",
+    "core_fraction",
+    "small_core_fraction",
+    "link_fraction",
+    "loop_fraction",
+    "dangling_end_fraction",
+    "no_core_fraction",
+]
+
+
+def _structured(image, graphs):
+    """One image's tables from hand graphs, one agglomerate each."""
+    edges, r, labels = [], [], []
+    for label, (graph_edges, graph_r) in enumerate(graphs):
+        offset = len(r)
+        edges += [(a + offset, b + offset) for a, b in graph_edges]
+        r += list(graph_r)
+        labels += [label] * len(graph_r)
+    p, a = structure_properties(*graph_tables(edges, r, labels))
+    a["member_count"] = np.bincount(p["agglomerate_id"])
+    return p.assign(image=image), a.assign(image=image)
+
+
+def _structure_scene():
+    """Image a: G4, G5, a single (29); b: G1, a 6-ring (11); blank."""
+    ring = ([(i, (i + 1) % 6) for i in range(6)], [1.0] * 6)
+    a = _structured("a", [G4, G5, ([], [1.0])])
+    b = _structured("b", [G1, ring])
+    images = pd.DataFrame({"image": ["a", "b", "blank"]})
+    particles = pd.concat([a[0], b[0]], ignore_index=True)
+    agglomerates = pd.concat([a[1], b[1]], ignore_index=True)
+    return images, particles, agglomerates
+
+
+def test_structure_family():
+    out = summary(*_structure_scene(), by="image", metrics="structure")
+    a, b = out.iloc[0], out.iloc[1]
+    assert a[STRUCTURE[:4]].tolist() == [3, 0, 1, 2]
+    assert a["core_fraction"] == 21 / 29
+    assert a["dangling_end_fraction"] == 3 / 29
+    assert a["link_fraction"] == 2 / 29
+    assert a["loop_fraction"] == 2 / 29
+    assert a["no_core_fraction"] == 1 / 29
+    assert b[STRUCTURE[:4]].tolist() == [0, 1, 0, 0]
+    assert b["small_core_fraction"] == 6 / 11
+    assert b["no_core_fraction"] == 5 / 11
+    fractions = [c for c in STRUCTURE if c.endswith("_fraction")]
+    assert np.allclose(out[fractions].iloc[:2].sum(axis=1), 1)
+    for column in STRUCTURE[:4]:
+        assert out[column].dtype == np.int64
+    # per image, then over the images
+    across = summary_across_images(*_structure_scene(), metrics="structure")
+    assert across["metric"].tolist() == STRUCTURE
+
+
+def test_structure_fractions_nan_without_particles():
+    out = summary(*_structure_scene(), by="image", metrics="structure")
+    blank = out.set_index("image").loc["blank"]
+    assert blank[STRUCTURE[:4]].tolist() == [0, 0, 0, 0]
+    assert blank[STRUCTURE[4:]].isna().all()
+
+
+def _with_structure_columns(particles, agglomerates):
+    particles = particles.assign(segment_type="no core")
+    agglomerates = agglomerates.assign(
+        core_count=0,
+        small_core_member_count=0,
+        link_count=0,
+        dangling_end_count=0,
+    )
+    return particles, agglomerates
+
+
+def test_default_summary_includes_structure_only_with_its_columns():
+    images, particles, agglomerates = _scene(RA_EXAMPLE)
+    plain = summary(images, particles, agglomerates)
+    assert "N_cores" not in plain.columns
+    out = summary(images, *_with_structure_columns(particles, agglomerates))
+    columns = list(out.columns)
+    at = columns.index("coordination_mean") + 1
+    assert columns[at : at + len(STRUCTURE)] == STRUCTURE
+    assert columns[at + len(STRUCTURE)] == "coverage"
+
+
+@pytest.mark.parametrize(
+    ("drop", "missing"),
+    [("particles", "segment_type"), ("agglomerates", "link_count")],
+)
+def test_structure_by_name_without_columns(drop, missing):
+    images, particles, agglomerates = _scene(RA_EXAMPLE)
+    particles, agglomerates = _with_structure_columns(particles, agglomerates)
+    if drop == "particles":
+        particles = particles.drop(columns=missing)
+    else:
+        agglomerates = agglomerates.drop(columns=missing)
+    with pytest.raises(TableError, match=missing):
+        summary(images, particles, agglomerates, metrics="structure")
+    # the default leaves the family out instead
+    assert "N_cores" not in summary(images, particles, agglomerates).columns
