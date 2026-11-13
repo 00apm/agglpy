@@ -4,9 +4,12 @@
 particle and agglomerate tables (``docs/agglomerate-structure.md``).
 """
 
+from typing import Literal
+
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
+from scipy.sparse import csr_matrix
 
 from agglpy.core import _graph
 from agglpy.core.agglomerates import (
@@ -23,6 +26,7 @@ __all__ = [
     "AGGLOMERATE_COLUMNS",
     "PARTICLE_COLUMNS",
     "SEGMENT_TYPES",
+    "chain_path",
     "structure_properties",
 ]
 
@@ -140,6 +144,106 @@ def structure_properties(
     for column in AGGLOMERATE_COLUMNS:
         a[column] = found[column][rows]
     return p, a
+
+
+def chain_path(
+    particles: pd.DataFrame,
+    contacts: pd.DataFrame,
+    agglomerate_id: int,
+    *,
+    to: int | None = None,
+    by: Literal["hops", "length"] = "hops",
+) -> list[int]:
+    """The particles of an agglomerate's longest chain or of a branch.
+
+    ``to=None`` gives the longest chain, ``to=<tip id>`` the branch from
+    the base to that tip; ``by="length"`` goes by sums of diameters.
+    The path has the hop count or length that ``structure_properties``
+    stores. Among equal paths: the end pair with the lower ids, then at
+    each step the lower id. A large agglomerate may need one search per
+    member.
+
+    Args:
+        particles: One image's particle table with ``id``, ``r`` and
+            ``agglomerate_id``.
+        contacts: Its contacts table (``find_agglomerates``).
+        agglomerate_id: The agglomerate.
+        to: The particle id of a tip, or None.
+        by: ``"hops"`` or ``"length"``.
+
+    Returns:
+        Particle ids in walking order.
+
+    Raises:
+        ParamsError: If ``by`` is unknown, the agglomerate does not
+            exist or ``to`` is not one of its tips.
+        TableError: If a column is missing or invalid, or the tables do
+            not belong together.
+    """
+    if by not in ("hops", "length"):
+        raise ParamsError(f"by must be 'hops' or 'length', got {by!r}")
+    number = _integer("agglomerate_id", agglomerate_id)
+    _require(particles, ("id", "r", "agglomerate_id"))
+    pairs = _check_contacts(particles, contacts)
+    labels = _whole(particles, "agglomerate_id", "particles")
+    rows = np.flatnonzero(labels == number)
+    if not len(rows):
+        raise ParamsError(f"no agglomerate {number} in the particle table")
+    ids = pairs.ids[rows]
+    r = _radii(particles)[rows]
+    keep = pairs.agglomerate_id == number
+    at = _contact_rows(ids, pairs.id_a[keep], pairs.id_b[keep])
+    g = _graph.graph(len(ids), at.larger, at.smaller)
+    hops = by == "hops"
+    matrix = g.matrix if hops else _graph.weighted(g, r)
+    if to is None:
+        start, end = _chain_ends(g, matrix, ids, r, hops)
+    else:
+        start, end = _branch_ends(g, ids, r, _integer("to", to), number)
+    found = _graph.path(matrix, start, end, ids, unweighted=hops)
+    return [int(ids[i]) for i in found]
+
+
+def _chain_ends(
+    g: _graph.Graph,
+    matrix: csr_matrix,
+    ids: NDArray[np.int64],
+    r: NDArray[np.float64],
+    hops: bool,
+) -> tuple[int, int]:
+    """Rows of the longest chain's ends: the lowest ids that reach it."""
+    if g.n == 1:
+        return 0, 0
+    radius = np.zeros(g.n) if hops else r
+    codes = np.zeros(g.n, dtype=np.intp)
+    longest = _graph.diameters(g, codes, 1, r=None if hops else r)[0]
+    for u in np.argsort(ids):
+        sources = np.array([u], dtype=np.intp)
+        d = _graph.distances(matrix, sources, unweighted=hops)
+        d = d + radius + radius[u]
+        d[u] = 0.0
+        reached = np.flatnonzero(_graph.equal(d, longest))
+        if len(reached):
+            return int(u), int(reached[np.argmin(ids[reached])])
+    raise AssertionError("no member reaches the longest chain")
+
+
+def _branch_ends(
+    g: _graph.Graph,
+    ids: NDArray[np.int64],
+    r: NDArray[np.float64],
+    to: int,
+    number: int,
+) -> tuple[int, int]:
+    """Rows of the base and of the tip ``to``."""
+    agg = np.zeros(g.n, dtype=np.intp)
+    tips = _branches(g, ids, r, agg, 1)["tip"]
+    at = np.flatnonzero(ids == to)
+    if not len(at) or not tips[at[0]]:
+        raise ParamsError(
+            f"particle {to} is not a tip of agglomerate {number}"
+        )
+    return int(_bases(ids, r, agg)[0]), int(at[0])
 
 
 def _min_core_members(value: object) -> int:
@@ -277,6 +381,15 @@ def _cores_touched(
     return np.bincount(touched[:, 0], minlength=g.n)
 
 
+def _bases(
+    ids: NDArray[np.int64], r: NDArray[np.float64], agg: NDArray[np.intp]
+) -> NDArray[np.intp]:
+    """Row of each agglomerate's largest member (equal radii: lower id)."""
+    order = np.lexsort((ids, -r, agg))
+    _, first = np.unique(agg[order], return_index=True)
+    return order[first].astype(np.intp)
+
+
 def _branches(
     g: _graph.Graph,
     ids: NDArray[np.int64],
@@ -285,10 +398,7 @@ def _branches(
     count: int,
 ) -> dict[str, NDArray[np.generic]]:
     """Branch depth, length and tips, from each agglomerate's base."""
-    # The base: the largest member, equal radii the lower id.
-    order = np.lexsort((ids, -r, agg))
-    _, first = np.unique(agg[order], return_index=True)
-    bases = order[first]
+    bases = _bases(ids, r, agg)
     depth = _graph.distances(g.matrix, bases, unweighted=True)
     dist = _graph.distances(_graph.weighted(g, r), bases, unweighted=False)
     # A path's weight counts each end's radius once: add the far end's,

@@ -229,6 +229,45 @@ def _bounded_diameter(
     return best
 
 
+# Two path lengths are equal when they differ by less than this
+# fraction: sums of floats in another order differ in the last bits.
+_TIE = 1e-12
+
+
+def equal(x: NDArray[np.float64] | float, y: float) -> NDArray[np.bool_]:
+    """Whether ``x`` equals ``y`` up to ``_TIE`` (relative)."""
+    return np.asarray(np.abs(x - y) <= _TIE * max(abs(y), 1.0))
+
+
+def path(
+    matrix: csr_matrix,
+    start: int,
+    end: int,
+    ids: NDArray[np.int64],
+    *,
+    unweighted: bool,
+) -> list[int]:
+    """A shortest path from ``start`` to ``end``, as row positions.
+
+    Each step goes to the neighbour with the lowest ``ids`` value among
+    those that stay on a shortest path.
+    """
+    far = np.asarray(
+        dijkstra(matrix, directed=True, indices=end, unweighted=unweighted),
+        dtype=np.float64,
+    )
+    out = [start]
+    v = start
+    while v != end:
+        at = slice(matrix.indptr[v], matrix.indptr[v + 1])
+        neighbours = matrix.indices[at]
+        step = 1.0 if unweighted else matrix.data[at]
+        on = neighbours[equal(step + far[neighbours], far[v])]
+        v = int(on[np.argmin(ids[on])])
+        out.append(v)
+    return out
+
+
 def _symmetric(
     n: int,
     a: NDArray[np.intp],

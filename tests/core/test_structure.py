@@ -5,6 +5,8 @@ their segments read by eye; the hand graphs below give the contact
 graph directly, as edge lists of particle ids.
 """
 
+import itertools
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -15,6 +17,7 @@ from agglpy.core import _graph as graph_module
 from agglpy.core.structure import (
     AGGLOMERATE_COLUMNS,
     PARTICLE_COLUMNS,
+    chain_path,
     structure_properties,
 )
 from agglpy.errors import ParamsError, TableError
@@ -522,3 +525,101 @@ def test_csv_round_trip_gives_the_same_columns(tmp_path):
     pd.testing.assert_frame_equal(
         a2[list(AGGLOMERATE_COLUMNS)], a[list(AGGLOMERATE_COLUMNS)]
     )
+
+
+def test_chain_path_hand_cases():
+    particles, _, contacts = _graph(*G2)
+    # hops: the lowest end pair (0, 3)
+    assert chain_path(particles, contacts, 0) == [0, 2, 3]
+    assert chain_path(particles, contacts, 0, by="length") == [0, 1]
+    assert chain_path(particles, contacts, 0, to=4) == [0, 1, 4]
+    assert chain_path(particles, contacts, 0, to=4, by="length") == [
+        0,
+        2,
+        3,
+        4,
+    ]
+    square, _, square_contacts = _graph(
+        [(0, 1), (1, 2), (2, 3), (3, 0)], [2.0, 1, 1, 1]
+    )
+    # two equal paths: through the lower id
+    assert chain_path(square, square_contacts, 0, to=2) == [0, 1, 2]
+    assert chain_path(square, square_contacts, 0, to=2, by="length") == [
+        0,
+        1,
+        2,
+    ]
+
+
+def test_chain_path_of_a_single_particle():
+    particles, _, contacts = _graph([], [1.5])
+    assert chain_path(particles, contacts, 0) == [0]
+    assert chain_path(particles, contacts, 0, by="length") == [0]
+
+
+def _stored_value_tables():
+    out = {"G1": _graph(*G1), "G4": _graph(*G4), "grid": _graph(*_grid())}
+    for name in CASES:
+        out[name] = _case_tables(name)
+    return out
+
+
+STORED = _stored_value_tables()
+
+
+@pytest.mark.parametrize("name", list(STORED))
+def test_chain_path_has_the_stored_values(name):
+    particles, agglomerates, contacts = STORED[name]
+    p, a = structure_properties(particles, agglomerates, contacts)
+    pairs = {
+        frozenset(e)
+        for e in zip(contacts["id_a"], contacts["id_b"], strict=True)
+    }
+    d = dict(zip(p["id"], 2 * p["r"], strict=True))
+
+    def walked(path):
+        steps = itertools.pairwise(path)
+        assert all(frozenset(step) in pairs for step in steps)
+        assert len(set(path)) == len(path)
+        return path
+
+    chain = walked(chain_path(particles, contacts, 0))
+    assert len(chain) - 1 == a["longest_chain"][0]
+    chain = walked(chain_path(particles, contacts, 0, by="length"))
+    np.testing.assert_allclose(
+        sum(d[i] for i in chain), a["longest_chain_length"][0], rtol=1e-12
+    )
+    for tip in p.loc[p["tip"], "id"]:
+        row = p.set_index("id").loc[tip]
+        branch = walked(chain_path(particles, contacts, 0, to=tip))
+        assert branch[-1] == tip
+        assert len(branch) - 1 == row["branch_depth"]
+        branch = walked(
+            chain_path(particles, contacts, 0, to=tip, by="length")
+        )
+        assert branch[-1] == tip
+        np.testing.assert_allclose(
+            sum(d[i] for i in branch[1:]), row["branch_length"], rtol=1e-12
+        )
+
+
+def _g2_and_a_pair():
+    edges, r = G2
+    return _graph([*edges, (5, 6)], [*r, 2.0, 1.0], [0] * 5 + [1, 1])
+
+
+@pytest.mark.parametrize(
+    ("tables", "arguments", "message"),
+    [
+        (lambda: _graph(*G2), {"by": "width"}, "by"),
+        (lambda: _graph(*G2), {"agglomerate_id": 99}, "99"),
+        (lambda: _graph(*G2), {"to": 1}, "not a tip"),
+        (_g2_and_a_pair, {"to": 6}, "not a tip"),
+        (lambda: _graph([], [1.5]), {"to": 0}, "not a tip"),
+    ],
+)
+def test_chain_path_refuses(tables, arguments, message):
+    particles, _, contacts = tables()
+    arguments = {"agglomerate_id": 0, **arguments}
+    with pytest.raises(ParamsError, match=message):
+        chain_path(particles, contacts, **arguments)
