@@ -1554,7 +1554,10 @@ def _assemble(
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         table = particles_from_passes(
-            prepared.final, [p.circles for p in passes], prepared.bounds
+            prepared.final,
+            [p.circles for p in passes],
+            [p.hct for p in passes],
+            prepared.bounds,
         )
     return table, tuple(warning_text(w) for w in caught)
 

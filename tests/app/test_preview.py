@@ -327,7 +327,7 @@ def test_set_ranges_and_shared_fields(tuning_col: Collection) -> None:
     # from no ranges, a range can be added again
     assert _ranges(empty.add_range(8, 18)) == (HCTRange(8, 18),)
     # set_ranges reruns only the passes that changed
-    same = p.set_ranges([(8, 18), (16, 44)])
+    same = p.set_ranges([(8, 20), (16, 44)])
     assert all(found.reused for found in same._state.passes)
 
 
@@ -436,7 +436,7 @@ def test_card_lines(tuning_col: Collection) -> None:
         "canny",
         "accumulator",
         "min dist",
-        "8-18",
+        "8-20",
         "total",
         "1 pair of near-identical circles between ranges 1 and 2",
         "DuplicateParticlesWarning: ",
@@ -446,7 +446,7 @@ def test_card_lines(tuning_col: Collection) -> None:
         "p.circles(1) · p.circles(2) · p.circles()",
         "compare=",
         "p.change_hct(range=1, canny_threshold=200, accumulator_threshold=15)",
-        "p.set_ranges([(8, 18), (16, 44)])",
+        "p.set_ranges([(8, 20), (16, 44)])",
         "p.keep()",
         "p.export()",
     ):

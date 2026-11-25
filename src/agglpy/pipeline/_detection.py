@@ -15,12 +15,17 @@ from numpy.typing import NDArray
 
 from agglpy.core._grey_image import check_grey_image
 from agglpy.core.detect import _hough as hct_pass
-from agglpy.core.detect import _table
+from agglpy.core.detect import _merge_passes
 
 # imported under another name: the keyword ``preprocess`` would hide it
 from agglpy.core.preprocess import preprocess as core_preprocess
 from agglpy.core.region import Bounds, region_bounds, region_slices
-from agglpy.params import HCTParams, PreprocessParams, RegionParams
+from agglpy.params import (
+    HCTParams,
+    HCTRange,
+    PreprocessParams,
+    RegionParams,
+)
 from agglpy.tables import validate_particles
 
 __all__ = [
@@ -90,7 +95,8 @@ def detect_particles(
     NoParticlesWarning
         If nothing is found.
     DuplicateParticlesWarning
-        If two ranges found the same particle.
+        If near-identical circles remain after the range-boundary
+        duplicates are dropped.
 
     Notes
     -----
@@ -104,7 +110,7 @@ def detect_particles(
     final = stages[-1].image if stages else cut
     report("hct")
     passes = [hct_pass(final, hct_range) for hct_range in hct.ranges]
-    return particles_from_passes(final, passes, bounds)
+    return particles_from_passes(final, passes, hct.ranges, bounds)
 
 
 @dataclasses.dataclass(frozen=True, eq=False)
@@ -212,6 +218,7 @@ def preprocess_stages(
 def particles_from_passes(
     image: NDArray[np.uint8],
     passes: Sequence[NDArray[np.float32]],
+    ranges: Sequence[HCTRange],
     bounds: Bounds,
 ) -> pd.DataFrame:
     """Return the HCT passes' particle table, in the raw image's frame.
@@ -223,6 +230,8 @@ def particles_from_passes(
         go into the no-circles warning).
     passes : sequence of ndarray
         One ``hct_pass`` result per range, in range order.
+    ranges : sequence of HCTRange
+        The range of each pass, in the same order.
     bounds : Bounds
         The region's bounds.
 
@@ -231,11 +240,12 @@ def particles_from_passes(
     NoParticlesWarning
         If no pass found a circle.
     DuplicateParticlesWarning
-        If two ranges found the same particle.
+        If near-identical circles remain after the range-boundary
+        duplicates are dropped.
     """
-    found = _table(image, passes)
+    found = _merge_passes(image, passes, ranges)
     # zero for a bottom cut; kept so a top or left cut stays right
     found["x"] += bounds.x_min + 0.5
     found["y"] += bounds.y_min + 0.5
-    # _table already warned about duplicates
+    # _merge_passes already warned about duplicates
     return validate_particles(found, warn_duplicates=False)

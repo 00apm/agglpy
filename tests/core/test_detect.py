@@ -14,7 +14,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from agglpy.core.detect import detect_hct, hct_edges
+from agglpy.core.detect import (
+    _hough,
+    _range_boundary_duplicates,
+    detect_hct,
+    hct_edges,
+)
 from agglpy.errors import (
     DuplicateParticlesWarning,
     ImageError,
@@ -228,6 +233,81 @@ def test_one_disc_found_by_two_ranges_is_kept_twice_and_warned():
         found = detect_hct(image, params)
     assert found["id"].tolist() == [1, 2]
     assert os.path.normcase(rec[0].filename) == os.path.normcase(__file__)
+
+
+R1 = HCTRange(3, 60)  # maxRadius 30
+R2 = HCTRange(60, 240)  # maxRadius 120
+R3 = HCTRange(240, 400)
+
+
+def _pass(*rows):
+    return np.array(rows, dtype=np.float32).reshape(-1, 3)
+
+
+@pytest.mark.parametrize(
+    ("limit", "partner", "dropped"),
+    [
+        ((412.0, 87.0, 29.4), (413.0, 88.0, 30.7), True),  # 1.4 px apart
+        ((412.0, 87.0, 29.4), (424.0, 87.0, 33.6), True),  # 12.0 px
+        ((412.0, 87.0, 29.4), (434.8, 87.0, 51.4), False),  # 22.8 px
+        ((412.0, 87.0, 28.3), (413.0, 88.0, 30.7), False),  # step below
+        ((412.0, 87.0, 29.0), (413.0, 88.0, 30.7), False),  # maxR - 1
+        ((412.0, 87.0, 29.4), (413.0, 88.0, 25.0), False),  # smaller
+    ],
+)
+def test_range_boundary_duplicates(limit, partner, dropped):
+    mask = _range_boundary_duplicates([_pass(limit), _pass(partner)], [R1, R2])
+    assert mask.tolist() == [dropped, False]
+
+
+def test_range_boundary_chain():
+    passes = [
+        _pass((412.0, 87.0, 29.4)),
+        _pass((413.0, 87.0, 119.4)),  # at R2's limit too
+        _pass((413.0, 88.0, 121.0)),
+    ]
+    mask = _range_boundary_duplicates(passes, [R1, R2, R3])
+    assert mask.tolist() == [True, True, False]
+
+
+def test_range_boundary_order():
+    passes = [_pass((413.0, 88.0, 30.7)), _pass((412.0, 87.0, 29.4))]
+    mask = _range_boundary_duplicates(passes, [R2, R1])
+    assert mask.tolist() == [False, True]
+
+
+def test_range_boundary_equal_radius(monkeypatch):
+    passes = [_pass((412.0, 87.0, 29.4)), _pass((412.0, 87.0, 29.4))]
+    assert _range_boundary_duplicates(passes, [R1, R1]).tolist() == [
+        False,
+        False,
+    ]
+    spy = _Spy([_circles((412.0, 87.0, 29.4))] * 2)
+    monkeypatch.setattr(cv2, "HoughCircles", spy)
+    with pytest.warns(DuplicateParticlesWarning, match=r"\(1, 2\)"):
+        found = detect_hct(
+            np.zeros((200, 500), dtype=np.uint8), HCTParams(ranges=(R1, R1))
+        )
+    assert found["id"].tolist() == [1, 2]
+
+
+def test_range_boundary_single_and_empty():
+    one = _range_boundary_duplicates([_pass((412.0, 87.0, 29.4))], [R1])
+    assert one.tolist() == [False]
+    empty = _range_boundary_duplicates([_pass(), _pass((1, 1, 5))], [R1, R1])
+    assert empty.tolist() == [False]
+
+
+def test_one_disc_at_a_range_boundary_is_kept_once():
+    image = _draw(200, 200, [(100.5, 100.25, 31)])
+    low = HCTRange(10, 60)
+    # the case needs the first range to report the disc at its limit
+    assert (_hough(image, low)[:, 2] > 29).any()
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        found = detect_hct(image, HCTParams(ranges=(low, HCTRange(60, 100))))
+    assert len(found) == 1
+    assert abs(found["r"].iloc[0] - 31) <= 1
 
 
 def test_input_is_not_modified():

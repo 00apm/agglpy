@@ -138,7 +138,7 @@ TUNING_PARAMS = {
         "rolling_ball": {"radius": 20},
         "clahe": {"clip_limit": 2.0, "tile_grid": [4, 4]},
     },
-    "hct": {"ranges": [{"d_min": 8, "d_max": 18}, {"d_min": 16, "d_max": 44}]},
+    "hct": {"ranges": [{"d_min": 8, "d_max": 20}, {"d_min": 16, "d_max": 44}]},
 }
 
 
@@ -147,11 +147,11 @@ def tuning_col(tmp_path: Path) -> Collection:
     """Three 200 x 160 px images with two HCT ranges set, for tuning.
 
     With the defaults (region bottom 10 % cut, median 3, rolling ball
-    r 20, CLAHE) range 1 (d 8-18) finds T1's three small discs and its
+    r 20, CLAHE) range 1 (d 8-20) finds T1's three small discs and its
     r 8.5 disc, range 2 (d 16-44) the two large ones and the r 8.5 disc
-    again (a duplicate pair). T2 has two small and two large discs and
-    its own entry (range 1 with accumulator 14); T3.jpg is T1 as a
-    JPEG.
+    again (a duplicate pair away from range 1's upper limit). T2 has
+    two small and two large discs and its own entry (range 1 with
+    accumulator 14); T3.jpg is T1 as a JPEG.
     """
     folder = tmp_path / "images"
     folder.mkdir()
@@ -169,7 +169,7 @@ def tuning_col(tmp_path: Path) -> Collection:
         "T2",
         hct={
             "ranges": [
-                {"d_min": 8, "d_max": 18, "accumulator_threshold": 14},
+                {"d_min": 8, "d_max": 20, "accumulator_threshold": 14},
                 {"d_min": 16, "d_max": 44},
             ]
         },
