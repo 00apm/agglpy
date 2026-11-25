@@ -1,5 +1,6 @@
 """``Image``: a handle on one image of a collection."""
 
+import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, TypeVar
 
@@ -138,6 +139,11 @@ class Image:
     def particles(self) -> pd.DataFrame:
         """The particle table (px) of the set in use.
 
+        The reader's warnings (e.g. near-identical circles) are not
+        shown: they belong to the run that wrote the file.
+        `Collection.analyze` still warns when it groups a circle lying
+        inside a near-identical one.
+
         Raises `NoParticleSetError` if the image has no particles yet.
         """
         used = self.particle_set
@@ -147,7 +153,9 @@ class Image:
                 "import_particles()"
             )
         name = CORRECTED_CSV if used == "corrected" else HCT_CSV
-        return read_particles(self._folder / name)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            return read_particles(self._folder / name)
 
     @property
     def detection(self) -> dict[str, Any] | None:

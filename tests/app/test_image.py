@@ -1,5 +1,6 @@
 """col[name]: the Image handle."""
 
+import warnings
 from pathlib import Path
 
 import pandas as pd
@@ -36,6 +37,14 @@ def test_handle_reads_files_on_access(particles_col: Collection) -> None:
     assert img.detection["particles"]["count"] == 2
     assert type(img.detection["particles"]["file"]) is str
     assert img.correction is None
+    # the reader's warnings stay with the run that wrote the file
+    csv = work(particles_col, "D7-017") / "particles_hct.csv"
+    table = pd.read_csv(csv)
+    copy = table.iloc[[0]].assign(id=99)
+    pd.concat([table, copy]).to_csv(csv, index=False)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        assert len(img.particles) == 3
 
 
 def test_corrected_set_wins(particles_col: Collection, fiji_csv: Path) -> None:
