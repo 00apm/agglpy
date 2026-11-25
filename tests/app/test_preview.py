@@ -65,7 +65,7 @@ def test_preview_shows_what_detect_stores(tuning_col: Collection) -> None:
     assert len(p.particles) == 7
     with pytest.warns(
         DuplicateParticlesWarning,
-        match=r"DuplicateParticlesWarning in T1|near-identical circles",
+        match=r"in T1|near-identical circles",
     ):
         tuning_col.detect(["T1"], progress=False)
         stored = read_particles(work(tuning_col, "T1") / "particles_hct.csv")
@@ -516,9 +516,7 @@ def test_keep_writes_only_this_image(
     tuning_col: Collection, caplog: pytest.LogCaptureFixture
 ) -> None:
     yml = tuning_col.folder / "agglpy.yml"
-    with pytest.warns(
-        DuplicateParticlesWarning, match="DuplicateParticlesWarning in T1"
-    ):
+    with pytest.warns(DuplicateParticlesWarning, match="in T1"):
         tuning_col.detect("T1", progress=False)
     before = _yaml.load(yml)
     t2 = tuning_col.params("T2")

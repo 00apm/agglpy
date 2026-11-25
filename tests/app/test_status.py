@@ -234,7 +234,7 @@ def test_missing_image(tmp_path: Path) -> None:
     write_zeiss(tmp_path / "images" / "a.tif", 64, 48, raw=1e-9)
     col = Collection.create(tmp_path / "col", images=tmp_path / "images")
     col.set_params(None, hct=HCT)
-    with pytest.warns(NoParticlesWarning, match="NoParticlesWarning in a"):
+    with pytest.warns(NoParticlesWarning, match="in a"):
         col.detect(progress=False)
     (tmp_path / "images" / "a.tif").unlink()
     r = row(col, "a")
@@ -295,9 +295,7 @@ def test_warnings_column_from_the_set_in_use(
             "ranges": [{"d_min": 12, "d_max": 44}, {"d_min": 20, "d_max": 40}]
         },
     )
-    with pytest.warns(
-        DuplicateParticlesWarning, match="DuplicateParticlesWarning in D7-017"
-    ):
+    with pytest.warns(DuplicateParticlesWarning, match="in D7-017"):
         particles_col.detect(progress=False)
     assert (
         particles_col.status()["warnings"].tolist()

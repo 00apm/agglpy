@@ -115,8 +115,8 @@ def _summaries(
     found: list[tuple[type[Warning], str]] = [
         (
             cls,
-            f"{cls.__name__} in {', '.join(images)} (messages in the "
-            "returned table and the records)",
+            f"in {', '.join(images)}; messages in the returned table "
+            "and the records",
         )
         for cls, images in seen.items()
     ]
