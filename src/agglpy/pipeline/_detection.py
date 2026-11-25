@@ -15,7 +15,7 @@ from numpy.typing import NDArray
 
 from agglpy.core._grey_image import check_grey_image
 from agglpy.core.detect import _hough as hct_pass
-from agglpy.core.detect import _merge_passes
+from agglpy.core.detect import _merge_passes, _range_boundary_duplicates
 
 # imported under another name: the keyword ``preprocess`` would hide it
 from agglpy.core.preprocess import preprocess as core_preprocess
@@ -36,6 +36,7 @@ __all__ = [
     "hct_pass",
     "matching_stages",
     "particles_from_passes",
+    "pass_of_particles",
     "preprocess_stages",
 ]
 
@@ -249,3 +250,25 @@ def particles_from_passes(
     found["y"] += bounds.y_min + 0.5
     # _merge_passes already warned about duplicates
     return validate_particles(found, warn_duplicates=False)
+
+
+def pass_of_particles(
+    passes: Sequence[NDArray[np.float32]], ranges: Sequence[HCTRange]
+) -> NDArray[np.intp]:
+    """Return the pass of each row `particles_from_passes` returns.
+
+    Parameters
+    ----------
+    passes : sequence of ndarray
+        One ``hct_pass`` result per range, in range order.
+    ranges : sequence of HCTRange
+        The range of each pass, in the same order.
+
+    Returns
+    -------
+    ndarray
+        The 0-based pass of each kept circle, in row order.
+    """
+    counts = [len(found) for found in passes]
+    every = np.repeat(np.arange(len(passes)), counts)
+    return every[~_range_boundary_duplicates(passes, ranges)]

@@ -2,6 +2,7 @@
 
 import matplotlib
 import numpy as np
+import pandas as pd
 import pytest
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
@@ -10,7 +11,9 @@ from agglpy.app import Collection, Preview
 from agglpy.app import _preview as preview_module
 from agglpy.core.detect import hct_edges
 from agglpy.errors import ParamsError
+from agglpy.io import read_image
 from agglpy.params import HCTRange
+from agglpy.pipeline import detect_particles
 
 from support.render import render
 
@@ -435,3 +438,38 @@ def test_full_image_must_be_true_or_false(p: Preview, view: str) -> None:
     }[view]
     with pytest.raises(ParamsError, match="full_image must be True or False"):
         call()
+
+
+def test_range_boundary_duplicate_is_left_out_of_views(
+    tuning_col: Collection,
+) -> None:
+    # with d 8-18, range 1 reports the r 8.5 disc at its upper limit:
+    # dropped, range 2's circle stays
+    p = (
+        tuning_col["T1"]
+        .preview(progress=False)
+        .set_ranges([(8, 18), (16, 44)])
+    )
+    assert len(p.particles) == 6
+    assert p.warnings == ()
+    assert _legend_texts(p.circles()) == ["range 1 (3)", "range 2 (3)"]
+    assert _legend_texts(p.circles(1)) == ["range 1 (3)"]
+    assert "near-identical" not in repr(p)
+    record = p._export_record(full_image=False)
+    assert [r["circles"] for r in record["ranges"]] == [3, 3]
+    image = read_image(tuning_col.folder.parent / "images" / "T1.tif")
+
+    def detected(preview: Preview) -> pd.DataFrame:
+        params = preview.params
+        return detect_particles(
+            image,
+            region=params.region,
+            preprocess=params.preprocess,
+            hct=params.hct,
+        )
+
+    pd.testing.assert_frame_equal(p.particles, detected(p))
+    # a change that reuses range 1's pass recomputes the drop
+    q = p.change_hct(range=2, accumulator_threshold=21)
+    assert q._state.passes[0].reused
+    pd.testing.assert_frame_equal(q.particles, detected(q))
