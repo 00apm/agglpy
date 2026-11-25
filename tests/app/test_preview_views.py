@@ -473,3 +473,8 @@ def test_range_boundary_duplicate_is_left_out_of_views(
     q = p.change_hct(range=2, accumulator_threshold=21)
     assert q._state.passes[0].reused
     pd.testing.assert_frame_equal(q.particles, detected(q))
+    # without range 2's partner, the reused range 1 circle comes back
+    alone = p.remove_range(2)
+    assert alone._state.passes[0].reused
+    assert len(alone.particles) == 4
+    pd.testing.assert_frame_equal(alone.particles, detected(alone))
