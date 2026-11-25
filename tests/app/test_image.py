@@ -138,7 +138,7 @@ def test_pixel_size_in_metres(tmp_path: Path) -> None:
     assert col["C"].pixel_size is None
     # the image gone: the copy in the particle record
     col.set_params(None, hct=HCT)
-    with pytest.warns(NoParticlesWarning, match="NoParticlesWarning in B"):
+    with pytest.warns(NoParticlesWarning, match="in B"):
         col.detect(["B"], progress=False)
     zeiss.unlink()
     assert col["B"].pixel_size == pytest.approx(from_tag)

@@ -29,7 +29,6 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from agglpy.errors import DuplicateParticlesWarning
 from agglpy.io import read_image, read_image_metadata, read_particles
 from agglpy.params import HCTParams, HCTRange, RegionParams
 from agglpy.pipeline import ImageResult, analyze, detect_particles
@@ -52,7 +51,7 @@ RANGES = {
     ),
 }
 # circles, edge particles, agglomerates, edge agglomerates
-COUNTS = {"D7-017": (784, 12, 422, 12), "D7-019": (673, 9, 469, 9)}
+COUNTS = {"D7-017": (774, 12, 422, 12), "D7-019": (667, 9, 469, 9)}
 # particles of the corrected sets touching the region's edge
 CORRECTED_EDGE = {"D7-017": 19, "D7-019": 39}
 
@@ -79,12 +78,9 @@ def _automatic(name: str) -> tuple[pd.DataFrame, list, ImageResult]:
             read_image(tif), region=REGION, hct=HCTParams(ranges=RANGES[name])
         )
     meta = read_image_metadata(tif)
-    with warnings.catch_warnings():
-        # the enclosed duplicates of the boundary pairs, warned again
-        warnings.simplefilter("ignore", DuplicateParticlesWarning)
-        result = analyze(
-            circles, width=meta.width, height=meta.height, region=REGION
-        )
+    result = analyze(
+        circles, width=meta.width, height=meta.height, region=REGION
+    )
     return circles, record, result
 
 
@@ -147,9 +143,8 @@ def _canonical(
 def test_automatic_circles(dataframe_regression, name: str) -> None:
     # Detection finds the same circles (px).
     circles, record, _ = _automatic(name)
-    # two pairs per image at the boundary between the ranges (r ~ 30)
-    assert [w.category for w in record] == [DuplicateParticlesWarning]
-    assert str(record[0].message).startswith("2 pairs")
+    # the two boundary pairs per image are dropped
+    assert record == []
     assert len(circles) == COUNTS[name][0]
     dataframe_regression.check(
         circles[["x", "y", "r"]].sort_values(

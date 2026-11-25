@@ -65,7 +65,7 @@ def test_preview_shows_what_detect_stores(tuning_col: Collection) -> None:
     assert len(p.particles) == 7
     with pytest.warns(
         DuplicateParticlesWarning,
-        match=r"DuplicateParticlesWarning in T1|near-identical circles",
+        match=r"in T1|near-identical circles",
     ):
         tuning_col.detect(["T1"], progress=False)
         stored = read_particles(work(tuning_col, "T1") / "particles_hct.csv")
@@ -327,7 +327,7 @@ def test_set_ranges_and_shared_fields(tuning_col: Collection) -> None:
     # from no ranges, a range can be added again
     assert _ranges(empty.add_range(8, 18)) == (HCTRange(8, 18),)
     # set_ranges reruns only the passes that changed
-    same = p.set_ranges([(8, 18), (16, 44)])
+    same = p.set_ranges([(8, 20), (16, 44)])
     assert all(found.reused for found in same._state.passes)
 
 
@@ -436,7 +436,7 @@ def test_card_lines(tuning_col: Collection) -> None:
         "canny",
         "accumulator",
         "min dist",
-        "8-18",
+        "8-20",
         "total",
         "1 pair of near-identical circles between ranges 1 and 2",
         "DuplicateParticlesWarning: ",
@@ -446,7 +446,7 @@ def test_card_lines(tuning_col: Collection) -> None:
         "p.circles(1) · p.circles(2) · p.circles()",
         "compare=",
         "p.change_hct(range=1, canny_threshold=200, accumulator_threshold=15)",
-        "p.set_ranges([(8, 18), (16, 44)])",
+        "p.set_ranges([(8, 20), (16, 44)])",
         "p.keep()",
         "p.export()",
     ):
@@ -516,9 +516,7 @@ def test_keep_writes_only_this_image(
     tuning_col: Collection, caplog: pytest.LogCaptureFixture
 ) -> None:
     yml = tuning_col.folder / "agglpy.yml"
-    with pytest.warns(
-        DuplicateParticlesWarning, match="DuplicateParticlesWarning in T1"
-    ):
+    with pytest.warns(DuplicateParticlesWarning, match="in T1"):
         tuning_col.detect("T1", progress=False)
     before = _yaml.load(yml)
     t2 = tuning_col.params("T2")

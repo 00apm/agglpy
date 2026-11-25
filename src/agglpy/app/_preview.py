@@ -52,6 +52,7 @@ from agglpy.pipeline._detection import (
     hct_pass,
     matching_stages,
     particles_from_passes,
+    pass_of_particles,
     preprocess_stages,
 )
 from agglpy.tables import find_duplicates, validate_particles
@@ -155,6 +156,8 @@ class _State:
     preprocess_reused: bool
     passes: tuple[_Pass, ...]
     particles: pd.DataFrame
+    # the 0-based pass of each row of particles
+    pass_of: NDArray[np.intp]
     warnings: tuple[str, ...]
     # the image's params in agglpy.yml when the first preview was made
     stored: ImageParams
@@ -599,10 +602,12 @@ class Preview:
             {
                 "range": k,
                 **plain(found.hct, f"ranges[{k}]"),
-                "circles": len(found.circles),
+                "circles": count,
                 "seconds": round(found.seconds, 3),
             }
-            for k, found in enumerate(state.passes, start=1)
+            for k, (found, count) in enumerate(
+                zip(state.passes, _kept_counts(state), strict=True), start=1
+            )
         ]
         return {
             "image": state.name,
@@ -945,17 +950,13 @@ class Preview:
         The label is in column ``range``; the colour of each label
         comes with the table.
         """
-        passes = self._state.passes
-        labels = {
-            i: f"range {i + 1} ({len(passes[i].circles)})" for i in chosen
-        }
+        state = self._state
+        counts = _kept_counts(state)
+        labels = {i: f"range {i + 1} ({counts[i]})" for i in chosen}
         colours: dict[str, ColorType] = {
             labels[i]: _pass_colour(i) for i in chosen
         }
-        counts = [len(found.circles) for found in passes]
-        table = self._state.particles.assign(
-            range=np.repeat(np.arange(len(passes)), counts)
-        )
+        table = state.particles.assign(range=state.pass_of)
         table = table[table["range"].isin(chosen)]
         return table.assign(range=table["range"].map(labels)), colours
 
@@ -1182,8 +1183,9 @@ class Preview:
         table: list[list[str]] = []
         if ranges:
             table.append(list(_CARD_HEADS))
-            for k, (hct, found) in enumerate(
-                zip(ranges, state.passes, strict=True), start=1
+            counts = _kept_counts(state)
+            for k, (hct, found, count) in enumerate(
+                zip(ranges, state.passes, counts, strict=True), start=1
             ):
                 table.append(
                     [
@@ -1192,7 +1194,7 @@ class Preview:
                         f"{hct.canny_threshold:g}",
                         f"{hct.accumulator_threshold:g}",
                         f"{hct.min_dist_ratio:g}",
-                        str(len(found.circles)),
+                        str(count),
                         "yes" if found.reused else "no",
                     ]
                 )
@@ -1225,14 +1227,7 @@ class Preview:
             for k, found in enumerate(state.passes, start=1)
             if len(found.circles) == 0
         ]
-        counts = [len(found.circles) for found in state.passes]
-        pass_of = dict(
-            zip(
-                state.particles["id"],
-                np.repeat(np.arange(len(counts)), counts),
-                strict=True,
-            )
-        )
+        pass_of = dict(zip(state.particles["id"], state.pass_of, strict=True))
         pairs: dict[tuple[int, int], int] = {}
         for a, b in find_duplicates(state.particles):
             i, j = sorted((int(pass_of[a]), int(pass_of[b])))
@@ -1422,7 +1417,7 @@ def _new(
     start: float,
 ) -> Preview:
     """Make the preview: number circles, gather warnings, log it."""
-    particles, assembly = _assemble(prepared, passes)
+    particles, pass_of, assembly = _assemble(prepared, passes)
     preview = Preview(
         _State(
             collection=collection,
@@ -1433,6 +1428,7 @@ def _new(
             preprocess_reused=preprocess_reused,
             passes=passes,
             particles=particles,
+            pass_of=pass_of,
             # detect()'s order: the file, reading, preprocessing, HCT
             warnings=(
                 source_warnings
@@ -1547,16 +1543,25 @@ def _run_passes(
 
 def _assemble(
     prepared: _Prepared, passes: Sequence[_Pass]
-) -> tuple[pd.DataFrame, tuple[str, ...]]:
-    """Return the particle table of the passes and its warnings."""
+) -> tuple[pd.DataFrame, NDArray[np.intp], tuple[str, ...]]:
+    """Return the passes' particle table, each row's pass, warnings."""
     if not passes:
-        return _no_particles(), ()
+        return _no_particles(), np.empty(0, dtype=np.intp), ()
+    circles = [p.circles for p in passes]
+    ranges = [p.hct for p in passes]
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         table = particles_from_passes(
-            prepared.final, [p.circles for p in passes], prepared.bounds
+            prepared.final, circles, ranges, prepared.bounds
         )
-    return table, tuple(warning_text(w) for w in caught)
+    pass_of = pass_of_particles(circles, ranges)
+    return table, pass_of, tuple(warning_text(w) for w in caught)
+
+
+def _kept_counts(state: _State) -> list[int]:
+    """Return the number of rows of `state.particles` per pass."""
+    counts = np.bincount(state.pass_of, minlength=len(state.passes))
+    return [int(n) for n in counts]
 
 
 def _no_particles() -> pd.DataFrame:

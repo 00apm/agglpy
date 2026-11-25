@@ -183,7 +183,9 @@ def test_helpers_give_detect_particles():
     passes = [hct_pass(stages[-1].image, r) for r in TWO_RANGES.ranges]
     assert [len(found) for found in passes] == [2, 2]
     pd.testing.assert_frame_equal(
-        particles_from_passes(stages[-1].image, passes, bounds),
+        particles_from_passes(
+            stages[-1].image, passes, TWO_RANGES.ranges, bounds
+        ),
         detect_particles(
             TWO_SIZES, region=region, preprocess=MEDIAN_CLAHE, hct=TWO_RANGES
         ),
@@ -239,6 +241,6 @@ def test_no_preprocessing_detects_on_the_cut():
     assert preprocess_stages(cut, PreprocessParams()) == ()
     passes = [hct_pass(cut, r) for r in TWO_RANGES.ranges]
     pd.testing.assert_frame_equal(
-        particles_from_passes(cut, passes, bounds),
+        particles_from_passes(cut, passes, TWO_RANGES.ranges, bounds),
         detect_particles(TWO_SIZES, hct=TWO_RANGES),
     )

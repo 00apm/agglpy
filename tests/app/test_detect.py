@@ -175,7 +175,7 @@ def _semicolon_csv(col: Collection) -> None:
 
 
 @NOT_DONE
-@pytest.mark.filterwarnings("ignore:UserWarning in D7-017")
+@pytest.mark.filterwarnings("ignore:in D7-017")
 @pytest.mark.parametrize(
     ("damage", "word", "past"),
     [
@@ -207,9 +207,7 @@ def test_persons_file_is_kept_then_replaced_with_force(
 
 def test_zero_particles_is_a_result(particles_col: Collection) -> None:
     write_blank_image(image(particles_col, "D7-017"))
-    with pytest.warns(
-        NoParticlesWarning, match="NoParticlesWarning in D7-017"
-    ):
+    with pytest.warns(NoParticlesWarning, match="in D7-017"):
         rep = particles_col.detect(progress=False)
     assert rep["outcome"][0] == "detected"
     assert rep["particle_count"][0] == 0
@@ -402,15 +400,13 @@ def test_duplicates_go_into_the_record_and_are_reemitted_once(
 ) -> None:
     # two overlapping ranges find the same discs
     particles_col.set_params(None, hct=TWO_RANGES)
-    with pytest.warns(
-        DuplicateParticlesWarning, match="DuplicateParticlesWarning in D7-017"
-    ) as ws:
+    with pytest.warns(DuplicateParticlesWarning, match="in D7-017") as ws:
         rep = particles_col.detect(progress=False)
     dup = [w for w in ws if w.category is DuplicateParticlesWarning]
     assert len(dup) == 1
     assert str(dup[0].message) == (
-        "DuplicateParticlesWarning in D7-017, D7-018, D7-019 (messages in "
-        "the returned table and the records)"
+        "in D7-017, D7-018, D7-019; messages in the returned table and "
+        "the records"
     )
     assert _is_here(dup[0])
     assert rep["warnings"].tolist() == ["DuplicateParticlesWarning"] * 3
@@ -453,14 +449,11 @@ def test_jpeg_recognised_by_bytes_not_suffix(tmp_path: Path) -> None:
     )
     col = Collection.create(tmp_path / "col", images=folder)
     col.set_params(None, hct=HCT)
-    with pytest.warns(
-        LossyImageWarning, match="LossyImageWarning in D7-017"
-    ) as ws:
+    with pytest.warns(LossyImageWarning, match="in D7-017") as ws:
         rep = col.detect(progress=False)
     lossy = [w for w in ws if w.category is LossyImageWarning]
     assert [str(w.message) for w in lossy] == [
-        "LossyImageWarning in D7-017 (messages in the returned table and "
-        "the records)"
+        "in D7-017; messages in the returned table and the records"
     ]
     assert rep["warnings"].tolist() == ["LossyImageWarning", ""]
 
@@ -589,7 +582,7 @@ def test_warnings_as_errors_raise_after_the_batch(
         warnings.simplefilter("error")
         with pytest.raises(
             DuplicateParticlesWarning,
-            match="DuplicateParticlesWarning in D7-017",
+            match="in D7-017",
         ):
             particles_col.detect(progress=False)
     for name in NAMES:
