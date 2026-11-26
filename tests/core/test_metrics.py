@@ -14,7 +14,7 @@ import pandas as pd
 import pytest
 
 from agglpy.core.agglomerates import find_agglomerates
-from agglpy.core.metrics import summary
+from agglpy.core.metrics import _FAMILIES, _METRICS, summary
 from agglpy.core.properties import (
     agglomerate_properties,
     particle_properties,
@@ -329,24 +329,74 @@ def test_one_image_without_fov_area_makes_its_group_nan():
     assert math.isnan(per_image["coverage"].iloc[1])
 
 
-def test_metrics_narrow_the_table_in_family_order():
+def test_column_names_in_the_given_order():
     scene = _scene(RA_EXAMPLE)
-    out = summary(*scene, metrics=["ratios", "counts"])
+    full = summary(*scene)
+    out = summary(*scene, metrics=["particle_D50", "counts", "N_primary"])
     assert list(out.columns) == [
         "n_images",
+        "particle_D50",
         "N_primary",
         "N_aerosol",
         "N_pp1",
         "N_ppA",
         "N_aggl",
         "N_merges",
-        "Ra",
-        "agglomerated_fraction",
-        "merge_ratio",
-        "n_ppA",
-        "n_ppP",
     ]
-    assert list(summary(*scene, metrics="counts").columns)[-1] == "N_merges"
+    pd.testing.assert_frame_equal(out, full[out.columns])
+    assert list(summary(*scene, metrics=["ratios", "counts"]).columns) == [
+        "n_images",
+        *_FAMILIES["ratios"],
+        *_FAMILIES["counts"],
+    ]
+    # one string is one name, not letters
+    assert list(summary(*scene, metrics="N_primary").columns) == [
+        "n_images",
+        "N_primary",
+    ]
+    assert list(summary(*scene, metrics=[]).columns) == ["n_images"]
+
+
+def test_a_column_needs_only_its_family():
+    images, particles, agglomerates = _scene(RA_EXAMPLE)
+    images = images.drop(columns="fov_area")
+    out = summary(images, particles, agglomerates, metrics="merge_ratio")
+    assert list(out.columns) == ["n_images", "merge_ratio"]  # counts hidden
+    with pytest.raises(TableError, match="fov_area"):
+        summary(
+            images, particles, agglomerates, metrics=["N_primary", "coverage"]
+        )
+    with pytest.raises(TableError, match="segment_type"):
+        summary(images, particles, agglomerates, metrics="N_cores")
+
+
+def test_by_clashes_only_with_shown_columns():
+    images, particles, agglomerates = _scene(RA_EXAMPLE)
+    images["N_aerosol"] = ["x", "y"]
+    out = summary(
+        images, particles, agglomerates, by="N_aerosol", metrics="merge_ratio"
+    )
+    assert list(out.columns) == ["N_aerosol", "n_images", "merge_ratio"]
+
+
+def test_family_and_column_names_never_clash():
+    assert not set(_FAMILIES) & set(_METRICS)
+
+
+def test_register_dimensions_match_scaling():
+    # Every length scaled by 2: each column scales by 2 ** dimension.
+    scene = _scene(RA_EXAMPLE, fov_area={"A": 100.0, "B": 100.0})
+    images, particles, agglomerates = (t.copy() for t in scene)
+    images["fov_area"] *= 4
+    particles["D"] *= 2
+    agglomerates["D"] *= 2
+    agglomerates["area"] *= 4
+    base = summary(*scene).iloc[0]
+    scaled = summary(images, particles, agglomerates).iloc[0]
+    for name in base.index.drop("n_images"):
+        factor = 2.0 ** _METRICS[name].dimension
+        expected = base[name] * factor
+        assert scaled[name] == pytest.approx(expected, nan_ok=True), name
 
 
 def test_fov_area_is_needed_only_for_per_area():
@@ -357,9 +407,10 @@ def test_fov_area_is_needed_only_for_per_area():
         summary(images, particles, agglomerates)
 
 
-def test_unknown_family_raises():
-    with pytest.raises(ParamsError, match="families"):
-        summary(*_scene(RA_EXAMPLE), metrics="sizes")
+def test_unknown_metric_raises():
+    for bad in ("sizes", "n_images"):
+        with pytest.raises(ParamsError, match=rf"\['{bad}'\].*metric_names"):
+            summary(*_scene(RA_EXAMPLE), metrics=["counts", bad])
 
 
 def test_empty_by_cell_is_its_own_group():
