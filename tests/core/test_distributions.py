@@ -14,7 +14,6 @@ import pytest
 
 from agglpy.core.distributions import (
     distribution,
-    distribution_across_images,
     size_classes,
 )
 from agglpy.errors import ParamsError, TableError, ValuesNotCountedWarning
@@ -377,57 +376,3 @@ def test_bad_closed_raises():
 def test_text_column_raises():
     with pytest.raises(TableError, match="'v' must be numeric"):
         distribution(*_one_image(["big"]), "v", [0, 2])
-
-
-def test_distribution_across_images():
-    images = pd.DataFrame({"image": ["A", "B", "blank"]})
-    table = pd.DataFrame({"image": ["A", "A", "A", "B"], "v": [1, 1, 3, 3]})
-    out = distribution_across_images(images, table, "v", [0, 2, 4])
-    assert list(out.columns) == [
-        "left",
-        "mid",
-        "right",
-        "width",
-        "basis",
-        "metric",
-        "mean",
-        "std",
-        "n",
-        "ci_low",
-        "ci_high",
-    ]
-    assert out["metric"].unique().tolist() == ["fraction"]
-    # A: 2/3, 1/3; B: 0, 1; the blank image has no fraction (n = 2)
-    assert out["mean"].tolist() == pytest.approx([1 / 3, 2 / 3], rel=RTOL)
-    assert out["n"].tolist() == [2, 2]
-
-
-def test_distribution_across_images_images_column_named_fraction():
-    # an images column "fraction" must not hide the fractions
-    images = pd.DataFrame({"image": ["A"], "fraction": ["x"]})
-    table = pd.DataFrame({"image": ["A", "A"], "v": [1, 3]})
-    out = distribution_across_images(images, table, "v", [0, 2, 4])
-    assert out["mean"].tolist() == [0.5, 0.5]
-
-
-def test_distribution_across_images_by_column_named_basis_raises():
-    images = pd.DataFrame({"image": ["A"], "basis": ["SEM"]})
-    table = pd.DataFrame({"image": ["A"], "v": [1]})
-    with pytest.raises(TableError, match=r"by: .*'basis'"):
-        distribution_across_images(images, table, "v", [0, 2], by="basis")
-
-
-def test_distribution_across_images_by_group_and_basis():
-    images = pd.DataFrame({"image": ["A", "B"], "condition": ["x", "y"]})
-    table = pd.DataFrame(
-        {"image": ["A", "B"], "v": [1, 3], "volume": [1.0, 1.0]}
-    )
-    out = distribution_across_images(
-        images, table, "v", [0, 2, 4], by="condition", weights="volume"
-    )
-    assert out["condition"].tolist() == ["x"] * 4 + ["y"] * 4
-    assert (
-        out["basis"].tolist()
-        == ["number"] * 2 + ["volume"] * 2 + ["number"] * 2 + ["volume"] * 2
-    )
-    assert out["mean"].tolist() == [1, 0, 1, 0, 0, 1, 0, 1]

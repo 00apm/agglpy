@@ -24,7 +24,6 @@ from agglpy.core._images import (
     require,
     with_labels,
 )
-from agglpy.core.metrics import values_across_images
 from agglpy.errors import ParamsError, TableError, ValuesNotCountedWarning
 from agglpy.params import _integer, _number, _positive
 
@@ -170,11 +169,6 @@ def distribution(
     ValuesNotCountedWarning
         If values were left out.
 
-    See Also
-    --------
-    distribution_across_images : Mean ± CI of the fractions over
-        images.
-
     Notes
     -----
     - A value equal to the first (or last) edge is counted; a value
@@ -256,77 +250,6 @@ def distribution(
     )
     labels = groups.labels.iloc[out.pop("_group")].reset_index(drop=True)
     return with_labels(labels, out)
-
-
-def distribution_across_images(
-    images: pd.DataFrame,
-    table: pd.DataFrame,
-    column: str,
-    edges: ArrayLike,
-    by: str | Iterable[str] | None = None,
-    *,
-    closed: str = "right",
-    weights: str | Iterable[str] = (),
-    confidence: float = 0.95,
-) -> pd.DataFrame:
-    """Return the mean ± CI over images of each class's fraction.
-
-    ``distribution(..., by="image")``, then
-    `agglpy.core.metrics.values_across_images` with the class and basis
-    as keys. An image without counted values has NaN fractions: it is
-    left out of the means and of ``n``.
-
-    Parameters
-    ----------
-    images : DataFrame
-        As in `distribution`.
-    table : DataFrame
-        As in `distribution`.
-    column : str
-        As in `distribution`.
-    edges : array_like
-        As in `distribution`.
-    by : str or list of str, optional
-        As in `distribution`.
-    closed : {"right", "left"}, default "right"
-        As in `distribution`.
-    weights : str or list of str, default ()
-        As in `distribution`.
-    confidence : float, default 0.95
-        Level of the confidence interval, between 0 and 1.
-
-    Returns
-    -------
-    DataFrame
-        A long table: the `by` columns, ``left, mid, right, width``,
-        ``basis``, ``metric`` (``"fraction"``), ``mean``, ``std``,
-        ``n``, ``ci_low``, ``ci_high``.
-
-    Raises
-    ------
-    TableError
-        If a table is invalid, as in `distribution`.
-    ParamsError
-        If an argument is invalid, as in `distribution`, or
-        `confidence` is not between 0 and 1.
-
-    Warns
-    -----
-    ValuesNotCountedWarning
-        If values were left out.
-    """
-    per_image = distribution(
-        images, table, column, edges, "image", closed=closed, weights=weights
-    )
-    keys = [*_CLASS_COLUMNS, "basis"]
-    return values_across_images(
-        images,
-        per_image[["image", *keys, "fraction"]],
-        by,
-        keys=keys,
-        values="fraction",
-        confidence=confidence,
-    )
 
 
 def _classes_per_step(

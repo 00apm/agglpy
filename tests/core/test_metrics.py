@@ -14,18 +14,14 @@ import pandas as pd
 import pytest
 
 from agglpy.core.agglomerates import find_agglomerates
-from agglpy.core.metrics import (
-    summary,
-    summary_across_images,
-    values_across_images,
-)
+from agglpy.core.metrics import summary
 from agglpy.core.properties import (
     agglomerate_properties,
     particle_properties,
     to_physical,
 )
 from agglpy.core.structure import structure_properties
-from agglpy.errors import MissingImagesWarning, ParamsError, TableError
+from agglpy.errors import ParamsError, TableError
 from agglpy.tables import make_particles
 
 from support.structure_cases import G1, G4, G5, graph_tables
@@ -169,13 +165,6 @@ def test_merge_ratio_nan_below_two_particles(counts: list[int]):
     row = summary(*_scene({"A": counts})).iloc[0]
     # N = 0 would give -0.0 without the guard
     assert math.isnan(row["merge_ratio"])
-
-
-def test_merge_ratio_across_images_is_the_mean_per_image():
-    out = summary_across_images(*_scene(RA_EXAMPLE), metrics="ratios")
-    mean = out.set_index("metric").loc["merge_ratio", "mean"]
-    # A: 1 merge of 2 particles; B: 2 merges of 20
-    assert mean == pytest.approx((1 / 1 + 2 / 19) / 2, rel=RTOL)
 
 
 def test_contacts_family_needs_contact_count():
@@ -524,251 +513,21 @@ def test_by_column_named_like_a_metric_raises():
 
 
 def test_repeated_by_column_raises():
-    images = _images("A", "B", g=["x", "y"])
-    per_image = pd.DataFrame({"image": ["A", "B"], "v": [1.0, 3.0]})
+    images, particles, agglomerates = _scene(RA_EXAMPLE)
+    images["g"] = ["x", "y"]
     with pytest.raises(ParamsError, match=r"by: .*'g'"):
-        values_across_images(images, per_image, by=["g", "g"])
+        summary(images, particles, agglomerates, by=["g", "g"])
 
 
-# --- values_across_images and summary_across_images -------------------
-
-# t(0.975, 1): the 95 % quantile factor for two images (scipy gives it).
-T_975_1 = 12.706204736174698
-
-
-def _images(*names: str, **columns: list) -> pd.DataFrame:
-    return pd.DataFrame({"image": list(names), **columns})
-
-
-def test_values_across_images_mean_std_and_interval():
-    per_image = pd.DataFrame({"image": ["A", "B"], "Ra": [0.5, 0.1]})
-    out = values_across_images(_images("A", "B"), per_image)
-    assert list(out.columns) == [
-        "metric",
-        "mean",
-        "std",
-        "n",
-        "ci_low",
-        "ci_high",
-    ]
-    row = out.iloc[0]
-    assert row["metric"] == "Ra"
-    assert row["mean"] == pytest.approx(0.3, rel=RTOL)
-    assert row["std"] == pytest.approx(math.sqrt(0.08), rel=RTOL)
-    assert row["n"] == 2
-    # t(0.975, 1) * std / sqrt(2) = 12.706... * 0.2
-    half = T_975_1 * 0.2
-    assert row["ci_low"] == pytest.approx(0.3 - half, rel=1e-9)
-    assert row["ci_high"] == pytest.approx(0.3 + half, rel=1e-9)
-
-
-def test_confidence_level_changes_the_interval():
-    per_image = pd.DataFrame({"image": ["A", "B"], "v": [0.5, 0.1]})
-    out = values_across_images(_images("A", "B"), per_image, confidence=0.9)
-    # t(0.95, 1) = 6.313751514675043
-    half = 6.313751514675043 * 0.2
-    assert out["ci_high"].iloc[0] == pytest.approx(0.3 + half, rel=1e-9)
-
-
-@pytest.mark.parametrize("level", [0, 1, 1.5, -0.1, "95%"])
-def test_bad_confidence_raises(level):
-    per_image = pd.DataFrame({"image": ["A"], "v": [1.0]})
-    with pytest.raises(ParamsError, match="confidence"):
-        values_across_images(_images("A"), per_image, confidence=level)
-
-
-def test_one_image_gives_nan_spread_never_zero():
-    per_image = pd.DataFrame({"image": ["A", "B"], "v": [0.5, 0.1]})
-    out = values_across_images(_images("A", "B"), per_image, by="image")
-    assert out["n"].tolist() == [1, 1]
-    assert out["mean"].tolist() == [0.5, 0.1]
-    assert out[["std", "ci_low", "ci_high"]].isna().all().all()
-
-
-def test_nan_values_are_left_out_per_column():
-    per_image = pd.DataFrame(
-        {"image": ["A", "B", "C"], "N": [2, 0, 4], "Ra": [0.5, np.nan, 0.1]}
-    )
-    out = values_across_images(_images("A", "B", "C"), per_image)
-    out = out.set_index("metric")
-    assert out.loc["N", "n"] == 3
-    assert out.loc["N", "mean"] == 2
-    assert out.loc["Ra", "n"] == 2
-    assert out.loc["Ra", "mean"] == pytest.approx(0.3, rel=RTOL)
-
-
-def test_repeated_images_raise():
-    # a particle table passed by mistake: one row per particle
-    _, particles, _ = _scene(RA_EXAMPLE)
-    with pytest.raises(TableError, match="one row per image"):
-        values_across_images(_images("A", "B"), particles[["image", "D"]])
-
-
-def test_missing_images_are_nan_with_a_warning():
-    per_image = pd.DataFrame({"image": ["A", "C"], "v": [1.0, 3.0]})
-    with pytest.warns(MissingImagesWarning, match=r"\['B'\].*0"):
-        out = values_across_images(_images("A", "B", "C"), per_image)
-    assert out["n"].iloc[0] == 2
-    assert out["mean"].iloc[0] == 2
-
-
-def test_unknown_image_in_per_image_raises():
-    per_image = pd.DataFrame({"image": ["A", "X"], "v": [1.0, 3.0]})
-    with pytest.raises(TableError, match=r"per_image: .*\['X'\]"):
-        values_across_images(_images("A"), per_image)
-
-
-def test_groups_come_from_the_images_table():
-    images = _images("A", "B", "C", "D", condition=["x", "y", "x", None])
-    per_image = pd.DataFrame(
-        {"image": ["A", "B", "C", "D"], "v": [1.0, 5.0, 3.0, 7.0]}
-    )
-    out = values_across_images(images, per_image, by="condition")
-    assert out["condition"].iloc[:2].tolist() == ["x", "y"]
-    assert pd.isna(out["condition"].iloc[2])
-    assert out["mean"].tolist() == [2, 5, 7]
-    assert out["n"].tolist() == [2, 1, 1]
-
-
-def test_images_table_columns_are_not_values():
-    # per_image may carry the image's own columns: they are not averaged
-    images = _images("A", "B", condition=["x", "x"])
-    per_image = pd.DataFrame(
-        {"image": ["A", "B"], "condition": ["x", "x"], "v": [1.0, 3.0]}
-    )
-    out = values_across_images(images, per_image, by="condition")
-    assert out["metric"].tolist() == ["v"]
-
-
-def test_by_column_named_like_an_output_column_raises():
-    images = _images("A", "B", mean=["x", "y"])
-    per_image = pd.DataFrame({"image": ["A", "B"], "v": [1.0, 3.0]})
-    with pytest.raises(TableError, match=r"by: .*'mean'"):
-        values_across_images(images, per_image, by="mean")
-
-
-def test_text_value_column_raises():
-    per_image = pd.DataFrame({"image": ["A"], "note": ["ok"]})
-    with pytest.raises(TableError, match="'note' must be numeric"):
-        values_across_images(_images("A"), per_image)
-
-
-def test_keys_tell_values_of_one_image_apart():
-    per_image = pd.DataFrame(
-        {
-            "image": ["A", "A", "B", "B"],
-            "size_class": [2, 1, 2, 1],
-            "fraction": [0.25, 0.75, 0.5, 0.5],
-        }
-    )
-    out = values_across_images(_images("A", "B"), per_image, keys="size_class")
-    # keys in the order they first appear; one row per key and metric
-    assert out["size_class"].tolist() == [2, 1]
-    assert out["metric"].tolist() == ["fraction", "fraction"]
-    assert out["mean"].tolist() == [0.375, 0.625]
-    assert out["n"].tolist() == [2, 2]
-
-
-def test_categorical_by_and_keys_give_only_used_values():
+def test_categorical_by_gives_only_used_groups():
     # pandas would warn (observed default) and add a row for the unused
-    # category "y" / "c" with n = 0
-    images = _images(
-        "A", "B", condition=pd.Categorical(["x", "x"], ["x", "y"])
-    )
-    per_image = pd.DataFrame(
-        {
-            "image": ["A", "B"],
-            "size_class": pd.Categorical(["a", "a"], ["a", "c"]),
-            "v": [1.0, 3.0],
-        }
-    )
-    scene_images, particles, agglomerates = _scene({"A": [1], "B": [2]})
-    scene_images["condition"] = images["condition"]
+    # category "y"
+    images, particles, agglomerates = _scene({"A": [1], "B": [2]})
+    images["condition"] = pd.Categorical(["x", "x"], ["x", "y"])
     with warnings.catch_warnings():
         warnings.simplefilter("error")
-        by_group = values_across_images(
-            images, per_image.drop(columns="size_class"), by="condition"
-        )
-        by_key = values_across_images(
-            images[["image"]], per_image, keys="size_class"
-        )
-        pooled = summary(scene_images, particles, agglomerates, by="condition")
+        pooled = summary(images, particles, agglomerates, by="condition")
     assert pooled["N_primary"].tolist() == [3]
-    assert by_group["condition"].tolist() == ["x"]
-    assert by_group["n"].tolist() == [2]
-    assert by_key["size_class"].tolist() == ["a"]
-    assert by_key["n"].tolist() == [2]
-
-
-def test_summary_across_images_uses_per_image_metrics():
-    images, particles, agglomerates = _scene({**RA_EXAMPLE, "blank": []})
-    out = summary_across_images(
-        images, particles, agglomerates, metrics=["counts", "ratios"]
-    )
-    assert out["metric"].tolist() == [
-        "N_primary",
-        "N_aerosol",
-        "N_pp1",
-        "N_ppA",
-        "N_aggl",
-        "N_merges",
-        "Ra",
-        "agglomerated_fraction",
-        "merge_ratio",
-        "n_ppA",
-        "n_ppP",
-    ]
-    out = out.set_index("metric")
-    # mean of the per-image ratios: (0.5 + 0.1) / 2; the blank image
-    # has Ra NaN and is left out, but counts its 0 particles
-    assert out.loc["Ra", "mean"] == pytest.approx(0.3, rel=RTOL)
-    assert out.loc["Ra", "n"] == 2
-    assert out.loc["N_primary", "n"] == 3
-    assert out.loc["N_primary", "mean"] == pytest.approx(22 / 3, rel=RTOL)
-
-
-def test_summary_across_images_by_group():
-    images, particles, agglomerates = _scene(RA_EXAMPLE)
-    images["condition"] = ["x", "y"]
-    out = summary_across_images(
-        images, particles, agglomerates, by="condition", metrics="ratios"
-    )
-    assert list(out.columns) == [
-        "condition",
-        "metric",
-        "mean",
-        "std",
-        "n",
-        "ci_low",
-        "ci_high",
-    ]
-    assert out["condition"].tolist() == ["x"] * 5 + ["y"] * 5
-    ra = out[out["metric"] == "Ra"]
-    assert ra["mean"].tolist() == [0.5, 0.1]
-
-
-def test_images_column_named_like_a_metric_keeps_the_metric():
-    # an images column "Ra" (e.g. roughness) is not the metric Ra
-    images, particles, agglomerates = _scene(RA_EXAMPLE)
-    images["Ra"] = ["smooth", "rough"]
-    out = summary_across_images(
-        images, particles, agglomerates, metrics="ratios"
-    )
-    assert "Ra" in out["metric"].tolist()
-
-
-def test_values_given_are_averaged_even_if_images_has_them():
-    images = _images("A", "B", v=["x", "y"])
-    per_image = pd.DataFrame({"image": ["A", "B"], "v": [1.0, 3.0]})
-    assert values_across_images(images, per_image)["metric"].empty
-    out = values_across_images(images, per_image, values="v")
-    assert out["mean"].tolist() == [2.0]
-
-
-def test_summary_across_images_warns_about_nothing():
-    with warnings.catch_warnings():
-        warnings.simplefilter("error")
-        summary_across_images(*_scene({**RA_EXAMPLE, "blank": []}))
 
 
 STRUCTURE = [
@@ -825,9 +584,6 @@ def test_structure_family():
     assert np.allclose(out[fractions].iloc[:2].sum(axis=1), 1)
     for column in STRUCTURE[:4]:
         assert out[column].dtype == np.int64
-    # per image, then over the images
-    across = summary_across_images(*_structure_scene(), metrics="structure")
-    assert across["metric"].tolist() == STRUCTURE
 
 
 def test_structure_fractions_nan_without_particles():
