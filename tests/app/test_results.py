@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import agglpy
 from agglpy import _yaml
 from agglpy.app import Collection
 from agglpy.app._results import Results
@@ -460,6 +461,36 @@ def test_structure_summary_needs_the_columns(res: Results) -> None:
     # metrics may be any iterable, read once
     once = res.summary(metrics=iter(["counts"]))
     pd.testing.assert_frame_equal(once, res.summary(metrics=["counts"]))
+    # a structure column by name: the same error, the given order
+    with pytest.raises(TableError, match=r"with_structure\(\)"):
+        res.summary(metrics=["N_primary", "core_fraction"])
+    out = res.with_structure().summary(metrics=["N_cores", "N_primary"])
+    assert list(out.columns) == ["n_images", "N_cores", "N_primary"]
+
+
+def test_metric_names(res: Results) -> None:
+    names = agglpy.metric_names()
+    assert list(names.columns) == ["name", "family", "unit", "meaning"]
+    full = res.with_structure().summary()
+    assert names.name.tolist() == list(full.columns.drop("n_images"))
+    assert names.index.equals(pd.RangeIndex(len(names)))
+    assert names.family.unique().tolist() == [
+        "counts",
+        "ratios",
+        "contacts",
+        "structure",
+        "per_area",
+        "particle_size",
+        "aerosol_size",
+        "member_count",
+    ]
+    unit = dict(zip(names.name, names.unit, strict=True))
+    assert (unit["particle_D50"], unit["N_aggl_per_area"]) == ("m", "m⁻²")
+    assert unit["coverage"] == unit["merge_ratio"] == ""
+    assert names.meaning.str.len().gt(0).all()
+    assert not names.meaning.str.contains(r"[$`\[\]]").any()
+    # pandas cuts a cell after 50 characters by default
+    assert names.meaning.str.len().le(50).all()
 
 
 def test_draw_by_segment_type(res: Results) -> None:
