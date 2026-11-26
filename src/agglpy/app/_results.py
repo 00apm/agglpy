@@ -32,6 +32,7 @@ from agglpy.app._sources import PathLike
 from agglpy.app._work import export_folder
 from agglpy.core import distributions
 from agglpy.core import metrics as _metrics
+from agglpy.core._images import names
 from agglpy.core.agglomerates import select_agglomerates
 from agglpy.core.properties import DIMENSIONS
 from agglpy.core.region import Bounds, region_bounds
@@ -185,8 +186,9 @@ class Results:
             ``"image"``, a column of `images` (a sheet column groups
             images directly) or a list of them; None gives one row.
         metrics : str or iterable of str, optional
-            Family names; None gives every family, ``"structure"``
-            only when the tables have its columns.
+            Family or column names, in the order given
+            (`agglpy.metric_names`); None gives every family,
+            ``"structure"`` only when the tables have its columns.
 
         Returns
         -------
@@ -197,11 +199,12 @@ class Results:
         Raises
         ------
         TableError
-            If ``"structure"`` is chosen on results without the
-            structure columns (`with_structure` adds them), or a `by`
-            column is missing or has the name of an output column.
+            If ``"structure"`` or one of its columns is chosen on
+            results without the structure columns (`with_structure`
+            adds them), or a `by` column is missing or has the name of
+            an output column.
         ParamsError
-            If a family name is unknown.
+            If a metric name is unknown.
 
         See Also
         --------
@@ -810,18 +813,19 @@ class Results:
     def _check_structure(
         self, metrics: str | Iterable[str] | None
     ) -> list[str] | None:
-        """Read the family names once.
+        """Read the metric names once.
 
-        Refuse the family ``"structure"`` on results without its
-        columns.
+        Refuse the family ``"structure"`` or one of its columns on
+        results without the structure columns.
         """
         if metrics is None:
             return None
-        chosen = [metrics] if isinstance(metrics, str) else list(metrics)
+        chosen = names(metrics, "metrics")
         present = set(PARTICLE_COLUMNS) <= set(self.particles.columns) and set(
             AGGLOMERATE_COLUMNS
         ) <= set(self.agglomerates.columns)
-        if "structure" in chosen and not present:
+        structure = set(_metrics._FAMILIES["structure"])
+        if structure & set(_metrics._expand(chosen)) and not present:
             raise TableError(
                 "metrics 'structure' needs the structure columns: call "
                 "res.with_structure() first"

@@ -518,6 +518,7 @@ def test_top_level_names() -> None:
     for name in ("Drawings", "Image", "Preview", "Results"):
         assert getattr(agglpy, name) is getattr(agglpy.app, name)
     assert agglpy.size_classes is agglpy.core.distributions.size_classes
+    assert agglpy.metric_names is agglpy.app.metric_names
     assert agglpy.__all__ == sorted(agglpy.__all__)
 
 

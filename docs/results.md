@@ -168,17 +168,23 @@ a middle one inside an outer one) is left out
 ## Metrics
 
 `res.summary(by=None)` gives one row per group of images: the `by` columns, `n_images` (images in the group,
-those without particles included), then the metric families in the order below. `by` is `None` (all images),
-`"image"` or columns of `res.images`; `metrics=` picks families (see `help(res.summary)`).
+those without particles included), then the metrics: without `metrics=`, every family in the order below. `by`
+is `None` (all images), `"image"` or columns of `res.images`.
+
+`metrics=` picks what is computed: family names, column names or both, in the order given; a family stands for
+its columns. Only the families behind the chosen columns are computed. `agglpy.metric_names()` lists every column
+with its family, unit and a short meaning; the tables below define them.
+
+```python
+res.summary(by="series", metrics=["counts", "ratios"])
+res.summary(by="series", metrics=["N_primary", "merge_ratio", "particle_D50"])
+agglpy.metric_names().query("family == 'ratios'")
+```
 
 `summary` **pools** the images of a group: counts are summed, ratios computed from the summed counts, sizes from
 the pooled rows. Ratios are never means of per-image ratios
 ([methodology §9](methodology.md#9-population-metrics-and-size-distributions)). Every metric uses the visible
 values only. A group without particles gives zero counts and NaN ratios and sizes.
-
-```python
-res.summary(by="series", metrics=["counts", "ratios"])
-```
 
 **counts** (no unit)
 
@@ -265,7 +271,7 @@ Model: low by the hidden particles, high where overlapping agglomerates are join
 | column | meaning | formula |
 |---|---|---|
 | `aerosol_member_count_std` | sample std of the member counts | the mean is `n_ppP` |
-| `aerosol_member_count_q10`, `_q50`, `_q90` | 10 / 50 / 90 % quantiles of the member counts | linear interpolation |
+| `aerosol_member_count_q10`, `aerosol_member_count_q50`, `aerosol_member_count_q90` | 10 / 50 / 90 % quantiles of the member counts | linear interpolation |
 
 Description, as `member_count`.
 

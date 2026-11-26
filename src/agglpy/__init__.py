@@ -8,7 +8,14 @@ with their params, detected or corrected particles and the analysis.
 
 from agglpy._legacy.img_ds import ImgDataSet
 from agglpy._legacy.manager import Manager
-from agglpy.app import Collection, Drawings, Image, Preview, Results
+from agglpy.app import (
+    Collection,
+    Drawings,
+    Image,
+    Preview,
+    Results,
+    metric_names,
+)
 from agglpy.core.distributions import size_classes
 from agglpy.logger import logger
 
@@ -21,5 +28,6 @@ __all__ = [
     "Preview",
     "Results",
     "logger",
+    "metric_names",
     "size_classes",
 ]

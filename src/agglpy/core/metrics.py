@@ -11,6 +11,7 @@ See *Results* (``docs/results.md``), section *Metrics*.
 
 from collections.abc import Iterable
 from types import MappingProxyType
+from typing import NamedTuple
 
 import numpy as np
 import pandas as pd
@@ -29,59 +30,169 @@ from agglpy.core._images import (
 from agglpy.core.structure import SEGMENT_TYPES
 from agglpy.errors import ParamsError, TableError
 
-# Built-in metrics by family, in the column order of ``summary``.
+
+class _Metric(NamedTuple):
+    """Family, length dimension (power of the unit) and meaning."""
+
+    family: str
+    dimension: int
+    meaning: str
+
+
+_FRACTION_MEANINGS = {
+    "core": "share of primaries in cores",
+    "small core": "share of primaries in small cores",
+    "link": "share of primaries in links",
+    "loop": "share of primaries in runs touching one core",
+    "dangling end": "share of primaries in dangling ends",
+    "no core": "share of primaries in agglomerates without loops",
+}
+
+# Every summary column, in the default column order of ``summary``.
+# Meanings stay within 50 characters: pandas shows no more by default.
+_METRICS: MappingProxyType[str, _Metric] = MappingProxyType(
+    {
+        "N_primary": _Metric("counts", 0, "number of primary particles"),
+        "N_aerosol": _Metric(
+            "counts", 0, "aerosol particles: agglomerates plus singles"
+        ),
+        "N_pp1": _Metric(
+            "counts", 0, "single primary particles, in no agglomerate"
+        ),
+        "N_ppA": _Metric(
+            "counts", 0, "primary particles in agglomerates of two or more"
+        ),
+        "N_aggl": _Metric(
+            "counts", 0, "agglomerates of two or more primary particles"
+        ),
+        "N_merges": _Metric(
+            "counts", 0, "merges of primaries: N_primary - N_aerosol"
+        ),
+        "Ra": _Metric(
+            "ratios", 0, "agglomeration ratio (Gotoh): N_aggl / N_primary"
+        ),
+        "agglomerated_fraction": _Metric(
+            "ratios", 0, "share in agglomerates: N_ppA / N_primary"
+        ),
+        "merge_ratio": _Metric(
+            "ratios", 0, "agglomeration degree: 0 all single, 1 all in one"
+        ),
+        "n_ppA": _Metric(
+            "ratios", 0, "mean primaries per agglomerate, singles left out"
+        ),
+        "n_ppP": _Metric(
+            "ratios", 0, "mean primaries per aerosol particle, singles in"
+        ),
+        "N_contacts": _Metric(
+            "contacts", 0, "overlapping or touching circle pairs; upper bound"
+        ),
+        "N_loops": _Metric(
+            "contacts", 0, "circuits (N_contacts - N_merges); upper bound"
+        ),
+        "coordination_mean": _Metric(
+            "contacts", 0, "mean coordination number; upper bound"
+        ),
+        "N_cores": _Metric(
+            "structure",
+            0,
+            "triangulated groups of min_core_members+ particles",
+        ),
+        "N_small_cores": _Metric(
+            "structure", 0, "agglomerates with loops but no core"
+        ),
+        "N_links": _Metric(
+            "structure", 0, "chain-like runs joining two or more cores"
+        ),
+        "N_dangling_ends": _Metric(
+            "structure", 0, "coreless groups hanging by a single contact"
+        ),
+        **{
+            f"{s.replace(' ', '_')}_fraction": _Metric(
+                "structure", 0, _FRACTION_MEANINGS[s]
+            )
+            for s in SEGMENT_TYPES
+        },
+        "coverage": _Metric(
+            "per_area", 0, "agglomerates' projected area / field-of-view area"
+        ),
+        "N_primary_per_area": _Metric(
+            "per_area", -2, "primary particles per field-of-view area"
+        ),
+        "N_aerosol_per_area": _Metric(
+            "per_area", -2, "aerosol particles per field-of-view area"
+        ),
+        "N_aggl_per_area": _Metric(
+            "per_area", -2, "agglomerates per field-of-view area"
+        ),
+        "particle_D_mean": _Metric(
+            "particle_size", 1, "number mean of the primary particle diameters"
+        ),
+        "particle_D_std": _Metric(
+            "particle_size", 1, "sample std of the primary particle diameters"
+        ),
+        "particle_D10": _Metric(
+            "particle_size",
+            1,
+            "10 % quantile of the primary particle diameters",
+        ),
+        "particle_D50": _Metric(
+            "particle_size", 1, "median primary particle diameter"
+        ),
+        "particle_D90": _Metric(
+            "particle_size",
+            1,
+            "90 % quantile of the primary particle diameters",
+        ),
+        "particle_SMD": _Metric(
+            "particle_size", 1, "Sauter mean diameter: sum D³ / sum D²"
+        ),
+        "aerosol_D_mean": _Metric(
+            "aerosol_size",
+            1,
+            "number mean of aerosol volume-equivalent diameters",
+        ),
+        "aerosol_D_std": _Metric(
+            "aerosol_size",
+            1,
+            "sample std of aerosol volume-equivalent diameters",
+        ),
+        "aerosol_D10": _Metric(
+            "aerosol_size",
+            1,
+            "10 % quantile, aerosol volume-equivalent diameters",
+        ),
+        "aerosol_D50": _Metric(
+            "aerosol_size", 1, "median aerosol volume-equivalent diameter"
+        ),
+        "aerosol_D90": _Metric(
+            "aerosol_size",
+            1,
+            "90 % quantile, aerosol volume-equivalent diameters",
+        ),
+        "aerosol_member_count_std": _Metric(
+            "member_count", 0, "sample std of primaries per aerosol particle"
+        ),
+        "aerosol_member_count_q10": _Metric(
+            "member_count",
+            0,
+            "10 % quantile of primaries per aerosol particle",
+        ),
+        "aerosol_member_count_q50": _Metric(
+            "member_count", 0, "median primaries per aerosol particle"
+        ),
+        "aerosol_member_count_q90": _Metric(
+            "member_count",
+            0,
+            "90 % quantile of primaries per aerosol particle",
+        ),
+    }
+)
+
+# The columns of each family, in the order above.
 _FAMILIES: MappingProxyType[str, tuple[str, ...]] = MappingProxyType(
     {
-        "counts": (
-            "N_primary",
-            "N_aerosol",
-            "N_pp1",
-            "N_ppA",
-            "N_aggl",
-            "N_merges",
-        ),
-        "ratios": (
-            "Ra",
-            "agglomerated_fraction",
-            "merge_ratio",
-            "n_ppA",
-            "n_ppP",
-        ),
-        "contacts": ("N_contacts", "N_loops", "coordination_mean"),
-        "structure": (
-            "N_cores",
-            "N_small_cores",
-            "N_links",
-            "N_dangling_ends",
-            *(f"{s.replace(' ', '_')}_fraction" for s in SEGMENT_TYPES),
-        ),
-        "per_area": (
-            "coverage",
-            "N_primary_per_area",
-            "N_aerosol_per_area",
-            "N_aggl_per_area",
-        ),
-        "particle_size": (
-            "particle_D_mean",
-            "particle_D_std",
-            "particle_D10",
-            "particle_D50",
-            "particle_D90",
-            "particle_SMD",
-        ),
-        "aerosol_size": (
-            "aerosol_D_mean",
-            "aerosol_D_std",
-            "aerosol_D10",
-            "aerosol_D50",
-            "aerosol_D90",
-        ),
-        "member_count": (
-            "aerosol_member_count_std",
-            "aerosol_member_count_q10",
-            "aerosol_member_count_q50",
-            "aerosol_member_count_q90",
-        ),
+        family: tuple(n for n, m in _METRICS.items() if m.family == family)
+        for family in dict.fromkeys(m.family for m in _METRICS.values())
     }
 )
 
@@ -134,11 +245,13 @@ def summary(
         or a list of them: one row per existing combination; an empty
         cell is its own group.
     metrics : str or list of str, optional
-        Families, in this column order: ``"counts"``, ``"ratios"``,
-        ``"contacts"``, ``"structure"``, ``"per_area"``,
-        ``"particle_size"``, ``"aerosol_size"``, ``"member_count"``.
-        None gives all, ``"structure"`` only when the tables have its
-        columns (`agglpy.core.structure.structure_properties`).
+        Family or column names, in the order given; a family stands for
+        its columns (``agglpy.metric_names()`` lists them). Families:
+        ``"counts"``, ``"ratios"``, ``"contacts"``, ``"structure"``,
+        ``"per_area"``, ``"particle_size"``, ``"aerosol_size"``,
+        ``"member_count"``. None gives all, in this order,
+        ``"structure"`` only when the tables have its columns
+        (`agglpy.core.structure.structure_properties`).
 
     Returns
     -------
@@ -156,7 +269,7 @@ def summary(
         `agglpy.core.agglomerates.select_agglomerates`), or if a `by`
         column has the name of an output column.
     ParamsError
-        If a family name is unknown, or `by` is not column names or
+        If a metric name is unknown, or `by` is not column names or
         repeats one.
 
     Notes
@@ -166,7 +279,8 @@ def summary(
     follow numpy (0 / 0 is NaN). See *Results* (``docs/results.md``),
     section *Metrics*.
     """
-    families = _families(metrics, particles, agglomerates)
+    wanted = _columns(metrics, particles, agglomerates)
+    families = {_METRICS[c].family for c in wanted}
     check_images(images, fov_area="per_area" in families)
     groups = group_images(images, by)
     require(particles, ["image"], "particles")
@@ -239,32 +353,46 @@ def summary(
         for q in _QUANTILES:
             name = f"aerosol_member_count_q{round(q * 100)}"
             columns[name] = described[q].to_numpy()
-    return with_labels(groups.labels, pd.DataFrame(columns))
+    shown = {"n_images": columns["n_images"]}
+    shown.update((c, columns[c]) for c in wanted)
+    return with_labels(groups.labels, pd.DataFrame(shown))
 
 
-def _families(
+def _columns(
     metrics: str | Iterable[str] | None,
     particles: pd.DataFrame,
     agglomerates: pd.DataFrame,
 ) -> list[str]:
-    if metrics is None:
-        # structure is opt-in: plain tables keep their summary.
-        present = all(
-            c in table.columns
-            for table, name in (
-                (particles, "particles"),
-                (agglomerates, "agglomerates"),
-            )
-            for c in _STRUCTURE_COLUMNS[name]
+    if metrics is not None:
+        return _expand(names(metrics, "metrics"))
+    # structure is opt-in: plain tables keep their summary.
+    present = all(
+        c in table.columns
+        for table, name in (
+            (particles, "particles"),
+            (agglomerates, "agglomerates"),
         )
-        return [f for f in _FAMILIES if f != "structure" or present]
-    chosen = names(metrics, "metrics")
-    unknown = [f for f in chosen if f not in _FAMILIES]
+        for c in _STRUCTURE_COLUMNS[name]
+    )
+    return [
+        c for c, m in _METRICS.items() if m.family != "structure" or present
+    ]
+
+
+def _expand(names: list[str]) -> list[str]:
+    """Return the columns the metric names stand for, repeats dropped.
+
+    A family stands for its columns, a column for itself; the order is
+    kept.
+    """
+    unknown = [n for n in names if n not in _FAMILIES and n not in _METRICS]
     if unknown:
         raise ParamsError(
-            f"metrics: unknown families {unknown}; known: {list(_FAMILIES)}"
+            f"metrics: unknown names {unknown}; agglpy.metric_names() lists "
+            f"the columns, the families are {list(_FAMILIES)}"
         )
-    return [f for f in _FAMILIES if f in chosen]
+    columns = (c for n in names for c in _FAMILIES.get(n, (n,)))
+    return list(dict.fromkeys(columns))
 
 
 def _ratios(
