@@ -23,7 +23,11 @@ from agglpy.errors import (
     ValuesNotCountedWarning,
 )
 
+from support.paths import DOCS_DIR
+
 EDGES = size_classes(1e-9, 1e-6, step=10**0.1, scale="log")
+# The page that explains every summary column; moves with the docs.
+METRICS_PAGE = DOCS_DIR / "results.md"
 
 
 @pytest.fixture
@@ -491,6 +495,12 @@ def test_metric_names(res: Results) -> None:
     assert not names.meaning.str.contains(r"[$`\[\]]").any()
     # pandas cuts a cell after 50 characters by default
     assert names.meaning.str.len().le(50).all()
+
+
+def test_every_metric_is_on_the_docs_page() -> None:
+    text = METRICS_PAGE.read_text(encoding="utf-8")
+    missing = [n for n in agglpy.metric_names().name if f"`{n}`" not in text]
+    assert not missing
 
 
 def test_draw_by_segment_type(res: Results) -> None:

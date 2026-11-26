@@ -158,8 +158,8 @@ over the agglomerate; NaN when there is nothing to take (no branch in a single p
 - `core_fraction`, `small_core_fraction`, `link_fraction`, `loop_fraction`, `dangling_end_fraction`,
   `no_core_fraction`: the number fraction of the primary particles in each segment type; they add up to 1.
 
-`summary()` without `metrics=` includes the family only on results from `with_structure()`; asking for it by
-name on other results raises an error that says to call `with_structure()` first.
+`summary()` without `metrics=` includes the family only on results from `with_structure()`; asking for it or
+one of its columns on other results raises an error that says to call `with_structure()` first.
 
 ## The particles of a chain or a branch
 
