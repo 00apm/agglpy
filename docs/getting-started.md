@@ -143,12 +143,11 @@ All tables are in SI units (m, m², m³). For other units add a column:
 
 ## 7. Summarize
 
-`summary` pools the images of each group (a sheet column such as `series`, or `"image"`);
-`summary_across_images` computes each metric per image, then the mean and confidence interval over the images.
+`summary` pools the images of each group (a sheet column such as `series`, or `"image"`). The mean over the
+images instead, each image weighing equally: [Results](results.md#across-images).
 
 ```python
 res.summary(by="series")
-res.summary_across_images(by="series")
 ```
 
 Size distributions take the class edges in m; `size_classes` builds the usual ones.
