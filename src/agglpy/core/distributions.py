@@ -56,9 +56,12 @@ def size_classes(
     count : int, optional
         The number of classes; give exactly one of `count` and `step`.
     step : float, optional
-        ``"linear"``: the class width, which must divide
-        ``end - start``; ``"log"``: the **factor** between consecutive
-        edges, > 1.
+        The spacing of the edges, starting from `start`; they must
+        reach `end` exactly. ``"linear"``: the class width, added
+        to each edge (``step=0.5`` from 0: 0, 0.5, 1, …).
+        ``"log"``: the **factor** each edge is multiplied by, > 1
+        (``step=2`` from 0.1: 0.1, 0.2, 0.4, 0.8, …; ``step=10**0.1``:
+        ten classes per decade).
     scale : {"linear", "log"}, default "linear"
         The spacing of the edges.
 
@@ -70,7 +73,8 @@ def size_classes(
     Raises
     ------
     ParamsError
-        If an argument is invalid or `step` does not divide the range.
+        If an argument is invalid or `step` does not divide the range
+        (the message names the ends and counts that fit).
 
     Notes
     -----
@@ -270,11 +274,51 @@ def _classes_per_step(
     # Count the classes first, then place the edges (np.arange would
     # add an edge beyond end through rounding).
     if n < 1 or abs(exact - n) > _EDGE_TOL * n:
-        raise ParamsError(
-            f"step {step!r} does not divide the range {low!r} … {high!r} "
-            f"({exact:.6g} classes)"
-        )
+        raise ParamsError(_step_misses_end(low, high, size, exact, scale))
     return n
+
+
+def _step_misses_end(
+    low: float, high: float, size: float, exact: float, scale: str
+) -> str:
+    """Explain that the edges miss `end`; offer calls that fit."""
+    log = scale == "log"
+
+    def edge(k: int) -> float:
+        return low * size**k if log else low + size * k
+
+    def call(end: float, spacing: str) -> str:
+        scale_arg = ', scale="log"' if log else ""
+        return f"size_classes({low:.12g}, {end:.12g}, {spacing}{scale_arg})"
+
+    above = math.ceil(exact)
+    shown = [f"{edge(k):.3g}" for k in range(above + 1)]
+    if len(shown) > 5:
+        shown = [*shown[:2], "…", *shown[-2:]]
+    spacing = (
+        f"by a factor of {size:.3g}" if log else f"in steps of {size:.3g}"
+    )
+    # The whole class counts on either side of `exact`, at least one.
+    counts = sorted({max(math.floor(exact), 1), above})
+    widths = [
+        (high / low) ** (1 / k) if log else (high - low) / k for k in counts
+    ]
+    by_count = [call(high, f"count={k}") for k in counts]
+    pad = max(map(len, by_count))
+    what = "factor" if log else "step"
+    lines = [
+        f"{call(high, f'step={size:.12g}')}: the edges from {low:.3g} "
+        f"{spacing} are {', '.join(shown)}; none of them is the end "
+        f"{high:.3g}. Change one of:",
+        "- the end:",
+        *(f"    {call(edge(k), f'step={size:.12g}')}" for k in counts),
+        f"- the count instead of the step (keeps {low:.3g} … {high:.3g}):",
+        *(
+            f"    {c:<{pad}}  # {what} {w:.3g}"
+            for c, w in zip(by_count, widths, strict=True)
+        ),
+    ]
+    return "\n".join(lines)
 
 
 def _edges(edges: ArrayLike) -> NDArray[np.float64]:

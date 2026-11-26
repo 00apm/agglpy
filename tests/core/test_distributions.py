@@ -6,6 +6,7 @@ run the core on tables written by hand, with hand-worked values.
 """
 
 import math
+import re
 import warnings
 
 import numpy as np
@@ -150,7 +151,38 @@ def test_size_classes_are_float_with_exact_ends():
 @pytest.mark.parametrize(
     ("args", "kwargs", "message"),
     [
-        ((0, 10), {"step": 3}, "does not divide"),
+        # the message shows the edges and the calls that fit
+        (
+            (0, 10),
+            {"step": 3},
+            "size_classes(0, 10, step=3): the edges from 0 in steps of 3 "
+            "are 0, 3, 6, 9, 12; none of them is the end 10. Change one of:\n"
+            "- the end:\n"
+            "    size_classes(0, 9, step=3)\n"
+            "    size_classes(0, 12, step=3)\n"
+            "- the count instead of the step (keeps 0 … 10):\n"
+            "    size_classes(0, 10, count=3)  # step 3.33\n"
+            "    size_classes(0, 10, count=4)  # step 2.5",
+        ),
+        (
+            (0.1, 1),
+            {"step": 2, "scale": "log"},
+            "by a factor of 2 are 0.1, 0.2, 0.4, 0.8, 1.6; none of them is "
+            "the end 1.",
+        ),
+        (
+            (1e-8, 1e-6),
+            {"step": 1.27, "scale": "log"},
+            "are 1e-08, 1.27e-08, …, 9.38e-07, 1.19e-06;",
+        ),
+        (
+            (0, 1),
+            {"step": 3},
+            "- the end:\n"
+            "    size_classes(0, 3, step=3)\n"
+            "- the count instead of the step (keeps 0 … 1):\n"
+            "    size_classes(0, 1, count=1)  # step 1",
+        ),
         ((0, 10), {}, "exactly one"),
         ((0, 10), {"count": 2, "step": 5}, "exactly one"),
         ((10, 0), {"count": 2}, "end must be > start"),
@@ -163,7 +195,7 @@ def test_size_classes_are_float_with_exact_ends():
     ],
 )
 def test_size_classes_reject_bad_arguments(args, kwargs, message):
-    with pytest.raises(ParamsError, match=message):
+    with pytest.raises(ParamsError, match=re.escape(message)):
         size_classes(*args, **kwargs)
 
 
