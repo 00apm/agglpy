@@ -88,7 +88,7 @@ def test_detection_params_are_the_recorded_ones(
     # agglpy.yml changed after the detection: the record still holds
     # what the stored circles came from
     particles_col.set_params(
-        "D7-017", hct={"ranges": [{"d_min": 14, "d_max": 44}]}
+        image="D7-017", hct={"ranges": [{"d_min": 14, "d_max": 44}]}
     )
     assert img.params != detected
     assert img.detection_params == detected
@@ -137,7 +137,7 @@ def test_pixel_size_in_metres(tmp_path: Path) -> None:
     assert col["B"].pixel_size == from_tag  # exactly as read
     assert col["C"].pixel_size is None
     # the image gone: the copy in the particle record
-    col.set_params(None, hct=HCT)
+    col.set_params(hct=HCT)
     with pytest.warns(NoParticlesWarning, match="in B"):
         col.detect(["B"], progress=False)
     zeiss.unlink()

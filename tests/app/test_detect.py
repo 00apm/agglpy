@@ -96,7 +96,7 @@ def test_force_redetects_up_to_date(particles_col: Collection) -> None:
 def test_params_changed_redetects(particles_col: Collection) -> None:
     particles_col.detect(progress=False)
     particles_col.set_params(
-        "D7-018", hct={"ranges": [{"d_min": 12, "d_max": 40}]}
+        image="D7-018", hct={"ranges": [{"d_min": 12, "d_max": 40}]}
     )
     rep = particles_col.detect(progress=False)
     assert rep["outcome"].tolist() == ["skipped", "detected", "skipped"]
@@ -370,7 +370,7 @@ def test_non_ascii_name_and_path(tmp_path: Path) -> None:
     folder = tmp_path / "próbki 2026"
     write_disc_image(folder / "D7-019 ł.tif", DISCS["D7-019"])
     col = Collection.create(tmp_path / "col", images=folder)
-    col.set_params(None, hct=HCT)
+    col.set_params(hct=HCT)
     rep = col.detect(progress=False)
     assert rep["image"].tolist() == ["D7-019 ł"]
     assert rep["outcome"].tolist() == ["detected"]
@@ -399,7 +399,7 @@ def test_duplicates_go_into_the_record_and_are_reemitted_once(
     particles_col: Collection,
 ) -> None:
     # two overlapping ranges find the same discs
-    particles_col.set_params(None, hct=TWO_RANGES)
+    particles_col.set_params(hct=TWO_RANGES)
     with pytest.warns(DuplicateParticlesWarning, match="in D7-017") as ws:
         rep = particles_col.detect(progress=False)
     dup = [w for w in ws if w.category is DuplicateParticlesWarning]
@@ -426,7 +426,7 @@ def _jpeg(path: Path, discs) -> Path:
 def test_jpeg_warns_lossy(tmp_path: Path) -> None:
     _jpeg(tmp_path / "images" / "D7-017.jpg", DISCS["D7-017"])
     col = Collection.create(tmp_path / "col", images=tmp_path / "images")
-    col.set_params(None, hct=HCT)
+    col.set_params(hct=HCT)
     with pytest.warns(LossyImageWarning, match="D7-017") as ws:
         rep = col.detect(progress=False)
     assert _is_here(next(w for w in ws if w.category is LossyImageWarning))
@@ -448,7 +448,7 @@ def test_jpeg_recognised_by_bytes_not_suffix(tmp_path: Path) -> None:
         folder / "D7-018.jpg", draw_discs(160, 200, DISCS["D7-018"])
     )
     col = Collection.create(tmp_path / "col", images=folder)
-    col.set_params(None, hct=HCT)
+    col.set_params(hct=HCT)
     with pytest.warns(LossyImageWarning, match="in D7-017") as ws:
         rep = col.detect(progress=False)
     lossy = [w for w in ws if w.category is LossyImageWarning]
@@ -460,7 +460,7 @@ def test_jpeg_recognised_by_bytes_not_suffix(tmp_path: Path) -> None:
 
 def test_incomplete_run_warns_with_counts(particles_col: Collection) -> None:
     image(particles_col, "D7-018").unlink()
-    particles_col.set_params("D7-019", hct={"ranges": []})
+    particles_col.set_params(image="D7-019", hct={"ranges": []})
     with pytest.warns(IncompleteRunWarning, match="1 skipped, 1 error") as ws:
         particles_col.detect(progress=False)
     (w,) = [w for w in ws if w.category is IncompleteRunWarning]
@@ -510,7 +510,7 @@ def test_progress_bar_shows_image_and_step(
 ) -> None:
     _Bar.made = []
     monkeypatch.setattr(detect_module, "tqdm", _Bar)
-    particles_col.set_params("D7-018", preprocess={"median_blur": 3})
+    particles_col.set_params(image="D7-018", preprocess={"median_blur": 3})
     particles_col.detect()
     (bar,) = _Bar.made
     assert bar.kwargs == {"total": 3, "disable": False, "unit": "image"}
@@ -577,7 +577,7 @@ def test_error_traceback_goes_to_the_log(
 def test_warnings_as_errors_raise_after_the_batch(
     particles_col: Collection,
 ) -> None:
-    particles_col.set_params(None, hct=TWO_RANGES)
+    particles_col.set_params(hct=TWO_RANGES)
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         with pytest.raises(

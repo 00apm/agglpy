@@ -622,21 +622,19 @@ class Collection:
 
     def set_params(
         self,
-        image: str | None,
         *,
         region: Mapping[str, object] | RegionParams | None = None,
         preprocess: Mapping[str, object] | PreprocessParams | None = None,
         hct: Mapping[str, object] | HCTParams | None = None,
+        image: str | None = None,
     ) -> None:
-        """Write params for `image` into ``agglpy.yml``.
+        """Write the defaults or one image's params into ``agglpy.yml``.
 
         An image's entry keeps only what differs from the defaults.
         Every image is checked before writing.
 
         Parameters
         ----------
-        image : str or None
-            The image name; None writes the defaults.
         region : mapping or RegionParams, optional
             The ``region`` section: a mapping is merged into what is
             there, a params object replaces the section; None leaves
@@ -645,6 +643,8 @@ class Collection:
             The ``preprocess`` section, as `region`.
         hct : mapping or HCTParams, optional
             The ``hct`` section, as `region`.
+        image : str, optional
+            The image whose entry is written; None writes the defaults.
 
         Raises
         ------

@@ -6,6 +6,7 @@ run the core on tables written by hand, with hand-worked values.
 """
 
 import math
+import re
 import warnings
 
 import numpy as np
@@ -14,7 +15,6 @@ import pytest
 
 from agglpy.core.distributions import (
     distribution,
-    distribution_across_images,
     size_classes,
 )
 from agglpy.errors import ParamsError, TableError, ValuesNotCountedWarning
@@ -151,7 +151,38 @@ def test_size_classes_are_float_with_exact_ends():
 @pytest.mark.parametrize(
     ("args", "kwargs", "message"),
     [
-        ((0, 10), {"step": 3}, "does not divide"),
+        # the message shows the edges and the calls that fit
+        (
+            (0, 10),
+            {"step": 3},
+            "size_classes(0, 10, step=3): the edges from 0 in steps of 3 "
+            "are 0, 3, 6, 9, 12; none of them is the end 10. Change one of:\n"
+            "- the end:\n"
+            "    size_classes(0, 9, step=3)\n"
+            "    size_classes(0, 12, step=3)\n"
+            "- the count instead of the step (keeps 0 … 10):\n"
+            "    size_classes(0, 10, count=3)  # step 3.33\n"
+            "    size_classes(0, 10, count=4)  # step 2.5",
+        ),
+        (
+            (0.1, 1),
+            {"step": 2, "scale": "log"},
+            "by a factor of 2 are 0.1, 0.2, 0.4, 0.8, 1.6; none of them is "
+            "the end 1.",
+        ),
+        (
+            (1e-8, 1e-6),
+            {"step": 1.27, "scale": "log"},
+            "are 1e-08, 1.27e-08, …, 9.38e-07, 1.19e-06;",
+        ),
+        (
+            (0, 1),
+            {"step": 3},
+            "- the end:\n"
+            "    size_classes(0, 3, step=3)\n"
+            "- the count instead of the step (keeps 0 … 1):\n"
+            "    size_classes(0, 1, count=1)  # step 1",
+        ),
         ((0, 10), {}, "exactly one"),
         ((0, 10), {"count": 2, "step": 5}, "exactly one"),
         ((10, 0), {"count": 2}, "end must be > start"),
@@ -164,7 +195,7 @@ def test_size_classes_are_float_with_exact_ends():
     ],
 )
 def test_size_classes_reject_bad_arguments(args, kwargs, message):
-    with pytest.raises(ParamsError, match=message):
+    with pytest.raises(ParamsError, match=re.escape(message)):
         size_classes(*args, **kwargs)
 
 
@@ -377,57 +408,3 @@ def test_bad_closed_raises():
 def test_text_column_raises():
     with pytest.raises(TableError, match="'v' must be numeric"):
         distribution(*_one_image(["big"]), "v", [0, 2])
-
-
-def test_distribution_across_images():
-    images = pd.DataFrame({"image": ["A", "B", "blank"]})
-    table = pd.DataFrame({"image": ["A", "A", "A", "B"], "v": [1, 1, 3, 3]})
-    out = distribution_across_images(images, table, "v", [0, 2, 4])
-    assert list(out.columns) == [
-        "left",
-        "mid",
-        "right",
-        "width",
-        "basis",
-        "metric",
-        "mean",
-        "std",
-        "n",
-        "ci_low",
-        "ci_high",
-    ]
-    assert out["metric"].unique().tolist() == ["fraction"]
-    # A: 2/3, 1/3; B: 0, 1; the blank image has no fraction (n = 2)
-    assert out["mean"].tolist() == pytest.approx([1 / 3, 2 / 3], rel=RTOL)
-    assert out["n"].tolist() == [2, 2]
-
-
-def test_distribution_across_images_images_column_named_fraction():
-    # an images column "fraction" must not hide the fractions
-    images = pd.DataFrame({"image": ["A"], "fraction": ["x"]})
-    table = pd.DataFrame({"image": ["A", "A"], "v": [1, 3]})
-    out = distribution_across_images(images, table, "v", [0, 2, 4])
-    assert out["mean"].tolist() == [0.5, 0.5]
-
-
-def test_distribution_across_images_by_column_named_basis_raises():
-    images = pd.DataFrame({"image": ["A"], "basis": ["SEM"]})
-    table = pd.DataFrame({"image": ["A"], "v": [1]})
-    with pytest.raises(TableError, match=r"by: .*'basis'"):
-        distribution_across_images(images, table, "v", [0, 2], by="basis")
-
-
-def test_distribution_across_images_by_group_and_basis():
-    images = pd.DataFrame({"image": ["A", "B"], "condition": ["x", "y"]})
-    table = pd.DataFrame(
-        {"image": ["A", "B"], "v": [1, 3], "volume": [1.0, 1.0]}
-    )
-    out = distribution_across_images(
-        images, table, "v", [0, 2, 4], by="condition", weights="volume"
-    )
-    assert out["condition"].tolist() == ["x"] * 4 + ["y"] * 4
-    assert (
-        out["basis"].tolist()
-        == ["number"] * 2 + ["volume"] * 2 + ["number"] * 2 + ["volume"] * 2
-    )
-    assert out["mean"].tolist() == [1, 0, 1, 0, 0, 1, 0, 1]

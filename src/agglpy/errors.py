@@ -151,10 +151,6 @@ class ValuesNotCountedWarning(UserWarning):
     """
 
 
-class MissingImagesWarning(UserWarning):
-    """Images of the images table have no per-image value."""
-
-
 class FileFormatError(AgglpyError, ValueError):
     """A file exists but its content can't be read.
 

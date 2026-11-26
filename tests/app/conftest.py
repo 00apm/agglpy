@@ -37,7 +37,7 @@ def images(tmp_path: Path) -> Path:
 def particles_col(tmp_path: Path, images: Path) -> Collection:
     """A collection of the three images with one HCT range set."""
     col = Collection.create(tmp_path / "col", images=images)
-    col.set_params(None, hct=HCT)
+    col.set_params(hct=HCT)
     return col
 
 
@@ -70,7 +70,7 @@ def analysis_col(tmp_path: Path) -> Collection:
     write_blank_image(folder / "D7-019.tif")
     write_disc_image(folder / "D7-020.tif", DISCS["D7-019"])
     col = Collection.create(tmp_path / "col", images=folder)
-    col.set_params(None, hct=HCT)
+    col.set_params(hct=HCT)
     sheet = col.read_sheet()
     sheet["pixel_size_nm"] = [2.5, None, 2.5, None]
     sheet["include"] = [True, True, True, False]
@@ -164,9 +164,9 @@ def tuning_col(tmp_path: Path) -> Collection:
     assert ok
     np.asarray(jpeg).tofile(folder / "T3.jpg")
     col = Collection.create(tmp_path / "col", images=folder)
-    col.set_params(None, **TUNING_PARAMS)
+    col.set_params(**TUNING_PARAMS)
     col.set_params(
-        "T2",
+        image="T2",
         hct={
             "ranges": [
                 {"d_min": 8, "d_max": 20, "accumulator_threshold": 14},

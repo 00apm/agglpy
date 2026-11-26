@@ -271,30 +271,41 @@ Description, as `member_count`.
 
 ## Across images
 
-`res.summary_across_images(by="series")` computes every metric per image, then for each group and metric the
-mean over the images, its sample std, the number of images with a value and a t-based confidence interval
-(95 % by default; see `help(res.summary_across_images)`). Each image weighs equally: this describes the typical
-image and how well it is known; `summary` describes the pooled population. A ratio pooled and a ratio averaged
-over images differ when the images differ in size.
-
-Long table, one row per group and metric:
-
-| column | meaning |
-|---|---|
-| the `by` columns | the group |
-| `metric` | the metric's name |
-| `mean`, `std` | mean and sample std over the images |
-| `n` | images with a value (NaN values left out, per metric) |
-| `ci_low`, `ci_high` | $\bar{x} \pm t_{(1+c)/2,\,n-1}\, s/\sqrt{n}$; NaN when `n` is 1 |
-
-`res.values_across_images(per_image, by=...)` does the same for your own values: a table with `image` and one
-row per image (more keys with `keys=`; see `help(res.values_across_images)`). An image without a row gets NaN,
-with a warning; when the value is a count, add those images with 0.
+`summary` pools the images of a group. To describe the typical image instead, each image weighing equally,
+compute the metrics per image and average them with pandas:
 
 ```python
-per_image = res.agglomerates.groupby("image", as_index=False).touches_edge.mean()
-res.values_across_images(per_image, by="series")
+per_image = res.summary(by=["series", "image"])
+per_image.groupby("series", dropna=False)[["Ra", "coverage"]].agg(["mean", "std", "count"])
 ```
+
+`count` is the number of images with a value: an image without particles has NaN ratios and sizes, left out of
+`mean` and `count`. `dropna=False` keeps the images without a `series` value as a group of their own (pandas
+leaves them out otherwise). A pooled ratio and a mean of per-image ratios differ when the images differ in size
+([Methodology](methodology.md), section 9).
+
+Own values: one value per image, joined to every image of the sheet, so an image without rows gets NaN (use 0
+where the value is a count):
+
+```python
+edge = res.agglomerates.groupby("image", as_index=False).touches_edge.mean()
+per_image = res.images[["image", "series"]].merge(edge, on="image", how="left")
+per_image.groupby("series", dropna=False).touches_edge.agg(["mean", "std", "count"])
+```
+
+Size distributions per image (section [Size distributions](#size-distributions)), then over the images, class
+by class:
+
+```python
+edges = agglpy.size_classes(10e-9, 640e-9, step=2, scale="log")
+per_image = res.distribution("particles", "D", edges, by=["series", "image"])
+number = per_image[per_image.basis == "number"]
+number.groupby(["series", "left", "mid", "right"], dropna=False).fraction.agg(["mean", "std", "count"])
+```
+
+These replace `summary_across_images`, `values_across_images` and `distribution_across_images` of the
+development versions before 0.5.0. A confidence interval from `mean`, `std` and `count` is left to the user:
+which one fits depends on how the images were sampled.
 
 ## Size distributions
 
@@ -324,10 +335,6 @@ Long table, one row per group, basis and class:
 Values outside the classes and NaN values are not counted (warned); fractions refer to the counted values. A
 value within $10^{-9}$ (relative) of an edge counts as on it. Every class appears in every group; a group
 without values has zero amounts and NaN fractions. Plotting: recipe `examples/plot_distribution.py`.
-
-`res.distribution_across_images(...)` gives each class's fraction per image, then mean ± CI over the images of
-each group: the class columns, `basis`, `metric` (`fraction`) and the columns of [Across images](#across-images).
-An image without counted values is left out of the means and of `n`.
 
 ## Subsets
 

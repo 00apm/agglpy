@@ -463,12 +463,12 @@ class Preview:
                 "this preview has no HCT ranges; keep() would turn "
                 f"detection off for {name}. Add ranges "
                 "(p.set_ranges(...)), or turn it off on purpose: "
-                f'col.set_params("{name}", hct={{"ranges": []}})'
+                f'col.set_params(image="{name}", hct={{"ranges": []}})'
             )
         collection = state.collection
         changes = _differences(collection.params(name), params)
         collection.set_params(
-            name,
+            image=name,
             region=params.region,
             preprocess=params.preprocess,
             hct=params.hct,

@@ -151,7 +151,7 @@ over the agglomerate; NaN when there is nothing to take (no branch in a single p
 
 ## Summary family `structure`
 
-`summary(metrics="structure")` (and `summary_across_images`) gives, per group of images:
+`summary(metrics="structure")` gives, per group of images:
 
 - `N_cores`, `N_links`, `N_dangling_ends`: the sums of the agglomerate counts; `N_small_cores`: the agglomerates
   with a small core;

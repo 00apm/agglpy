@@ -110,12 +110,12 @@ is not set: `detect()` skips the image. Image names YAML reads as numbers must b
 
 The classes are in `agglpy.params`; the method behind each step is in [Methodology](methodology.md), sections
 1–3. Write params by hand (comments are kept when agglpy writes the file), with `col.set_params(...)` (a mapping
-merges into what is there; `None` as the image sets the defaults) and `col.reset_params(...)`, or from a tuning
+merges into what is there; without `image=` it sets the defaults) and `col.reset_params(...)`, or from a tuning
 preview with `p.keep()`. `col.params(name)` and `col[name].params` give the merged params of one image.
 
 ```python
-col.set_params(None, hct={"ranges": [{"d_min": 8, "d_max": 30}]})
-col.set_params("D7-019", preprocess={"rolling_ball": None})
+col.set_params(hct={"ranges": [{"d_min": 8, "d_max": 30}]})
+col.set_params(image="D7-019", preprocess={"rolling_ball": None})
 ```
 
 Every image is checked before anything is written; a problem is a `ParamsError` naming its key path, e.g.
