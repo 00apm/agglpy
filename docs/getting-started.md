@@ -77,8 +77,8 @@ q.circles(compare=p)
 Store the result as the defaults for every image, then check another image with them:
 
 ```python
-col.set_params(None, region=p.params.region,
-               preprocess=p.params.preprocess, hct=p.params.hct)
+col.set_params(region=p.params.region, preprocess=p.params.preprocess,
+               hct=p.params.hct)
 col["B-02"].preview().circles()
 ```
 

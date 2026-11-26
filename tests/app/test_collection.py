@@ -231,7 +231,7 @@ def test_source_images_untouched(tmp_path: Path, raw: Path) -> None:
     before = state()
     col = Collection.create(tmp_path / "col", images=raw)
     col.add_images(raw, pattern="**/*")
-    col.set_params("D7-019", preprocess={"median_blur": 3})
+    col.set_params(image="D7-019", preprocess={"median_blur": 3})
     assert state() == before
 
 
@@ -302,7 +302,7 @@ def test_open_missing_files(tmp_path: Path, col: Collection) -> None:
 
 
 def test_every_call_rereads_files(col: Collection) -> None:
-    col.set_params("D7-019", preprocess={"median_blur": 3})
+    col.set_params(image="D7-019", preprocess={"median_blur": 3})
     assert col.params("D7-019").preprocess.median_blur == 3
     text = yml(col).read_text(encoding="utf-8")
     assert "median_blur: 3" in text
@@ -316,29 +316,31 @@ def test_every_call_rereads_files(col: Collection) -> None:
 def test_set_params_checks_before_writing(col: Collection) -> None:
     before = yml(col).read_bytes()
     with pytest.raises(ParamsError, match="D7-019"):
-        col.set_params("D7-019", hct={"ranges": [{"d_min": 40, "d_max": 30}]})
+        col.set_params(
+            image="D7-019", hct={"ranges": [{"d_min": 40, "d_max": 30}]}
+        )
     assert yml(col).read_bytes() == before
 
 
 def test_set_params_defaults_and_objects(col: Collection) -> None:
-    col.set_params(None, preprocess=PreprocessParams(median_blur=3))
+    col.set_params(preprocess=PreprocessParams(median_blur=3))
     assert col.params("D7-017").preprocess.median_blur == 3
 
 
 def test_set_params_unknown_image(col: Collection) -> None:
     unknown = r"no image 'D7-099' in images\.xlsx"
     with pytest.raises(ParamsError, match=unknown):
-        col.set_params("D7-099", region={"bottom_fraction": 0.1})
+        col.set_params(image="D7-099", region={"bottom_fraction": 0.1})
     with pytest.raises(ParamsError, match=unknown):
         col.params("D7-099")
 
 
 def test_reset_params(col: Collection) -> None:
-    col.set_params("D7-019", preprocess={"median_blur": 3})
+    col.set_params(image="D7-019", preprocess={"median_blur": 3})
     assert yml(col).read_text(encoding="utf-8") != template()
     col.reset_params("D7-019", "preprocess.median_blur")
     assert yml(col).read_text(encoding="utf-8") == template()
-    col.set_params("D7-019", preprocess={"median_blur": 3})
+    col.set_params(image="D7-019", preprocess={"median_blur": 3})
     col.reset_params("D7-019")
     assert yml(col).read_text(encoding="utf-8") == template()
 
@@ -371,7 +373,7 @@ def test_write_sheet_invalid_writes_nothing(col: Collection) -> None:
 
 
 def test_write_sheet_dropping_image_with_params(col: Collection) -> None:
-    col.set_params("D7-019", preprocess={"median_blur": 3})
+    col.set_params(image="D7-019", preprocess={"median_blur": 3})
     before = col.sheet_path.read_bytes()
     t = col.read_sheet()
     with pytest.raises(ParamsError, match=r"reset_params\('D7-019'\)"):
@@ -589,7 +591,7 @@ def test_removing_the_only_entry_keeps_yml_readable(
     if how == "reset":
         col.reset_params("D7-019")
     else:
-        col.set_params("D7-019", preprocess={"median_blur": None})
+        col.set_params(image="D7-019", preprocess={"median_blur": None})
     text = yml(col).read_text(encoding="utf-8")
     assert "# tuned by hand" in text
     assert Collection.open(col.folder).params("D7-019") == NEUTRAL

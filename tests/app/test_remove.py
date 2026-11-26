@@ -27,8 +27,8 @@ def test_remove_drops_row_entry_and_folder(
     analysis_col: Collection, tmp_path: Path
 ) -> None:
     col = analysis_col
-    col.set_params("D7-017", preprocess={"median_blur": 5})
-    col.set_params("D7-019", preprocess={"median_blur": 7})
+    col.set_params(image="D7-017", preprocess={"median_blur": 5})
+    col.set_params(image="D7-019", preprocess={"median_blur": 7})
     assert col.remove_images("D7-017") == ["D7-017"]
     assert col.read_sheet()["image"].tolist() == [
         "D7-018",

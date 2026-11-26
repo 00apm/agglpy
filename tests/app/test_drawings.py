@@ -234,7 +234,7 @@ def five(tmp_path: Path) -> Results:
     for name, discs in zip(NAMES, [*DISCS.values(), *DISCS.values()]):
         write_disc_image(folder / f"{name}.tif", discs)
     col = Collection.create(tmp_path / "col", images=folder)
-    col.set_params(None, hct=HCT)
+    col.set_params(hct=HCT)
     sheet = col.read_sheet()
     sheet["pixel_size_nm"] = 2.5
     col.write_sheet(sheet)
@@ -269,7 +269,7 @@ def test_repr_html_shows_four_then_more(five: Results, res: Results) -> None:
 @pytest.fixture
 def cut_res(analysis_col: Collection) -> Results:
     """Analysed with the bottom 10 % cut: 200 x 144 px regions."""
-    analysis_col.set_params(None, region={"bottom_fraction": 0.1})
+    analysis_col.set_params(region={"bottom_fraction": 0.1})
     with warnings.catch_warnings():
         # outdated detections, circles outside the region
         warnings.simplefilter("ignore")

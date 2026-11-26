@@ -202,7 +202,7 @@ def test_outside_region_warned_once_at_the_callers_line(
     analysis_col: Collection, tmp_path: Path
 ) -> None:
     # the region keeps rows 0-79: D7-017's disc at y 110.7 lies outside
-    analysis_col.set_params(None, region={"bottom_fraction": 0.5})
+    analysis_col.set_params(region={"bottom_fraction": 0.5})
     four = pd.DataFrame(
         {
             "id": [1, 2, 3, 4],
@@ -238,14 +238,14 @@ def test_outdated_detection_warns_first_and_still_returns(
     analysis_col: Collection,
 ) -> None:
     analysis_col.set_params(
-        "D7-017", hct={"ranges": [{"d_min": 10, "d_max": 40}]}
+        image="D7-017", hct={"ranges": [{"d_min": 10, "d_max": 40}]}
     )
     write_disc_image(
         analysis_col.folder.parent / "images" / "D7-019.tif", DISCS["D7-018"]
     )
     # a changed detection under a correction is not named
     analysis_col.set_params(
-        "D7-018", hct={"ranges": [{"d_min": 10, "d_max": 40}]}
+        image="D7-018", hct={"ranges": [{"d_min": 10, "d_max": 40}]}
     )
     with pytest.warns(UserWarning, match="outdated detection") as ws:
         res = analysis_col.analyze(progress=False)
@@ -263,7 +263,7 @@ def test_outdated_detection_warns_first_and_still_returns(
 
 
 def test_switched_off_detection_reason(analysis_col: Collection) -> None:
-    analysis_col.set_params("D7-017", hct={"ranges": []})
+    analysis_col.set_params(image="D7-017", hct={"ranges": []})
     with pytest.warns(
         OutdatedParticlesWarning, match="detection was switched off"
     ) as ws:

@@ -105,7 +105,7 @@ def test_after_detect_up_to_date(particles_col: Collection) -> None:
 def test_params_changed(particles_col: Collection) -> None:
     particles_col.detect(progress=False)
     particles_col.set_params(
-        "D7-018", hct={"ranges": [{"d_min": 12, "d_max": 40}]}
+        image="D7-018", hct={"ranges": [{"d_min": 12, "d_max": 40}]}
     )
     assert particles_col.status()["detection"].tolist() == [
         "up to date",
@@ -125,9 +125,7 @@ def test_image_changed_wins_over_params_changed(
 ) -> None:
     particles_col.detect(progress=False)
     write_disc_image(image(particles_col), OTHER_DISCS)
-    particles_col.set_params(
-        None, hct={"ranges": [{"d_min": 12, "d_max": 40}]}
-    )
+    particles_col.set_params(hct={"ranges": [{"d_min": 12, "d_max": 40}]})
     assert row(particles_col)["detection"] == "image changed"
 
 
@@ -178,7 +176,7 @@ def test_hct_emptied_after_detection_is_params_changed(
     particles_col: Collection,
 ) -> None:
     particles_col.detect(progress=False)
-    particles_col.set_params(None, hct={"ranges": []})
+    particles_col.set_params(hct={"ranges": []})
     table = particles_col.status()
     assert table["detection"].tolist() == ["params changed"] * 3
     assert table["particle_set"].tolist() == ["hct"] * 3
@@ -233,7 +231,7 @@ def test_missing_image(tmp_path: Path) -> None:
     (tmp_path / "images").mkdir()
     write_zeiss(tmp_path / "images" / "a.tif", 64, 48, raw=1e-9)
     col = Collection.create(tmp_path / "col", images=tmp_path / "images")
-    col.set_params(None, hct=HCT)
+    col.set_params(hct=HCT)
     with pytest.warns(NoParticlesWarning, match="in a"):
         col.detect(progress=False)
     (tmp_path / "images" / "a.tif").unlink()
@@ -290,7 +288,6 @@ def test_warnings_column_from_the_set_in_use(
     particles_col: Collection,
 ) -> None:
     particles_col.set_params(
-        None,
         hct={
             "ranges": [{"d_min": 12, "d_max": 44}, {"d_min": 20, "d_max": 40}]
         },

@@ -105,7 +105,7 @@ def test_preview_from_params_and_without_ranges(
     assert p2.image_name == "T2"
     assert len(p2.particles) == 4
     # T2's own empty list replaces the defaults' ranges
-    tuning_col.set_params("T2", hct={"ranges": []})
+    tuning_col.set_params(image="T2", hct={"ranges": []})
     p3 = tuning_col["T2"].preview(progress=False)
     assert p3.params.hct is None
     assert p3.particles.empty
@@ -493,7 +493,7 @@ def test_card_lines(tuning_col: Collection) -> None:
 def test_card_is_a_snapshot(tuning_col: Collection) -> None:
     p = tuning_col["T1"].preview(progress=False)
     text, page = repr(p), p._repr_html_()
-    tuning_col.set_params("T1", region={"bottom_fraction": 0.2})
+    tuning_col.set_params(image="T1", region={"bottom_fraction": 0.2})
     # the card compares with agglpy.yml as it was when p was made
     assert repr(p) == text and p._repr_html_() == page
     changed = repr(p.change_hct(range=2, d_max=40))
@@ -522,7 +522,7 @@ def test_keep_writes_only_this_image(
     t2 = tuning_col.params("T2")
     p = tuning_col["T1"].preview(progress=False)
     # agglpy.yml changed by hand after the preview was made
-    tuning_col.set_params("T1", region={"bottom_fraction": 0.2})
+    tuning_col.set_params(image="T1", region={"bottom_fraction": 0.2})
     q = p.change_hct(range=1, canny_threshold=150)
     with caplog.at_level(logging.INFO, logger="agglpy"):
         q.keep()
@@ -545,7 +545,8 @@ def test_keep_writes_only_this_image(
         ParamsError,
         match=r"this preview has no HCT ranges; keep\(\) would turn detection "
         r"off for T1\. Add ranges \(p\.set_ranges\(\.\.\.\)\), or turn it "
-        r'off on purpose: col\.set_params\("T1", hct=\{"ranges": \[\]\}\)',
+        r'off on purpose: col\.set_params\(image="T1", '
+        r'hct=\{"ranges": \[\]\}\)',
     ):
         q.remove_range(1).remove_range(1).keep()
     assert yml.read_text(encoding="utf-8") == text
@@ -569,7 +570,6 @@ def test_export_files_and_names(
         col = Collection.create(tmp_path / "named col", images=folder)
         params = tuning_col.params("T1")
         col.set_params(
-            None,
             region=params.region,
             preprocess=params.preprocess,
             hct=params.hct,
@@ -677,7 +677,7 @@ def test_preview_warnings_include_the_metadata(tmp_path: Path) -> None:
         folder / "Z.tif", 200, 160, raw=1e-8, image_pixel_size=(50, "nm")
     )
     col = Collection.create(tmp_path / "col", images=folder)
-    col.set_params(None, hct={"ranges": [{"d_min": 8, "d_max": 18}]})
+    col.set_params(hct={"ranges": [{"d_min": 8, "d_max": 18}]})
     p = col["Z"].preview(progress=False)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
