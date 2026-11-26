@@ -465,6 +465,8 @@ def test_structure_summary_needs_the_columns(res: Results) -> None:
     # metrics may be any iterable, read once
     once = res.summary(metrics=iter(["counts"]))
     pd.testing.assert_frame_equal(once, res.summary(metrics=["counts"]))
+    with pytest.raises(ParamsError, match="column names"):
+        res.summary(metrics=["counts", ["x"]])
     # a structure column by name: the same error, the given order
     with pytest.raises(TableError, match=r"with_structure\(\)"):
         res.summary(metrics=["N_primary", "core_fraction"])

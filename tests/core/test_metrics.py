@@ -386,6 +386,8 @@ def test_family_and_column_names_never_clash():
 def test_register_dimensions_match_scaling():
     # Every length scaled by 2: each column scales by 2 ** dimension.
     scene = _scene(RA_EXAMPLE, fov_area={"A": 100.0, "B": 100.0})
+    # unequal diameters: a std of 0 would scale by any power
+    scene[1]["D"] = np.linspace(1.0, 3.0, len(scene[1]))
     images, particles, agglomerates = (t.copy() for t in scene)
     images["fov_area"] *= 4
     particles["D"] *= 2
@@ -393,6 +395,10 @@ def test_register_dimensions_match_scaling():
     agglomerates["area"] *= 4
     base = summary(*scene).iloc[0]
     scaled = summary(images, particles, agglomerates).iloc[0]
+    # every column with a unit is checked, on a value that can show it
+    with_unit = {n for n, m in _METRICS.items() if m.dimension}
+    assert with_unit <= set(base.index)
+    assert all(np.isfinite(base[n]) and base[n] != 0 for n in with_unit)
     for name in base.index.drop("n_images"):
         factor = 2.0 ** _METRICS[name].dimension
         expected = base[name] * factor

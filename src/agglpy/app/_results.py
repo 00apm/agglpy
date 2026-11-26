@@ -32,6 +32,7 @@ from agglpy.app._sources import PathLike
 from agglpy.app._work import export_folder
 from agglpy.core import distributions
 from agglpy.core import metrics as _metrics
+from agglpy.core._images import names
 from agglpy.core.agglomerates import select_agglomerates
 from agglpy.core.properties import DIMENSIONS
 from agglpy.core.region import Bounds, region_bounds
@@ -819,7 +820,7 @@ class Results:
         """
         if metrics is None:
             return None
-        chosen = [metrics] if isinstance(metrics, str) else list(metrics)
+        chosen = names(metrics, "metrics")
         present = set(PARTICLE_COLUMNS) <= set(self.particles.columns) and set(
             AGGLOMERATE_COLUMNS
         ) <= set(self.agglomerates.columns)

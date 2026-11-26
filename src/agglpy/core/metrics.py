@@ -98,7 +98,7 @@ _METRICS: MappingProxyType[str, _Metric] = MappingProxyType(
             "triangulated groups of min_core_members+ particles",
         ),
         "N_small_cores": _Metric(
-            "structure", 0, "agglomerates: no core, loops < min_core_members"
+            "structure", 0, "agglomerates with loops but no core"
         ),
         "N_links": _Metric(
             "structure", 0, "chain-like runs joining two or more cores"
