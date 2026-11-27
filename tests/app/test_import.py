@@ -87,6 +87,8 @@ def test_import_writes_corrected_csv_and_record(
     rec = read_record(corrected_record(particles_col), CorrectionRecord)
     assert rec is not None
     assert rec.source.format == "imagej"
+    # outside the collection: absolute, it stays put when the
+    # collection moves
     assert rec.source.path == fiji_csv.resolve().as_posix()
     assert rec.source.sha256 == sha256(fiji_csv)
     assert rec.image.file == "../images/D7-017.tif"
@@ -104,6 +106,18 @@ def test_import_writes_corrected_csv_and_record(
     table = read_particles(corrected(particles_col))
     assert table.columns.tolist() == ["id", "x", "y", "r"]
     assert len(table) == 2
+
+
+def test_source_inside_the_collection_is_stored_relative(
+    particles_col: Collection, fiji_csv: Path
+) -> None:
+    inside = particles_col.folder / "raw" / "corrections" / "D7-017.csv"
+    inside.parent.mkdir(parents=True)
+    shutil.copy(fiji_csv, inside)
+    particles_col.import_particles("D7-017", inside)
+    rec = read_record(corrected_record(particles_col), CorrectionRecord)
+    assert rec is not None
+    assert rec.source.path == "raw/corrections/D7-017.csv"
 
 
 def test_import_without_detection_or_image(

@@ -207,6 +207,10 @@ reported in one `NonCircularParticlesWarning`. Ids are the numbers Fiji shows. A
 The record notes how many detected circles the correction kept (centres within 2 px, radii within 10 %). A
 correction that keeps fewer than half of them is shown as `correction_base: no detection`.
 
+The record stores the source path relative to the collection when the file lies inside it, absolute otherwise.
+Keep the Fiji files inside the collection (for example `raw/corrections/`): moving the whole folder then keeps every
+link.
+
 ## Status
 
 `col.status()` returns one row per sheet image, worked out from the files now. It writes nothing.

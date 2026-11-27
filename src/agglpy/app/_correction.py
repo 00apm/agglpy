@@ -24,7 +24,7 @@ from agglpy.app._records import (
 )
 from agglpy.app._report import class_names, report, warning_text
 from agglpy.app._sheet import Entry
-from agglpy.app._sources import resolve_stored
+from agglpy.app._sources import resolve_stored, stored_path
 from agglpy.app._work import (
     CORRECTED_CSV,
     CORRECTED_RECORD,
@@ -87,6 +87,19 @@ def based_on_detection(base: BaseInfo | None) -> bool:
     )
 
 
+def _stored_source(path: Path, folder: Path) -> str:
+    """Give the source path as the record stores it, with ``/``.
+
+    Relative to the collection when inside it, so the link survives
+    moving the collection; absolute outside it, where the source stays
+    put when the collection moves.
+    """
+    source, collection = path.resolve(), folder.resolve()
+    if source.is_relative_to(collection):
+        return stored_path(source, collection)
+    return source.as_posix()
+
+
 def run_import(
     folder: Path, entry: Entry, path: Path, *, format: str, force: bool
 ) -> tuple[pd.DataFrame, list[warnings.WarningMessage]]:
@@ -110,9 +123,9 @@ def run_import(
         warnings.simplefilter("always")
         resolved = particle_format(path) if format == "auto" else format
         table = read_particles(path, format=format)
-        # absolute and with "/": the notebook's working folder and the
-        # OS mean nothing to whoever reads the record later
-        source = SourceInfo(path.resolve().as_posix(), resolved, sha256(path))
+        source = SourceInfo(
+            _stored_source(path, folder), resolved, sha256(path)
+        )
         read_end = len(caught)
         work = image_folder(folder, name)
         outcome, message = "imported", ""
