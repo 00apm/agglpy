@@ -206,7 +206,10 @@ reported in one `NonCircularParticlesWarning`. Ids are the numbers Fiji shows. A
 `force=True`. See `help(col.import_particles)`.
 
 The record notes how many detected circles the correction kept (centres within 2 px, radii within 10 %). A
-correction that keeps fewer than half of them is shown as `correction_base: no detection`.
+correction that keeps fewer than half of them is shown as `correction_base: no detection`. When it keeps fewer
+than half, or has circles lying entirely outside the image, the import warns with `CorrectionMismatchWarning`
+("check that this is the correction of D7-017: ..."): a file of another image, or a wrong coordinate offset. The
+warning is kept in the record, so `status()` lists it under `particle_set_warnings`.
 
 The record stores the source path relative to the collection when the file lies inside it, absolute otherwise.
 Keep the Fiji files inside the collection (for example `raw/corrections/`): moving the whole folder then keeps every

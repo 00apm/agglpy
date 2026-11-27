@@ -386,7 +386,7 @@ def test_record_without_csv_is_ignored(particles_col: Collection) -> None:
 
 
 @NOT_DONE
-@pytest.mark.filterwarnings("ignore:correction keeps only")
+@pytest.mark.filterwarnings("ignore::agglpy.errors.CorrectionMismatchWarning")
 def test_status_writes_nothing(
     particles_col: Collection, fiji_csv: Path
 ) -> None:

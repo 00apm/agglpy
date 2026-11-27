@@ -4,6 +4,7 @@ import pytest
 
 from agglpy.errors import (
     AgglpyError,
+    CorrectionMismatchWarning,
     DuplicateParticlesWarning,
     FileFormatError,
     ImageError,
@@ -78,6 +79,7 @@ def test_particle_table_error_is_a_table_error() -> None:
         IncompleteRunWarning,
         LeftoverFoldersWarning,
         OutdatedParticlesWarning,
+        CorrectionMismatchWarning,
     ],
 )
 def test_warnings_are_user_warnings(warning: type[Warning]) -> None:

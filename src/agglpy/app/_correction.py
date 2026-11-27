@@ -12,6 +12,7 @@ from agglpy.app._records import (
     BaseInfo,
     CorrectionRecord,
     DetectionRecord,
+    ImageInfo,
     ParticlesInfo,
     SourceInfo,
     csv_sha256,
@@ -33,8 +34,10 @@ from agglpy.app._work import (
     image_folder,
     inspect,
 )
-from agglpy.errors import OutputExistsError
+from agglpy.core.region import outside_region, region_bounds
+from agglpy.errors import CorrectionMismatchWarning, OutputExistsError
 from agglpy.io import particle_format, read_particles, write_particles
+from agglpy.params import RegionParams
 from agglpy.tables import _DUPLICATE_R_REL_TOL, _DUPLICATE_XY_TOL
 
 __all__ = ["based_on_detection", "count_kept", "run_import"]
@@ -148,20 +151,20 @@ def run_import(
         base = _base(work, table)
         # warnings about the files already there belong to their records
         others_end = len(caught)
-        if base is not None and not based_on_detection(base):
-            warnings.warn(
-                f"correction keeps only {base.kept} of "
-                f"{base.detection_count} detected circles; status() "
-                "shows correction_base: no detection",
-                UserWarning,
-                stacklevel=2,
-            )
         image_path = resolve_stored(entry.file, folder)
         image = (
             image_info(entry.file, image_path)
             if image_path.is_file()
             else missing_image(entry.file)
         )
+        signs = _mismatch_signs(table, base, image)
+        if signs:
+            warnings.warn(
+                f"check that this is the correction of {name}: "
+                + "; ".join(signs),
+                CorrectionMismatchWarning,
+                stacklevel=2,
+            )
         own = caught[:read_end] + caught[others_end:]
         texts = tuple(warning_text(w) for w in own)
         work.mkdir(parents=True, exist_ok=True)
@@ -193,6 +196,29 @@ def run_import(
         "warnings": class_names(texts),
     }
     return report([row]), list(caught)
+
+
+def _mismatch_signs(
+    corrected: pd.DataFrame, base: BaseInfo | None, image: ImageInfo
+) -> list[str]:
+    """Return the signs that the file is not the image's correction.
+
+    No outside check when the image size is unknown.
+    """
+    signs = []
+    if base is not None and not based_on_detection(base):
+        signs.append(
+            f"it keeps only {base.kept} of {base.detection_count} detected "
+            "circles (status() shows correction_base: no detection)"
+        )
+    if image.width is not None and image.height is not None:
+        bounds = region_bounds(RegionParams(), image.width, image.height)
+        outside = int(outside_region(corrected, bounds).sum())
+        if outside == 1:
+            signs.append("1 circle lies entirely outside the image")
+        elif outside:
+            signs.append(f"{outside} circles lie entirely outside the image")
+    return signs
 
 
 def _base(work: Path, corrected: pd.DataFrame) -> BaseInfo | None:

@@ -808,10 +808,11 @@ class Collection:
 
         Warns
         -----
-        UserWarning
-            If the correction keeps less than half of the detected
-            circles: ``status()`` then shows ``correction_base: no
-            detection``.
+        CorrectionMismatchWarning
+            If the file may not be this image's correction: it keeps
+            less than half of the detected circles (``status()`` then
+            shows ``correction_base: no detection``), or circles lie
+            entirely outside the image.
         NonCircularParticlesWarning
             If ImageJ shapes were read as circles or dropped.
         DuplicateParticlesWarning

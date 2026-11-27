@@ -239,3 +239,11 @@ class OutdatedParticlesWarning(UserWarning):
     A detection made with other params or another image file, or a
     correction whose source file changed since it was imported.
     """
+
+
+class CorrectionMismatchWarning(UserWarning):
+    """An imported correction may not belong to its image.
+
+    It keeps fewer than half of the detected circles, or has circles
+    lying entirely outside the image.
+    """
