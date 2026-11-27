@@ -3,79 +3,8 @@
 The errors agglpy raises on purpose subclass `AgglpyError`, most also a
 built-in exception (``ValueError``, ``FileExistsError`` ...), so a
 handler for the built-in one catches them too; the warnings subclass
-``UserWarning``. The classes before `AgglpyError` serve the legacy API.
+``UserWarning``.
 """
-
-from typing import List
-
-
-class MultipleFilesFoundError(Exception):
-    """Several files are found where one with the name is expected.
-
-    Parameters
-    ----------
-    matches : list of str
-        The files found.
-    filename : str, default ""
-        The name searched for; ``""`` leaves it out of the message.
-    """
-
-    def __init__(
-        self,
-        matches: List[str],
-        filename: str = "",
-    ) -> None:
-        self.filename = filename
-        self.matches = matches
-        if filename == "":
-            super().__init__(f"Multiple files found: {matches}")
-        else:
-            super().__init__(f"Multiple files found for {filename}: {matches}")
-
-
-class SettingsStructureError(Exception):
-    """A legacy settings dict does not match the settings schema."""
-
-    pass
-
-
-class DirectoryStructureError(Exception):
-    """A legacy working directory does not have the required layout."""
-
-    pass
-
-
-class ParticleCsvStructureError(Exception):
-    """A primary particle CSV file has a structure not recognised."""
-
-    pass
-
-
-class ImgDataSetBufferError(Exception):
-    """The primary particle source buffer is not configured properly."""
-
-    pass
-
-
-class ImgDataSetStructureError(Exception):
-    """The structure of an ``ImgDataSet`` object is not correct."""
-
-    pass
-
-
-class ImgDataSetStateError(Exception):
-    """An ``ImgDataSet`` is not in the state an operation needs."""
-
-    pass
-
-
-class AgglomerateStructureError(Exception):
-    """The structure of an ``Agglomerate`` object is not correct."""
-
-    pass
-
-
-# --- New code; the legacy exceptions above go with the legacy API. ---
 
 
 class AgglpyError(Exception):
