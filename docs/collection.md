@@ -244,8 +244,9 @@ link.
 |---|---|---|
 | *(empty)* | No correction | — |
 | `up to date` | `particles_corrected.csv` matches its record, and the source file the one imported | Nothing |
-| `source changed` | The source file changed since the import; the imported copy is used | `col.import_particles()` again; `analyze()` warns with `OutdatedParticlesWarning` until then |
+| `source changed` | The source file changed since the import (other line endings alone do not count); the imported copy is used | `col.import_particles()` again; `analyze()` warns with `OutdatedParticlesWarning` until then |
 | `source missing` | The source file is not at the path in the record (moved or deleted); the imported copy is used | Nothing, or move it back |
+| `source unreadable` | The source file is there but does not open (e.g. locked by another program); the imported copy is used | Close it, then check again |
 | `edited outside agglpy` | `particles_corrected.csv` differs from its record | Import the corrected file again |
 | `no record` | The record is missing or does not read | Import again |
 | `file unreadable` | `particles_corrected.csv` does not read | Import again, or delete it |

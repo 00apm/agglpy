@@ -19,7 +19,6 @@ from agglpy.app._records import (
     image_info,
     missing_image,
     now,
-    sha256,
     versions,
     write_record,
 )
@@ -127,7 +126,7 @@ def run_import(
         resolved = particle_format(path) if format == "auto" else format
         table = read_particles(path, format=format)
         source = SourceInfo(
-            _stored_source(path, folder), resolved, sha256(path)
+            _stored_source(path, folder), resolved, csv_sha256(path)
         )
         read_end = len(caught)
         work = image_folder(folder, name)

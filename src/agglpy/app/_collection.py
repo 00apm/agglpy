@@ -839,7 +839,8 @@ class Collection:
         """Report where each image's particles come from.
 
         Writes nothing. Images are hashed again only when their size or
-        time differs from the record; particle files always.
+        time differs from the record; particle files and the source
+        files of corrections always.
 
         Returns
         -------

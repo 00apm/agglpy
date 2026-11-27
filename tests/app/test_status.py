@@ -1,5 +1,6 @@
 """Collection.status: where each image's particles come from."""
 
+import importlib
 import os
 import shutil
 import warnings
@@ -236,9 +237,17 @@ def test_correction_source_changed_or_missing(
     particles_col: Collection, fiji_csv: Path
 ) -> None:
     particles_col.import_particles("D7-017", fiji_csv)
-    fiji_csv.write_text(
-        fiji_csv.read_text(encoding="utf-8") + "\n", encoding="utf-8"
+    # other line endings (a Git checkout on another OS): the same file
+    raw = fiji_csv.read_bytes()
+    flipped = (
+        raw.replace(b"\r\n", b"\n")
+        if b"\r\n" in raw
+        else raw.replace(b"\n", b"\r\n")
     )
+    assert flipped != raw
+    fiji_csv.write_bytes(flipped)
+    assert row(particles_col)["correction_state"] == "up to date"
+    fiji_csv.write_bytes(raw + b"9\n")
     r = row(particles_col)
     assert r["correction_state"] == "source changed"
     # the imported copy stays in use
@@ -246,6 +255,27 @@ def test_correction_source_changed_or_missing(
     assert r["particle_count"] == 2
     fiji_csv.unlink()
     assert row(particles_col)["correction_state"] == "source missing"
+
+
+def test_correction_source_that_does_not_open(
+    particles_col: Collection,
+    fiji_csv: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    particles_col.import_particles("D7-017", fiji_csv)
+    status_module = importlib.import_module("agglpy.app._status")
+    real = status_module.csv_sha256
+
+    def locked(path: Path) -> str:
+        # Excel holds an open CSV with an exclusive lock on Windows
+        if path == fiji_csv.resolve():
+            raise PermissionError(13, "Permission denied", str(path))
+        return real(path)
+
+    monkeypatch.setattr(status_module, "csv_sha256", locked)
+    r = row(particles_col)
+    assert r["correction_state"] == "source unreadable"
+    assert r["particle_set"] == "corrected"
 
 
 def test_csv_state_wins_over_source_state(
@@ -325,7 +355,7 @@ def test_pixel_size_precedence(tmp_path: Path) -> None:
     assert table["pixel_size_source"].tolist() == ["images.csv", "none"]
 
 
-def test_outside_image_counts_circles_beyond_the_image(
+def test_particles_outside_image_counts_circles_beyond_the_image(
     particles_col: Collection,
 ) -> None:
     particles_col.detect(progress=False)

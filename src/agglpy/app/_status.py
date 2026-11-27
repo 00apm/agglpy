@@ -19,10 +19,10 @@ from agglpy.app._correction import based_on_detection
 from agglpy.app._records import (
     CorrectionRecord,
     DetectionRecord,
+    csv_sha256,
     nanometres,
     read_record,
     same_image,
-    sha256,
 )
 from agglpy.app._report import class_names
 from agglpy.app._sheet import Entry, Sheet
@@ -94,6 +94,7 @@ CorrectionState = Literal[
     "up to date",
     "source changed",
     "source missing",
+    "source unreadable",
     "edited outside agglpy",
     "no record",
     "file unreadable",
@@ -395,7 +396,12 @@ def _correction_state(
     source = resolve_stored(corr.record.source.path, folder)
     if not source.is_file():
         return "source missing"
-    if sha256(source) != corr.record.source.sha256:
+    try:
+        digest = csv_sha256(source)
+    except OSError:
+        # e.g. held open with a lock by another program
+        return "source unreadable"
+    if digest != corr.record.source.sha256:
         return "source changed"
     return "up to date"
 

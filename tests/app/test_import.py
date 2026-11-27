@@ -13,6 +13,7 @@ from agglpy.app._correction import count_kept
 from agglpy.app._records import (
     CorrectionRecord,
     DetectionRecord,
+    csv_sha256,
     read_record,
     sha256,
 )
@@ -91,7 +92,7 @@ def test_import_writes_corrected_csv_and_record(
     # outside the collection: absolute, it stays put when the
     # collection moves
     assert rec.source.path == fiji_csv.resolve().as_posix()
-    assert rec.source.sha256 == sha256(fiji_csv)
+    assert rec.source.sha256 == csv_sha256(fiji_csv)
     assert rec.image.file == "../images/D7-017.tif"
     assert rec.particles.sha256 == sha256(corrected(particles_col))
     hct = read_record(
