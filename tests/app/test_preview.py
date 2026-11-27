@@ -538,7 +538,7 @@ def test_keep_writes_only_this_image(
         "ranges[1].canny_threshold 200 → 150)"
     ) in caplog.messages
     status = tuning_col.status().set_index("image")
-    assert status.loc["T1", "detection"] == "params changed"
+    assert status.loc["T1", "detection_state"] == "params changed"
     # no ranges: refused, the file untouched
     text = yml.read_text(encoding="utf-8")
     with pytest.raises(

@@ -120,7 +120,7 @@ def test_hct_not_set_is_skipped(tmp_path: Path, images: Path) -> None:
     assert rep["outcome"].tolist() == ["skipped"] * 3
     assert (
         rep["message"].tolist()
-        == ["detection not set: hct.ranges is empty (set_params)"] * 3
+        == ["params not set: hct.ranges is empty (set_params)"] * 3
     )
     assert list((col.folder / "agglpy").iterdir()) == []
 
@@ -179,7 +179,7 @@ def _semicolon_csv(col: Collection) -> None:
 @pytest.mark.parametrize(
     ("damage", "word", "past"),
     [
-        (_edit_csv, "was edited by hand", "was edited by hand"),
+        (_edit_csv, "was edited outside agglpy", "was edited outside agglpy"),
         (_delete_record, "has no record", "had no record"),
         (_semicolon_csv, "does not read", "did not read"),
     ],
@@ -296,7 +296,7 @@ def test_interrupted_write_shows_as_edited_then_force_redetects(
     rep = particles_col.detect(progress=False)
     assert rep["outcome"][0] == "kept"
     assert rep["message"][0] == (
-        "particles_hct.csv was edited by hand; force=True replaces it"
+        "particles_hct.csv was edited outside agglpy; force=True replaces it"
     )
     rep = particles_col.detect(force=True, progress=False)
     assert rep["outcome"][0] == "replaced"
@@ -600,4 +600,7 @@ def test_csv_with_crlf_line_endings_still_matches(
         path.write_bytes(path.read_bytes().replace(b"\n", b"\r\n"))
     rep = particles_col.detect(progress=False)
     assert rep["message"].tolist() == ["up to date"] * 3
-    assert particles_col.status()["detection"].tolist() == ["up to date"] * 3
+    assert (
+        particles_col.status()["detection_state"].tolist()
+        == ["up to date"] * 3
+    )

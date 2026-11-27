@@ -843,11 +843,13 @@ class Collection:
         -------
         DataFrame
             One row per sheet image, in sheet order (index 0 … n-1):
-            ``image``, ``include``, ``file``, ``pixel_size_nm``,
-            ``pixel_size_source``, ``particle_set``,
-            ``particle_count``, ``outside_image`` (circles entirely
-            outside the image), ``detection``, ``correction``,
-            ``kept`` and ``warnings`` (of the set in use).
+            ``image``, ``include``, ``image_file_state``,
+            ``pixel_size_nm``, ``pixel_size_source``,
+            ``particle_set``, ``particle_count``,
+            ``particles_outside_image`` (circles entirely outside
+            the image), ``detection_state``, ``correction``,
+            ``kept`` and ``particle_set_warnings`` (of the set in
+            use).
 
         Raises
         ------
@@ -866,8 +868,8 @@ class Collection:
 
         Notes
         -----
-        The values of ``file``, ``pixel_size_source``,
-        ``particle_set``, ``detection`` and ``correction``: see
+        The values of ``image_file_state``, ``pixel_size_source``,
+        ``particle_set``, ``detection_state`` and ``correction``: see
         *Collection* (``docs/collection.md``), section *Status*.
         """
         sheet, config = self._read(check=True)

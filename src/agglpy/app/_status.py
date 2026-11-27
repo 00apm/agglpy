@@ -43,7 +43,9 @@ from agglpy.params import RegionParams
 
 __all__ = [
     "STATUS_COLUMNS",
+    "DetectionState",
     "ImageFacts",
+    "ImageFileState",
     "image_facts",
     "pixel_size",
     "table",
@@ -52,23 +54,37 @@ __all__ = [
 STATUS_COLUMNS = (
     "image",
     "include",
-    "file",
+    "image_file_state",
     "pixel_size_nm",
     "pixel_size_source",
     "particle_set",
     "particle_count",
-    "outside_image",
-    "detection",
+    "particles_outside_image",
+    "detection_state",
     "correction",
     "kept",
-    "warnings",
+    "particle_set_warnings",
 )
 _DTYPES = {
     "include": "bool",
     "pixel_size_nm": "Float64",
     "particle_count": "Int64",
-    "outside_image": "Int64",
+    "particles_outside_image": "Int64",
 }
+
+# The labels of the status columns, listed once so that mypy checks
+# every comparison with them
+ImageFileState = Literal["ok", "missing", "unreadable"]
+DetectionState = Literal[
+    "params not set",
+    "not detected",
+    "up to date",
+    "params changed",
+    "image changed",
+    "edited outside agglpy",
+    "no record",
+    "file unreadable",
+]
 
 
 @dataclass(frozen=True)
@@ -84,10 +100,11 @@ class ImageFacts:
         The sheet row.
     path : Path
         The image file, resolved.
-    file : {"ok", "missing", "unreadable"}
+    image_file_state : ImageFileState
         ``ok``, ``missing`` or ``unreadable``.
     meta : ImageMetadata or None
-        The image metadata; None unless ``file`` is ``ok``.
+        The image metadata; None unless ``image_file_state`` is
+        ``ok``.
     meta_warnings : tuple of WarningMessage
         The metadata reader's warnings (e.g. ``PixelSizeWarning``),
         caught.
@@ -104,7 +121,7 @@ class ImageFacts:
     size : tuple or None
         ``(width, height)`` in px from the image or a record;
         None when neither gives it.
-    detection : str
+    detection_state : DetectionState
         The ``status()`` label of the detection.
     correction : str
         The ``status()`` label of the correction.
@@ -112,7 +129,7 @@ class ImageFacts:
 
     entry: Entry
     path: Path
-    file: Literal["ok", "missing", "unreadable"]
+    image_file_state: ImageFileState
     meta: ImageMetadata | None
     meta_warnings: tuple[warnings.WarningMessage, ...]
     hct: ParticleFile | None
@@ -120,7 +137,7 @@ class ImageFacts:
     pixel_size: float | None
     pixel_size_source: str
     size: tuple[int, int] | None
-    detection: str
+    detection_state: DetectionState
     correction: str
 
     @property
@@ -173,7 +190,7 @@ def image_facts(
     path = resolve_stored(entry.file, folder)
     meta: ImageMetadata | None = None
     caught: list[warnings.WarningMessage] = []
-    file: Literal["ok", "missing", "unreadable"]
+    file: ImageFileState
     if not path.is_file():
         file = "missing"
     else:
@@ -195,7 +212,7 @@ def image_facts(
     return ImageFacts(
         entry=entry,
         path=path,
-        file=file,
+        image_file_state=file,
         meta=meta,
         meta_warnings=tuple(caught),
         hct=hct,
@@ -203,7 +220,7 @@ def image_facts(
         pixel_size=metres,
         pixel_size_source=source,
         size=_size(meta, records),
-        detection=_detection(hct, params, path, file),
+        detection_state=_detection_state(hct, params, path, file),
         correction=_correction(corr, hct),
     )
 
@@ -275,20 +292,20 @@ def _row(facts: ImageFacts) -> dict[str, object]:
     return {
         "image": facts.entry.image,
         "include": facts.entry.include,
-        "file": facts.file,
+        "image_file_state": facts.image_file_state,
         "pixel_size_nm": nanometres(facts.pixel_size),
         "pixel_size_source": facts.pixel_size_source,
         "particle_set": facts.particle_set or "none",
         "particle_count": count,
-        "outside_image": outside,
-        "detection": facts.detection,
+        "particles_outside_image": outside,
+        "detection_state": facts.detection_state,
         "correction": facts.correction,
         "kept": (
             ""
             if started is None
             else f"{started.kept} of {started.detection_count} detected"
         ),
-        "warnings": (
+        "particle_set_warnings": (
             class_names(used.record.warnings)
             if used is not None and used.record is not None
             else ""
@@ -333,14 +350,19 @@ def _size(
     return None
 
 
-def _detection(
-    hct: ParticleFile | None, params: ImageParams, path: Path, file: str
-) -> str:
+def _detection_state(
+    hct: ParticleFile | None,
+    params: ImageParams,
+    path: Path,
+    file: ImageFileState,
+) -> DetectionState:
     if hct is None:
-        return "not set" if params.hct is None else "not detected"
-    if hct.state != "matching" or not isinstance(hct.record, DetectionRecord):
+        return "params not set" if params.hct is None else "not detected"
+    if hct.state != "matching":
         return hct.state
-    # a missing image is shown by the file column; params decide then
+    if not isinstance(hct.record, DetectionRecord):
+        return "no record"
+    # a missing image is shown by image_file_state; params decide then
     if file != "missing" and not same_image(hct.record.image, path):
         return "image changed"
     if hct.record.params != params:

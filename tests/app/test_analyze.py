@@ -129,7 +129,7 @@ def test_not_ready_lists_every_image_and_computes_nothing(
     status = analysis_col.status().set_index("image")
     assert status.loc["D7-017", "pixel_size_source"] == "none"
     assert status.loc["D7-018", "particle_set"] == "none"
-    assert status.loc["D7-019", "file"] == "missing"
+    assert status.loc["D7-019", "image_file_state"] == "missing"
 
 
 def test_unreadable_files_are_not_ready(analysis_col: Collection) -> None:
@@ -259,7 +259,7 @@ def test_outdated_detection_warns_first_and_still_returns(
         "to update them, then analyze() again."
     )
     assert len(res.images) == 3
-    assert res._origin.images["D7-019"]["detection"] == "image changed"
+    assert res._origin.images["D7-019"]["detection_state"] == "image changed"
 
 
 def test_switched_off_detection_reason(analysis_col: Collection) -> None:

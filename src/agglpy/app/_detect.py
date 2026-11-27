@@ -43,9 +43,12 @@ __all__ = ["run", "warn_if_lossy"]
 
 # How a person's particles_hct.csv is named in the report: now / after
 _KEPT = {
-    "edited by hand": ("was edited by hand", "was edited by hand"),
+    "edited outside agglpy": (
+        "was edited outside agglpy",
+        "was edited outside agglpy",
+    ),
     "no record": ("has no record", "had no record"),
-    "unreadable": ("does not read", "did not read"),
+    "file unreadable": ("does not read", "did not read"),
 }
 _JPEG_START = b"\xff\xd8\xff"
 
@@ -148,7 +151,7 @@ def _one(
         return _row(
             name,
             "skipped",
-            "detection not set: hct.ranges is empty (set_params)",
+            "params not set: hct.ranges is empty (set_params)",
         )
     path = resolve_stored(entry.file, folder)
     try:

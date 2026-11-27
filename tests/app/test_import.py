@@ -141,7 +141,7 @@ def test_hand_edited_correction_refuses_then_force(
     before = corrected(particles_col).read_bytes()
     with pytest.raises(
         OutputExistsError,
-        match=r"particles_corrected\.csv of D7-017 was edited by hand; "
+        match=r"particles_corrected\.csv of D7-017 was edited outside agglpy; "
         r"force=True replaces it",
     ):
         particles_col.import_particles("D7-017", fiji_csv)

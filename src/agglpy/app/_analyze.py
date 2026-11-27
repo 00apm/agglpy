@@ -194,9 +194,9 @@ def _outdated(f: ImageFacts, params: ImageParams) -> str | None:
     """
     if f.particle_set != "hct":
         return None  # a correction is the user's final word
-    if f.detection == "image changed":
+    if f.detection_state == "image changed":
         return "image file changed since detect()"
-    if f.detection != "params changed":
+    if f.detection_state != "params changed":
         return None
     if params.hct is None:
         return (
@@ -234,8 +234,12 @@ def _check_ready(sheet: Sheet, facts: list[ImageFacts]) -> None:
         if used is None:
             problems.append("no particles")
             fixes["run detect() or import_particles()"] = None
-        if f.file != "ok":
-            state = "not found" if f.file == "missing" else "does not read"
+        if f.image_file_state != "ok":
+            state = (
+                "not found"
+                if f.image_file_state == "missing"
+                else "does not read"
+            )
             problems.append(f"image file {state}: {f.entry.file}")
             fixes[f"fix the image file or its path in {where}"] = None
         if used is not None and used.particles is None:
@@ -338,7 +342,7 @@ def _record(
             "sha256": used.sha256,
             "state": used.state,
         },
-        "detection": f.detection,
+        "detection_state": f.detection_state,
         "correction": f.correction,
         "made_by": _made_by(used.record),
         "warnings": texts,

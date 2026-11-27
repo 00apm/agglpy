@@ -45,9 +45,9 @@ _MIN_SHARED_FRACTION = 0.5
 
 # How a person's particles_corrected.csv is named in the error
 _CHANGED = {
-    "edited by hand": "was edited by hand",
+    "edited outside agglpy": "was edited outside agglpy",
     "no record": "has no record",
-    "unreadable": "does not read",
+    "file unreadable": "does not read",
 }
 
 

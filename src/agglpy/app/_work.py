@@ -39,7 +39,9 @@ HCT_RECORD = "particles_hct_record.yml"
 CORRECTED_CSV = "particles_corrected.csv"
 CORRECTED_RECORD = "particles_corrected_record.yml"
 
-State = Literal["matching", "edited by hand", "no record", "unreadable"]
+State = Literal[
+    "matching", "edited outside agglpy", "no record", "file unreadable"
+]
 R = TypeVar("R", DetectionRecord, CorrectionRecord)
 
 
@@ -50,9 +52,9 @@ class ParticleFile:
     Attributes
     ----------
     state : State
-        ``matching``, ``edited by hand`` (its hash differs from
+        ``matching``, ``edited outside agglpy`` (its hash differs from
         the record's), ``no record`` (missing or unreadable) or
-        ``unreadable`` (the CSV itself).
+        ``file unreadable`` (the CSV itself).
     record : DetectionRecord or CorrectionRecord or None
         The record, None when missing or unreadable.
     particles : DataFrame or None
@@ -126,12 +128,14 @@ def inspect(
             stacklevel=2,
         )
         record = read_record(record_path, kind)
-        return ParticleFile("unreadable", record, None, digest)
+        return ParticleFile("file unreadable", record, None, digest)
     record = read_record(record_path, kind)
     if record is None:
         return ParticleFile("no record", None, particles, digest)
     state: State = (
-        "matching" if record.particles.sha256 == digest else "edited by hand"
+        "matching"
+        if record.particles.sha256 == digest
+        else "edited outside agglpy"
     )
     return ParticleFile(state, record, particles, digest)
 

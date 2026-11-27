@@ -97,7 +97,7 @@ report = col.detect()      # one row per image: outcome, particle_count, warning
 col.status()               # pixel size, particle set and detection state of each image
 ```
 
-`status()` writes nothing; its `detection` column says whether each detection is `up to date` or why not
+`status()` writes nothing; its `detection_state` column says whether each detection is `up to date` or why not
 (`params changed`, `image changed`, ...). See [Collection](collection.md#status).
 
 ## 4. Correct (optional)
