@@ -217,7 +217,7 @@ def test_outside_region_warned_once_at_the_callers_line(
         warnings.simplefilter("ignore")
         analysis_col.import_particles("D7-018", source)
     with pytest.warns(
-        UserWarning, match=r"outside the analysed region|outdated detection"
+        UserWarning, match=r"outside the analysed region|outdated particles"
     ) as ws:
         res = analysis_col.analyze(progress=False)
     outside = [w for w in ws if w.category is ParticlesOutsideRegionWarning]
@@ -247,16 +247,16 @@ def test_outdated_detection_warns_first_and_still_returns(
     analysis_col.set_params(
         image="D7-018", hct={"ranges": [{"d_min": 10, "d_max": 40}]}
     )
-    with pytest.warns(UserWarning, match="outdated detection") as ws:
+    with pytest.warns(UserWarning, match="outdated particles") as ws:
         res = analysis_col.analyze(progress=False)
     assert ws[0].category is OutdatedParticlesWarning
     assert os.path.normcase(ws[0].filename) == os.path.normcase(__file__)
     assert str(ws[0].message) == (
-        "2 images were analysed with particles from an outdated detection:\n"
-        "  D7-017: params changed since detect()\n"
-        "  D7-019: image file changed since detect()\n"
-        "These results do not reflect the current params. Run col.detect() "
-        "to update them, then analyze() again."
+        "2 images were analysed with outdated particles:\n"
+        "  D7-017: params changed since detect(); run col.detect()\n"
+        "  D7-019: image file changed since detect(); run col.detect()\n"
+        "These results do not reflect the current inputs. Update them, "
+        "then analyze() again."
     )
     assert len(res.images) == 3
     assert res._origin.images["D7-019"]["detection_state"] == "image changed"
@@ -274,10 +274,37 @@ def test_switched_off_detection_reason(analysis_col: Collection) -> None:
     ) as ws:
         analysis_col.analyze(progress=False)
     assert str(ws[0].message).startswith(
-        "1 image was analysed with particles from an outdated detection:\n"
+        "1 image was analysed with outdated particles:\n"
         "  D7-017: detection was switched off in agglpy.yml after detect(); "
         "set hct again or import_particles()\n"
     )
+
+
+def test_changed_correction_source_warns_missing_one_does_not(
+    analysis_col: Collection,
+) -> None:
+    source = analysis_col.folder.parent / "fiji" / "D7-018.csv"
+    source.write_text(
+        source.read_text(encoding="utf-8") + "\n", encoding="utf-8"
+    )
+    with pytest.warns(OutdatedParticlesWarning) as ws:
+        res = analysis_col.analyze(progress=False)
+    assert str(ws[0].message) == (
+        "1 image was analysed with outdated particles:\n"
+        "  D7-018: the correction's source file changed since "
+        "import_particles(); the imported copy was used; import it again\n"
+        "These results do not reflect the current inputs. Update them, "
+        "then analyze() again."
+    )
+    assert res.images.set_index("image").loc["D7-018", "particle_set"] == (
+        "corrected"
+    )
+    # a missing source can't be imported again: status() shows it, no
+    # warning on every run
+    source.unlink()
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", OutdatedParticlesWarning)
+        analysis_col.analyze(progress=False)
 
 
 def test_pixel_size_warning_only_when_the_metadata_decides(

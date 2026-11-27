@@ -234,7 +234,8 @@ class NotReadyError(AgglpyError, ValueError):
 
 
 class OutdatedParticlesWarning(UserWarning):
-    """Particles from an outdated detection are used.
+    """The particles in use no longer match their input.
 
-    The detection was made with other params or another image file.
+    A detection made with other params or another image file, or a
+    correction whose source file changed since it was imported.
     """

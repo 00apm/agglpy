@@ -915,8 +915,9 @@ class Collection:
         -----
         OutdatedParticlesWarning
             First, if a detection in use was made with other params or
-            another image file: the results don't reflect the current
-            params.
+            another image file, or a correction's source file changed
+            since it was imported: the results don't reflect the
+            current inputs.
         ParticlesOutsideRegionWarning
             If circles lying entirely outside the region were left out
             (counted in ``outside_region``).

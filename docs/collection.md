@@ -149,7 +149,8 @@ Each image has up to two particle sets in its work folder, each a CSV with a rec
 
 **The set in use** is decided by the CSV files alone: `particles_corrected.csv` if it exists, else
 `particles_hct.csv`. `col[name].particle_set` names it, `col[name].particles` reads it. `detect()` never touches a
-correction; a correction is never reported as outdated.
+correction. `analyze()` warns with `OutdatedParticlesWarning` about the set in use only: a detection made with
+other params or another image file, or a correction whose source file changed since the import.
 
 **Records** are what agglpy compares the CSV and the image with. Do not edit them. A CSV whose hash no longer
 matches its record is *edited outside agglpy*: agglpy keeps it and does not overwrite it without `force=True`. Read a
@@ -240,7 +241,7 @@ link.
 |---|---|---|
 | *(empty)* | No correction | — |
 | `up to date` | `particles_corrected.csv` matches its record, and the source file the one imported | Nothing |
-| `source changed` | The source file changed since the import; the imported copy is used | `col.import_particles()` again |
+| `source changed` | The source file changed since the import; the imported copy is used | `col.import_particles()` again; `analyze()` warns with `OutdatedParticlesWarning` until then |
 | `source missing` | The source file is not at the path in the record (moved or deleted); the imported copy is used | Nothing, or move it back |
 | `edited outside agglpy` | `particles_corrected.csv` differs from its record | Import the corrected file again |
 | `no record` | The record is missing or does not read | Import again |

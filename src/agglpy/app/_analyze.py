@@ -51,7 +51,7 @@ def run(
 
     Every image is checked before any is analysed. Each image's
     warnings are caught; returns the results and the summary warnings
-    (outdated detections first, then one per class) for the caller to
+    (outdated particles first, then one per class) for the caller to
     emit at the user's line.
 
     Raises
@@ -188,14 +188,21 @@ def summary_text(messages: list[tuple[str, str]]) -> str:
 
 
 def _outdated(f: ImageFacts, params: ImageParams) -> str | None:
-    """Return why the detection in use no longer matches.
+    """Return why the particles in use no longer match their input.
 
-    None if it still does.
+    With the fix; None if they still do. A missing correction source
+    is not named: it can't be imported again, and the copy in use
+    still is what was imported.
     """
-    if f.particle_set != "hct":
-        return None  # a correction is the user's final word
+    if f.particle_set == "corrected":
+        if f.correction_state != "source changed":
+            return None
+        return (
+            "the correction's source file changed since import_particles(); "
+            "the imported copy was used; import it again"
+        )
     if f.detection_state == "image changed":
-        return "image file changed since detect()"
+        return "image file changed since detect(); run col.detect()"
     if f.detection_state != "params changed":
         return None
     if params.hct is None:
@@ -203,7 +210,7 @@ def _outdated(f: ImageFacts, params: ImageParams) -> str | None:
             "detection was switched off in agglpy.yml after detect(); "
             "set hct again or import_particles()"
         )
-    return "params changed since detect()"
+    return "params changed since detect(); run col.detect()"
 
 
 def _outdated_text(outdated: list[tuple[str, str]]) -> str:
@@ -211,11 +218,10 @@ def _outdated_text(outdated: list[tuple[str, str]]) -> str:
     were = "image was" if count == 1 else "images were"
     return "\n".join(
         [
-            f"{count} {were} analysed with particles from an outdated "
-            "detection:",
+            f"{count} {were} analysed with outdated particles:",
             *(f"  {name}: {reason}" for name, reason in outdated),
-            "These results do not reflect the current params. Run "
-            "col.detect() to update them, then analyze() again.",
+            "These results do not reflect the current inputs. Update them, "
+            "then analyze() again.",
         ]
     )
 
