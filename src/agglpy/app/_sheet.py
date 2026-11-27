@@ -54,7 +54,7 @@ IMAGES_TABLE_COLUMNS = (
     "width",
     "height",
     "particle_set",
-    "outside_region",
+    "particles_outside_region",
 )
 RESERVED_COLUMNS = frozenset(FIXED_COLUMNS + IMAGES_TABLE_COLUMNS)
 

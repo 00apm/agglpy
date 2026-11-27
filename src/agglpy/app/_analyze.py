@@ -40,7 +40,7 @@ _DTYPES: dict[str, Any] = {
     "width": "int64",
     "height": "int64",
     "particle_set": object,
-    "outside_region": "int64",
+    "particles_outside_region": "int64",
 }
 
 
@@ -127,7 +127,7 @@ def run(
                 len(result.particles),
                 f.particle_set,
                 len(result.agglomerates),
-                row["outside_region"],
+                row["particles_outside_region"],
                 nanometres(p),
                 f.pixel_size_source,
             )
@@ -301,7 +301,7 @@ def _one(
         "width": f.meta.width,
         "height": f.meta.height,
         "particle_set": f.particle_set,
-        "outside_region": len(result.outside_ids),
+        "particles_outside_region": len(result.outside_ids),
     }
     return result, row
 
@@ -340,7 +340,7 @@ def _record(
         "pixel_size": row["pixel_size"],
         "pixel_size_source": row["pixel_size_source"],
         "region": plain(params.region, "region"),
-        "outside_region": row["outside_region"],
+        "particles_outside_region": row["particles_outside_region"],
         "particle_set": row["particle_set"],
         "particles": {
             "file": HCT_CSV if f.particle_set == "hct" else CORRECTED_CSV,

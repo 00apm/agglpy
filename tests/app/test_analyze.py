@@ -73,7 +73,7 @@ def test_tables_hold_each_image_in_metres(
         [200 * 160 * p**2 for p in sizes]
     )
     assert res.images[["width", "height"]].values.tolist() == [[200, 160]] * 3
-    assert res.images["outside_region"].tolist() == [0, 0, 0]
+    assert res.images["particles_outside_region"].tolist() == [0, 0, 0]
     for name, p in zip(NAMES, sizes, strict=True):
         found = analyze(
             read_particles(used_csv(analysis_col, name)), width=200, height=160
@@ -228,7 +228,7 @@ def test_outside_region_warned_once_at_the_callers_line(
     assert "\n  D7-017: " in text and "\n  D7-018: " in text
     # the region change made the detections outdated: that comes first
     assert ws[0].category is OutdatedParticlesWarning
-    assert res.images["outside_region"].tolist() == [1, 1, 0]
+    assert res.images["particles_outside_region"].tolist() == [1, 1, 0]
     (stored,) = res._origin.images["D7-017"]["warnings"]
     assert stored.startswith("ParticlesOutsideRegionWarning: ")
     assert f"\n  D7-017: {stored.split(': ', 1)[1]}\n" in text

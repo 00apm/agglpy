@@ -921,7 +921,7 @@ class Collection:
             current inputs.
         ParticlesOutsideRegionWarning
             If circles lying entirely outside the region were left out
-            (counted in ``outside_region``).
+            (counted in ``particles_outside_region``).
         DuplicateParticlesWarning
             If an enclosed particle lies inside a near-identical
             circle; it counts as enclosed.

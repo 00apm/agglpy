@@ -51,7 +51,7 @@ by row and column):
 - `pixel_size_nm`: a number from 0.001 to 10 000, `.` as decimal point.
 - `images.xlsx`: one worksheet, no formulas (paste values instead). `images.csv`: UTF-8.
 - Reserved names, not allowed for user columns: `pixel_size`, `pixel_size_source`, `fov_area`, `width`,
-  `height`, `particle_set`, `outside_region` (agglpy adds them to the results' `images` table).
+  `height`, `particle_set`, `particles_outside_region` (agglpy adds them to the results' `images` table).
 
 **Adding images.** `create(..., images=)` and `col.add_images(...)` take folders or files. A folder gives its
 image files (`.tif`, `.tiff`, `.png`, `.jpg`, `.jpeg`, `.bmp`, any case) directly inside it; `pattern=` takes
@@ -177,7 +177,7 @@ Particle files hold `id, x, y, r` in **px**, with pixel centres at integers: pix
 as in OpenCV, NumPy and scikit-image. `x` runs to the right, `y` down, and the origin is the top-left corner of the
 whole image file, data bar included, whatever region detection used. A circle that crosses the image edge, or has
 its centre outside, is a partly visible particle and stays in the file; `analyze()` leaves out only circles lying
-entirely outside the analysed region (`ParticlesOutsideRegionWarning`, counted in `outside_region`).
+entirely outside the analysed region (`ParticlesOutsideRegionWarning`, counted in `particles_outside_region`).
 
 ImageJ and Fiji count from pixel edges, so a circle read from Fiji is shifted by −0.5 px. `agglpy.io.read_particles`
 does the conversion; the details are in [Methodology](methodology.md#4-manual-correction), "Coordinates" and
