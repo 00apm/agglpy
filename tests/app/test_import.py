@@ -171,8 +171,8 @@ def test_correction_from_scratch_warns(
         particles_col.import_particles("D7-017", source)
     (w,) = [w for w in ws if "keeps only" in str(w.message)]
     assert str(w.message) == (
-        "correction keeps only 0 of 2 detected circles; shown as not based "
-        "on the detection"
+        "correction keeps only 0 of 2 detected circles; status() shows "
+        "correction_base: no detection"
     )
     assert os.path.normcase(w.filename) == os.path.normcase(__file__)
     rec = read_record(corrected_record(particles_col), CorrectionRecord)

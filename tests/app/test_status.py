@@ -29,8 +29,8 @@ COLUMNS = [
     "particle_count",
     "particles_outside_image",
     "detection_state",
-    "correction",
-    "kept",
+    "correction_state",
+    "correction_base",
     "particle_set_warnings",
 ]
 NAMES = ["D7-017", "D7-018", "D7-019"]
@@ -69,8 +69,8 @@ def test_fresh_collection(particles_col: Collection) -> None:
     assert table["particle_count"].tolist() == [0] * 3
     assert table["particles_outside_image"].tolist() == [0] * 3
     assert table["detection_state"].tolist() == ["not detected"] * 3
-    assert table["correction"].tolist() == [""] * 3
-    assert table["kept"].tolist() == [""] * 3
+    assert table["correction_state"].tolist() == [""] * 3
+    assert table["correction_base"].tolist() == [""] * 3
     assert table["particle_set_warnings"].tolist() == [""] * 3
     assert table.dtypes.astype(str).to_dict() == {
         "image": "object",
@@ -82,8 +82,8 @@ def test_fresh_collection(particles_col: Collection) -> None:
         "particle_count": "Int64",
         "particles_outside_image": "Int64",
         "detection_state": "object",
-        "correction": "object",
-        "kept": "object",
+        "correction_state": "object",
+        "correction_base": "object",
         "particle_set_warnings": "object",
     }
 
@@ -190,14 +190,18 @@ def test_correction_labels(
     particles_col.import_particles("D7-017", fiji_csv)
     r = row(particles_col)
     assert r["particle_set"] == "corrected"
-    assert r["correction"] == "current detection"
-    assert r["kept"] == "2 of 2 detected"
+    assert r["correction_state"] == "up to date"
+    assert r["correction_base"] == "current detection"
     assert r["detection_state"] == "up to date"
+    # the count behind the base is in the record, not in the table
+    started = particles_col["D7-017"].correction["started_from"]
+    assert (started["kept"], started["detection_count"]) == (2, 2)
     # a new detection: the correction started from the older one
     write_disc_image(image(particles_col), OTHER_DISCS)
     particles_col.detect("D7-017", force=True, progress=False)
     r = row(particles_col)
-    assert r["correction"] == "older detection"
+    assert r["correction_state"] == "up to date"
+    assert r["correction_base"] == "older detection"
     assert r["particle_set"] == "corrected"
     # a correction drawn from scratch
     scratch = tmp_path / "scratch.csv"
@@ -205,13 +209,14 @@ def test_correction_labels(
     with pytest.warns(UserWarning, match="keeps only 0 of 1"):
         particles_col.import_particles("D7-017", scratch)
     r = row(particles_col)
-    assert r["correction"] == "not from detection"
-    assert r["kept"] == "0 of 1 detected"
+    assert r["correction_base"] == "no detection"
     corrected = work(particles_col, "D7-017") / "particles_corrected.csv"
     with corrected.open("a", encoding="utf-8") as fh:
         fh.write("2,60.5,60.5,5.0\n")
     r = row(particles_col)
-    assert r["correction"] == "edited outside agglpy"
+    assert r["correction_state"] == "edited outside agglpy"
+    # the record no longer describes the CSV: its base can't be told
+    assert r["correction_base"] == ""
     assert r["particle_set"] == "corrected"
     assert r["particle_count"] == 2
 
@@ -221,8 +226,8 @@ def test_correction_without_detection(
 ) -> None:
     particles_col.import_particles("D7-017", fiji_csv)
     r = row(particles_col)
-    assert r["correction"] == "not from detection"
-    assert r["kept"] == ""
+    assert r["correction_state"] == "up to date"
+    assert r["correction_base"] == "no detection"
     assert r["detection_state"] == "not detected"
 
 

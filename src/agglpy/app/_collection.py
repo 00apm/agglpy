@@ -810,7 +810,8 @@ class Collection:
         -----
         UserWarning
             If the correction keeps less than half of the detected
-            circles: it is then shown as not based on the detection.
+            circles: ``status()`` then shows ``correction_base: no
+            detection``.
         NonCircularParticlesWarning
             If ImageJ shapes were read as circles or dropped.
         DuplicateParticlesWarning
@@ -847,9 +848,9 @@ class Collection:
             ``pixel_size_nm``, ``pixel_size_source``,
             ``particle_set``, ``particle_count``,
             ``particles_outside_image`` (circles entirely outside
-            the image), ``detection_state``, ``correction``,
-            ``kept`` and ``particle_set_warnings`` (of the set in
-            use).
+            the image), ``detection_state``, ``correction_state``,
+            ``correction_base`` and ``particle_set_warnings`` (of the
+            set in use).
 
         Raises
         ------
@@ -869,8 +870,9 @@ class Collection:
         Notes
         -----
         The values of ``image_file_state``, ``pixel_size_source``,
-        ``particle_set``, ``detection_state`` and ``correction``: see
-        *Collection* (``docs/collection.md``), section *Status*.
+        ``particle_set`` and the ``*_state`` / ``correction_base``
+        labels: see *Collection* (``docs/collection.md``), section
+        *Status*.
         """
         sheet, config = self._read(check=True)
         with warnings.catch_warnings(record=True) as caught:

@@ -205,7 +205,7 @@ reported in one `NonCircularParticlesWarning`. Ids are the numbers Fiji shows. A
 `force=True`. See `help(col.import_particles)`.
 
 The record notes how many detected circles the correction kept (centres within 2 px, radii within 10 %). A
-correction that keeps fewer than half of them is shown as `not from detection`.
+correction that keeps fewer than half of them is shown as `correction_base: no detection`.
 
 ## Status
 
@@ -218,8 +218,7 @@ correction that keeps fewer than half of them is shown as `not from detection`.
 | `pixel_size_nm`, `pixel_size_source` | The value used, in nm, and where it comes from ([Pixel size](#pixel-size)) |
 | `particle_set`, `particle_count` | `corrected`, `hct` or `none`, and its number of circles |
 | `particles_outside_image` | Circles lying entirely outside the image |
-| `detection_state`, `correction` | Labels below |
-| `kept` | For a correction: `k of n detected` |
+| `detection_state`, `correction_state`, `correction_base` | Labels below |
 | `particle_set_warnings` | Warning classes in the record of the set in use |
 
 | `detection_state` | Meaning | What to do |
@@ -233,15 +232,20 @@ correction that keeps fewer than half of them is shown as `not from detection`.
 | `no record` | The record is missing or does not read | `detect(force=True)` |
 | `file unreadable` | `particles_hct.csv` does not read | `detect(force=True)` |
 
-| `correction` | Meaning | What to do |
+| `correction_state` | Meaning | What to do |
 |---|---|---|
 | *(empty)* | No correction | — |
-| `current detection` | Started from the `particles_hct.csv` present now | Nothing |
-| `older detection` | Started from a detection since replaced or removed | Check the correction still fits |
-| `not from detection` | No detection at import, or it kept fewer than half of the detected circles | Check it is the right file |
+| `up to date` | `particles_corrected.csv` matches its record | Nothing |
 | `edited outside agglpy` | `particles_corrected.csv` differs from its record | Import the corrected file again |
 | `no record` | The record is missing or does not read | Import again |
 | `file unreadable` | `particles_corrected.csv` does not read | Import again, or delete it |
+
+| `correction_base` | Meaning | What to do |
+|---|---|---|
+| *(empty)* | No correction, or its record does not describe `particles_corrected.csv` (see `correction_state`) | — |
+| `current detection` | Started from the `particles_hct.csv` present now | Nothing |
+| `older detection` | Started from a detection since replaced or removed | Check the correction still fits |
+| `no detection` | No detection at import, or the correction kept fewer than half of its circles (the counts: `col[name].correction["started_from"]`) | Check it is the right file |
 
 `status()` and `analyze()` read the same facts: `analyze()` refuses (`NotReadyError`, listing every image and the fix) while an
 included image has no pixel size, no particles, or a missing or unreadable file. Select images from the table:

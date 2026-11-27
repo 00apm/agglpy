@@ -107,7 +107,7 @@ import it; from then on the image uses the correction instead of the detection, 
 
 ```python
 col.import_particles("A-02", "fiji/A-02.csv")
-col.status()[["image", "particle_set", "correction"]]
+col.status()[["image", "particle_set", "correction_state", "correction_base"]]
 ```
 
 How to draw the ROIs and what the import checks: [Collection](collection.md#correcting-in-fiji).

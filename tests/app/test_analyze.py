@@ -260,6 +260,11 @@ def test_outdated_detection_warns_first_and_still_returns(
     )
     assert len(res.images) == 3
     assert res._origin.images["D7-019"]["detection_state"] == "image changed"
+    # the record carries the status labels of the correction too
+    st = analysis_col.status().set_index("image")
+    for key in ("correction_state", "correction_base"):
+        assert res._origin.images["D7-018"][key] == st.loc["D7-018", key]
+    assert res._origin.images["D7-018"]["correction_state"] == "up to date"
 
 
 def test_switched_off_detection_reason(analysis_col: Collection) -> None:

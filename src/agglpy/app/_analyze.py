@@ -343,7 +343,8 @@ def _record(
             "state": used.state,
         },
         "detection_state": f.detection_state,
-        "correction": f.correction,
+        "correction_state": f.correction_state,
+        "correction_base": f.correction_base,
         "made_by": _made_by(used.record),
         "warnings": texts,
     }

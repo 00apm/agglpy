@@ -43,6 +43,8 @@ from agglpy.params import RegionParams
 
 __all__ = [
     "STATUS_COLUMNS",
+    "CorrectionBase",
+    "CorrectionState",
     "DetectionState",
     "ImageFacts",
     "ImageFileState",
@@ -61,8 +63,8 @@ STATUS_COLUMNS = (
     "particle_count",
     "particles_outside_image",
     "detection_state",
-    "correction",
-    "kept",
+    "correction_state",
+    "correction_base",
     "particle_set_warnings",
 )
 _DTYPES = {
@@ -84,6 +86,14 @@ DetectionState = Literal[
     "edited outside agglpy",
     "no record",
     "file unreadable",
+]
+# "" = no correction
+CorrectionState = Literal[
+    "", "up to date", "edited outside agglpy", "no record", "file unreadable"
+]
+# "" = no correction, or its record does not describe the CSV
+CorrectionBase = Literal[
+    "", "current detection", "older detection", "no detection"
 ]
 
 
@@ -123,8 +133,11 @@ class ImageFacts:
         None when neither gives it.
     detection_state : DetectionState
         The ``status()`` label of the detection.
-    correction : str
-        The ``status()`` label of the correction.
+    correction_state : CorrectionState
+        The ``status()`` label of the correction file.
+    correction_base : CorrectionBase
+        The ``status()`` label of the detection the correction
+        started from.
     """
 
     entry: Entry
@@ -138,7 +151,8 @@ class ImageFacts:
     pixel_size_source: str
     size: tuple[int, int] | None
     detection_state: DetectionState
-    correction: str
+    correction_state: CorrectionState
+    correction_base: CorrectionBase
 
     @property
     def used(self) -> ParticleFile | None:
@@ -221,7 +235,8 @@ def image_facts(
         pixel_size_source=source,
         size=_size(meta, records),
         detection_state=_detection_state(hct, params, path, file),
-        correction=_correction(corr, hct),
+        correction_state=_correction_state(corr),
+        correction_base=_correction_base(corr, hct),
     )
 
 
@@ -283,12 +298,6 @@ def _row(facts: ImageFacts) -> dict[str, object]:
                     ).sum()
                 )
             )
-    corr = facts.corrected
-    started = (
-        corr.record.started_from
-        if corr is not None and isinstance(corr.record, CorrectionRecord)
-        else None
-    )
     return {
         "image": facts.entry.image,
         "include": facts.entry.include,
@@ -299,12 +308,8 @@ def _row(facts: ImageFacts) -> dict[str, object]:
         "particle_count": count,
         "particles_outside_image": outside,
         "detection_state": facts.detection_state,
-        "correction": facts.correction,
-        "kept": (
-            ""
-            if started is None
-            else f"{started.kept} of {started.detection_count} detected"
-        ),
+        "correction_state": facts.correction_state,
+        "correction_base": facts.correction_base,
         "particle_set_warnings": (
             class_names(used.record.warnings)
             if used is not None and used.record is not None
@@ -370,16 +375,27 @@ def _detection_state(
     return "up to date"
 
 
-def _correction(corr: ParticleFile | None, hct: ParticleFile | None) -> str:
+def _correction_state(corr: ParticleFile | None) -> CorrectionState:
     if corr is None:
         return ""
-    if corr.state != "matching" or not isinstance(
-        corr.record, CorrectionRecord
-    ):
+    if corr.state != "matching":
         return corr.state
+    return "up to date"
+
+
+def _correction_base(
+    corr: ParticleFile | None, hct: ParticleFile | None
+) -> CorrectionBase:
+    # the base is known only from a record that describes the CSV
+    if (
+        corr is None
+        or corr.state != "matching"
+        or not isinstance(corr.record, CorrectionRecord)
+    ):
+        return ""
     started = corr.record.started_from
     if started is None or not based_on_detection(started):
-        return "not from detection"
+        return "no detection"
     if hct is None or started.sha256 != hct.sha256:
         return "older detection"
     return "current detection"

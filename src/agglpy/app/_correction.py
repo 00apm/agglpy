@@ -138,8 +138,8 @@ def run_import(
         if started is not None and not based_on_detection(started):
             warnings.warn(
                 f"correction keeps only {started.kept} of "
-                f"{started.detection_count} detected circles; shown as not "
-                "based on the detection",
+                f"{started.detection_count} detected circles; status() "
+                "shows correction_base: no detection",
                 UserWarning,
                 stacklevel=2,
             )
