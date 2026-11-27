@@ -102,9 +102,6 @@ select = [
 # Frozen legacy code (D-013), deleted in roadmap 2.9 together with these
 # lines. New modules get PEP 8 names and no print() from the start.
 "src/agglpy/_legacy/*" = ["N", "T20", "E501", "W505"]
-"tests/legacy/*" = ["N", "E501", "W505"]
-# The golden runner is rewritten on the new pipeline in 2.8.
-"tests/golden/test_golden.py" = ["N", "E501", "W505"]
 # The expected agglpy.yml template, compared line by line: its comments
 # are as long as the template writes them.
 "tests/app/test_config.py" = ["E501"]

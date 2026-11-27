@@ -39,7 +39,7 @@ IMAGES_DIR = DATA_DIR / "input" / "multiple_image" / "images"
 IMAGE_NAMES = ["D7-017", "D7-019"]
 REGION = RegionParams(bottom_fraction=0.1)
 
-# Settings of the v0.4 golden run (tests/data/golden/D7/settings.yml)
+# Settings of the v0.4.0 golden run the expected files were made with
 RANGES = {
     "D7-017": (
         HCTRange(3, 60, canny_threshold=220, accumulator_threshold=13),

@@ -1,8 +1,4 @@
-"""agglpy.io.read_particles and write_particles.
-
-Replaces the CSV importer tests of tests/legacy/test_particle_csv.py
-for the new API (that file goes with the legacy code).
-"""
+"""agglpy.io.read_particles and write_particles."""
 
 import os
 import warnings
