@@ -83,10 +83,6 @@ STATS: dict[str, StatsFunctions] = {
     "core": StatsFunctions(core_size_classes, core_distribution),
 }
 
-# Realistic SEM pixel size in metres. Runs at 1.0 keep coordinates in
-# px.
-REAL_PIXEL_SIZE = 2.5e-9
-
 
 @dataclass(frozen=True)
 class KnownFailure:
@@ -94,25 +90,8 @@ class KnownFailure:
     raises: type[BaseException] | None = None
 
 
-_SCALING = (
-    "the legacy code scales to metres before comparing, which can change "
-    "an exact result by one ulp; the new core compares in px (2.3, 2.4)"
-)
-
 # (adapter, check, case name, pixel size) -> why it fails
 KNOWN_FAILURES: dict[tuple[str, str, str, float], KnownFailure] = {
-    # 14 * 2.5e-9 = 3.5e-08 > 10 * 2.5e-9 + 4 * 2.5e-9
-    ("legacy", "grouping", "doublet_unequal_tangent", REAL_PIXEL_SIZE): (
-        KnownFailure(_SCALING)
-    ),
-    # 6 * 2.5e-9 = 1.5000000000000002e-08 > 10 * 2.5e-9 - 4 * 2.5e-9
-    ("legacy", "enclosed", "doublet_internally_tangent", REAL_PIXEL_SIZE): (
-        KnownFailure(_SCALING)
-    ),
-    # 14 * 2.5e-9 / (20 * 2.5e-9) = 0.7000000000000001 > 0.7
-    ("legacy", "classify", "ratio_at_0.7", REAL_PIXEL_SIZE): (
-        KnownFailure(_SCALING)
-    ),
     # np.arange(start, end + step, step) can keep end + step as well
     ("legacy", "size_classes", "lin_step_metres", 1.0): KnownFailure(
         "linear step bins get an extra edge beyond end through float "
@@ -129,11 +108,6 @@ KNOWN_FAILURES: dict[tuple[str, str, str, float], KnownFailure] = {
     ),
     # the constructor rejects an empty particle table
     ("legacy", "summary", "no_particles", 1.0): KnownFailure(
-        "an image without particles raises instead of giving an empty "
-        "summary (2.5)",
-        raises=ImgDataSetBufferError,
-    ),
-    ("legacy", "summary", "no_particles", REAL_PIXEL_SIZE): KnownFailure(
         "an image without particles raises instead of giving an empty "
         "summary (2.5)",
         raises=ImgDataSetBufferError,

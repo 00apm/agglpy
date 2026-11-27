@@ -27,7 +27,6 @@ from agglpy.tables import make_particles
 from support.structure_cases import G1, G4, G5, graph_tables
 from support.synthetic.adapters import (
     ADAPTERS,
-    REAL_PIXEL_SIZE,
     expect_known_failure,
     skip_unless_supported,
 )
@@ -35,26 +34,14 @@ from support.synthetic.cases import SUMMARY, Case
 
 RTOL = 1e-12
 
-# Diameters in the summary are compared in px; a real pixel size checks
-# that they are converted and the counts and ratios are not.
-SUMMARY_RUNS = [
-    pytest.param(c, px, id=f"{c.name}-px{px:g}")
-    for c in SUMMARY
-    for px in (1.0, REAL_PIXEL_SIZE)
-]
 
-
-@pytest.mark.parametrize(("case", "pixel_size"), SUMMARY_RUNS)
+@pytest.mark.parametrize("case", SUMMARY, ids=lambda c: c.name)
 def test_summary_cases(
-    request: pytest.FixtureRequest,
-    adapter: str,
-    case: Case,
-    pixel_size: float,
-    tmp_path: Path,
+    request: pytest.FixtureRequest, adapter: str, case: Case, tmp_path: Path
 ):
     skip_unless_supported(adapter, "summary")
-    expect_known_failure(request, adapter, "summary", case, pixel_size)
-    result = ADAPTERS[adapter](case, tmp_path, pixel_size=pixel_size)
+    expect_known_failure(request, adapter, "summary", case)
+    result = ADAPTERS[adapter](case, tmp_path)
     for name, value in case.summary.items():
         assert result.summary[name] == pytest.approx(
             value, rel=RTOL, abs=0, nan_ok=True

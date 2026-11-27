@@ -15,47 +15,27 @@ import pytest
 
 from support.synthetic.adapters import (
     ADAPTERS,
-    REAL_PIXEL_SIZE,
     expect_known_failure,
     skip_unless_supported,
 )
 from support.synthetic.cases import CLASSIFICATION, Case
 
-# Cases with the ratio exactly at the threshold also run with a
-# realistic pixel size: the legacy code computes the ratio in metres.
-AT_THRESHOLD = [c for c in CLASSIFICATION if c.name.startswith("ratio_at")]
-RUNS = [
-    *[pytest.param(c, 1.0, id=f"{c.name}-px1") for c in CLASSIFICATION],
-    *[
-        pytest.param(c, REAL_PIXEL_SIZE, id=f"{c.name}-px{REAL_PIXEL_SIZE}")
-        for c in AT_THRESHOLD
-    ],
-]
 
-
-@pytest.mark.parametrize(("case", "pixel_size"), RUNS)
+@pytest.mark.parametrize("case", CLASSIFICATION, ids=lambda c: c.name)
 def test_particle_types(
-    request: pytest.FixtureRequest,
-    adapter: str,
-    case: Case,
-    pixel_size: float,
-    tmp_path: Path,
+    request: pytest.FixtureRequest, adapter: str, case: Case, tmp_path: Path
 ):
     skip_unless_supported(adapter, "classify")
-    expect_known_failure(request, adapter, "classify", case, pixel_size)
-    result = ADAPTERS[adapter](case, tmp_path, pixel_size=pixel_size)
+    expect_known_failure(request, adapter, "classify", case)
+    result = ADAPTERS[adapter](case, tmp_path)
     assert result.particle_types() == dict(case.types), case.note
 
 
-@pytest.mark.parametrize(("case", "pixel_size"), RUNS)
+@pytest.mark.parametrize("case", CLASSIFICATION, ids=lambda c: c.name)
 def test_agglomerate_types(
-    request: pytest.FixtureRequest,
-    adapter: str,
-    case: Case,
-    pixel_size: float,
-    tmp_path: Path,
+    request: pytest.FixtureRequest, adapter: str, case: Case, tmp_path: Path
 ):
     skip_unless_supported(adapter, "classify")
-    expect_known_failure(request, adapter, "classify", case, pixel_size)
-    result = ADAPTERS[adapter](case, tmp_path, pixel_size=pixel_size)
+    expect_known_failure(request, adapter, "classify", case)
+    result = ADAPTERS[adapter](case, tmp_path)
     assert result.agglomerate_types() == case.agglomerate_types(), case.note

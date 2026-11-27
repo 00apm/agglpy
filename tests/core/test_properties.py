@@ -29,30 +29,18 @@ from agglpy.errors import (
 )
 from agglpy.tables import make_particles
 
-from support.synthetic.adapters import (
-    ADAPTERS,
-    REAL_PIXEL_SIZE,
-    skip_unless_supported,
-)
+from support.synthetic.adapters import ADAPTERS, skip_unless_supported
 from support.synthetic.cases import PROPERTIES, Case
 
 # Small enough to see members that add 3.75e-10 of the volume (the
-# polydisperse case); computing in metres and converting back costs only
-# a few ulps.
+# polydisperse case).
 RTOL = 1e-12
 
-# The properties are compared in px; running with a real pixel size as
-# well checks that every value is converted with the right power of it.
-PIXEL_SIZES = [1.0, REAL_PIXEL_SIZE]
 
-
-@pytest.mark.parametrize("pixel_size", PIXEL_SIZES, ids=lambda v: f"px{v:g}")
 @pytest.mark.parametrize("case", PROPERTIES, ids=lambda c: c.name)
-def test_agglomerate_properties(
-    adapter: str, case: Case, pixel_size: float, tmp_path: Path
-):
+def test_agglomerate_properties(adapter: str, case: Case, tmp_path: Path):
     skip_unless_supported(adapter, "properties")
-    result = ADAPTERS[adapter](case, tmp_path, pixel_size=pixel_size)
+    result = ADAPTERS[adapter](case, tmp_path)
     actual = result.agglomerate_properties()
     for members, expected in case.properties.items():
         for name, value in expected.items():

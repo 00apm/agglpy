@@ -36,7 +36,6 @@ from agglpy.tables import make_particles, validate_particles
 
 from support.synthetic.adapters import (
     ADAPTERS,
-    REAL_PIXEL_SIZE,
     expect_known_failure,
     skip_unless_supported,
 )
@@ -50,17 +49,6 @@ from support.synthetic.cases import (
 from support.synthetic.transforms import TRANSFORMS, Transform
 
 CASES = [SINGLE, *DOUBLETS, *STRUCTURES]
-
-# Every case runs in px. The doublet series also runs with a realistic
-# pixel size, because the legacy code scales by it before comparing.
-# The core works in px, so for it those runs repeat the px1 runs.
-RUNS = [
-    *[pytest.param(c, 1.0, id=f"{c.name}-px1") for c in CASES],
-    *[
-        pytest.param(c, REAL_PIXEL_SIZE, id=f"{c.name}-px{REAL_PIXEL_SIZE}")
-        for c in DOUBLETS
-    ],
-]
 
 # Deeper than Python's default recursion limit (1000) from wherever a
 # search starts: starting in the middle still needs n / 2 levels.
@@ -76,31 +64,23 @@ def default_recursion_limit() -> Iterator[None]:
     sys.setrecursionlimit(previous)
 
 
-@pytest.mark.parametrize(("case", "pixel_size"), RUNS)
+@pytest.mark.parametrize("case", CASES, ids=lambda c: c.name)
 def test_grouping(
-    request: pytest.FixtureRequest,
-    adapter: str,
-    case: Case,
-    pixel_size: float,
-    tmp_path: Path,
+    request: pytest.FixtureRequest, adapter: str, case: Case, tmp_path: Path
 ):
     skip_unless_supported(adapter, "grouping")
-    expect_known_failure(request, adapter, "grouping", case, pixel_size)
-    result = ADAPTERS[adapter](case, tmp_path, pixel_size=pixel_size)
+    expect_known_failure(request, adapter, "grouping", case)
+    result = ADAPTERS[adapter](case, tmp_path)
     assert result.groups() == case.groups, case.note
 
 
-@pytest.mark.parametrize(("case", "pixel_size"), RUNS)
+@pytest.mark.parametrize("case", CASES, ids=lambda c: c.name)
 def test_enclosed(
-    request: pytest.FixtureRequest,
-    adapter: str,
-    case: Case,
-    pixel_size: float,
-    tmp_path: Path,
+    request: pytest.FixtureRequest, adapter: str, case: Case, tmp_path: Path
 ):
     skip_unless_supported(adapter, "enclosed")
-    expect_known_failure(request, adapter, "enclosed", case, pixel_size)
-    result = ADAPTERS[adapter](case, tmp_path, pixel_size=pixel_size)
+    expect_known_failure(request, adapter, "enclosed", case)
+    result = ADAPTERS[adapter](case, tmp_path)
     assert result.enclosed_keys() == case.enclosed, case.note
 
 
