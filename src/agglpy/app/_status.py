@@ -22,6 +22,7 @@ from agglpy.app._records import (
     nanometres,
     read_record,
     same_image,
+    sha256,
 )
 from agglpy.app._report import class_names
 from agglpy.app._sheet import Entry, Sheet
@@ -89,7 +90,13 @@ DetectionState = Literal[
 ]
 # "" = no correction
 CorrectionState = Literal[
-    "", "up to date", "edited outside agglpy", "no record", "file unreadable"
+    "",
+    "up to date",
+    "source changed",
+    "source missing",
+    "edited outside agglpy",
+    "no record",
+    "file unreadable",
 ]
 # "" = no correction, or its record does not describe the CSV
 CorrectionBase = Literal[
@@ -235,7 +242,7 @@ def image_facts(
         pixel_size_source=source,
         size=_size(meta, records),
         detection_state=_detection_state(hct, params, path, file),
-        correction_state=_correction_state(corr),
+        correction_state=_correction_state(corr, folder),
         correction_base=_correction_base(corr, hct),
     )
 
@@ -375,11 +382,21 @@ def _detection_state(
     return "up to date"
 
 
-def _correction_state(corr: ParticleFile | None) -> CorrectionState:
+def _correction_state(
+    corr: ParticleFile | None, folder: Path
+) -> CorrectionState:
     if corr is None:
         return ""
     if corr.state != "matching":
         return corr.state
+    if not isinstance(corr.record, CorrectionRecord):
+        return "no record"
+    # the imported copy stays in use; this only says it may be stale
+    source = resolve_stored(corr.record.source.path, folder)
+    if not source.is_file():
+        return "source missing"
+    if sha256(source) != corr.record.source.sha256:
+        return "source changed"
     return "up to date"
 
 

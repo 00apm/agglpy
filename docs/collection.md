@@ -239,7 +239,9 @@ link.
 | `correction_state` | Meaning | What to do |
 |---|---|---|
 | *(empty)* | No correction | — |
-| `up to date` | `particles_corrected.csv` matches its record | Nothing |
+| `up to date` | `particles_corrected.csv` matches its record, and the source file the one imported | Nothing |
+| `source changed` | The source file changed since the import; the imported copy is used | `col.import_particles()` again |
+| `source missing` | The source file is not at the path in the record (moved or deleted); the imported copy is used | Nothing, or move it back |
 | `edited outside agglpy` | `particles_corrected.csv` differs from its record | Import the corrected file again |
 | `no record` | The record is missing or does not read | Import again |
 | `file unreadable` | `particles_corrected.csv` does not read | Import again, or delete it |

@@ -1,6 +1,7 @@
 """Collection.status: where each image's particles come from."""
 
 import os
+import shutil
 import warnings
 from pathlib import Path
 
@@ -229,6 +230,51 @@ def test_correction_without_detection(
     assert r["correction_state"] == "up to date"
     assert r["correction_base"] == "no detection"
     assert r["detection_state"] == "not detected"
+
+
+def test_correction_source_changed_or_missing(
+    particles_col: Collection, fiji_csv: Path
+) -> None:
+    particles_col.import_particles("D7-017", fiji_csv)
+    fiji_csv.write_text(
+        fiji_csv.read_text(encoding="utf-8") + "\n", encoding="utf-8"
+    )
+    r = row(particles_col)
+    assert r["correction_state"] == "source changed"
+    # the imported copy stays in use
+    assert r["particle_set"] == "corrected"
+    assert r["particle_count"] == 2
+    fiji_csv.unlink()
+    assert row(particles_col)["correction_state"] == "source missing"
+
+
+def test_csv_state_wins_over_source_state(
+    particles_col: Collection, fiji_csv: Path
+) -> None:
+    particles_col.import_particles("D7-017", fiji_csv)
+    fiji_csv.unlink()
+    corrected = work(particles_col, "D7-017") / "particles_corrected.csv"
+    with corrected.open("a", encoding="utf-8") as fh:
+        fh.write("3,60.5,60.5,5.0\n")
+    # the record no longer describes the CSV, so its source says nothing
+    assert row(particles_col)["correction_state"] == "edited outside agglpy"
+
+
+def test_moved_collection_keeps_a_source_inside_it(
+    particles_col: Collection, fiji_csv: Path, tmp_path: Path
+) -> None:
+    inside = particles_col.folder / "raw" / "D7-017.csv"
+    inside.parent.mkdir()
+    shutil.copy(fiji_csv, inside)
+    particles_col.import_particles("D7-017", inside)
+    # the sheet's image paths are relative too: move both folders
+    moved = tmp_path / "moved"
+    moved.mkdir()
+    shutil.move(particles_col.folder, moved / "col")
+    shutil.move(tmp_path / "images", moved / "images")
+    r = row(Collection(moved / "col"))
+    assert r["image_file_state"] == "ok"
+    assert r["correction_state"] == "up to date"
 
 
 def test_missing_image(tmp_path: Path) -> None:
