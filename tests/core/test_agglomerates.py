@@ -1,9 +1,7 @@
 """Grouping primary particles into agglomerates; enclosed particles.
 
 Synthetic cases from ``support.synthetic.cases`` with hand-worked
-answers, run once per implementation in
-``support.synthetic.adapters.ADAPTERS``: the legacy code and
-``agglpy.core.agglomerates``.
+answers, then unit tests of ``agglpy.core.agglomerates``.
 """
 
 import sys
@@ -34,11 +32,6 @@ from agglpy.errors import (
 )
 from agglpy.tables import make_particles, validate_particles
 
-from support.synthetic.adapters import (
-    ADAPTERS,
-    expect_known_failure,
-    skip_unless_supported,
-)
 from support.synthetic.cases import (
     DOUBLETS,
     SINGLE,
@@ -46,6 +39,7 @@ from support.synthetic.cases import (
     Case,
     long_chain,
 )
+from support.synthetic.run import run_case
 from support.synthetic.transforms import TRANSFORMS, Transform
 
 CASES = [SINGLE, *DOUBLETS, *STRUCTURES]
@@ -65,51 +59,34 @@ def default_recursion_limit() -> Iterator[None]:
 
 
 @pytest.mark.parametrize("case", CASES, ids=lambda c: c.name)
-def test_grouping(
-    request: pytest.FixtureRequest, adapter: str, case: Case, tmp_path: Path
-):
-    skip_unless_supported(adapter, "grouping")
-    expect_known_failure(request, adapter, "grouping", case)
-    result = ADAPTERS[adapter](case, tmp_path)
-    assert result.groups() == case.groups, case.note
+def test_grouping(case: Case):
+    assert run_case(case).groups() == case.groups, case.note
 
 
 @pytest.mark.parametrize("case", CASES, ids=lambda c: c.name)
-def test_enclosed(
-    request: pytest.FixtureRequest, adapter: str, case: Case, tmp_path: Path
-):
-    skip_unless_supported(adapter, "enclosed")
-    expect_known_failure(request, adapter, "enclosed", case)
-    result = ADAPTERS[adapter](case, tmp_path)
-    assert result.enclosed_keys() == case.enclosed, case.note
+def test_enclosed(case: Case):
+    assert run_case(case).enclosed_keys() == case.enclosed, case.note
 
 
 @pytest.mark.parametrize("transform", TRANSFORMS.values(), ids=TRANSFORMS)
 @pytest.mark.parametrize("case", CASES, ids=lambda c: c.name)
 def test_result_does_not_depend_on_order_or_position(
-    adapter: str, case: Case, transform: Transform, tmp_path: Path
+    case: Case, transform: Transform
 ):
     # Input order, position (incl. negative coordinates, i.e. outside
     # the image), mirroring and swapped axes must not change the result.
-    skip_unless_supported(adapter, "grouping")
-    skip_unless_supported(adapter, "enclosed")
-    result = ADAPTERS[adapter](transform(case), tmp_path)
+    result = run_case(transform(case))
     assert result.groups() == case.groups, case.note
     assert result.enclosed_keys() == case.enclosed, case.note
 
 
 @pytest.mark.usefixtures("default_recursion_limit")
-def test_long_chain_is_one_agglomerate(
-    request: pytest.FixtureRequest, adapter: str, tmp_path: Path
-):
-    skip_unless_supported(adapter, "grouping")
-    expect_known_failure(request, adapter, "grouping", LONG_CHAIN)
-    result = ADAPTERS[adapter](LONG_CHAIN, tmp_path)
-    assert result.groups() == LONG_CHAIN.groups, LONG_CHAIN.note
+def test_long_chain_is_one_agglomerate():
+    assert run_case(LONG_CHAIN).groups() == LONG_CHAIN.groups, LONG_CHAIN.note
 
 
 # ---------------------------------------------------------------------
-# Unit tests of agglpy.core.agglomerates (one run, no adapter)
+# Unit tests of agglpy.core.agglomerates
 # ---------------------------------------------------------------------
 
 

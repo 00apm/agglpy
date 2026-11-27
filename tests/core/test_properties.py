@@ -1,13 +1,11 @@
 """Particle and agglomerate properties (``agglpy.core.properties``).
 
 The synthetic cases (``support.synthetic.cases.PROPERTIES``, values
-worked out by hand) run once per implementation; the unit tests below
-run the core directly, on hand-worked cases.
+worked out by hand), then unit tests on hand-worked tables.
 """
 
 import math
 import warnings
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -29,8 +27,8 @@ from agglpy.errors import (
 )
 from agglpy.tables import make_particles
 
-from support.synthetic.adapters import ADAPTERS, skip_unless_supported
 from support.synthetic.cases import PROPERTIES, Case
+from support.synthetic.run import run_case
 
 # Small enough to see members that add 3.75e-10 of the volume (the
 # polydisperse case).
@@ -38,9 +36,8 @@ RTOL = 1e-12
 
 
 @pytest.mark.parametrize("case", PROPERTIES, ids=lambda c: c.name)
-def test_agglomerate_properties(adapter: str, case: Case, tmp_path: Path):
-    skip_unless_supported(adapter, "properties")
-    result = ADAPTERS[adapter](case, tmp_path)
+def test_agglomerate_properties(case: Case):
+    result = run_case(case)
     actual = result.agglomerate_properties()
     for members, expected in case.properties.items():
         for name, value in expected.items():
@@ -54,7 +51,7 @@ def test_agglomerate_properties(adapter: str, case: Case, tmp_path: Path):
 
 
 # ---------------------------------------------------------------------
-# Unit tests of agglpy.core.properties (one run, no adapter)
+# Unit tests of agglpy.core.properties
 # ---------------------------------------------------------------------
 
 

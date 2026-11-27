@@ -1,13 +1,11 @@
 """Population metrics (``agglpy.core.metrics``).
 
-The synthetic summary cases (``support.synthetic.cases.SUMMARY``) run
-once per implementation; the unit tests below run the core on tables
-written by hand, with hand-worked values.
+The synthetic summary cases (``support.synthetic.cases.SUMMARY``),
+then unit tests on tables written by hand, with hand-worked values.
 """
 
 import math
 import warnings
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -25,23 +23,15 @@ from agglpy.errors import ParamsError, TableError
 from agglpy.tables import make_particles
 
 from support.structure_cases import G1, G4, G5, graph_tables
-from support.synthetic.adapters import (
-    ADAPTERS,
-    expect_known_failure,
-    skip_unless_supported,
-)
 from support.synthetic.cases import SUMMARY, Case
+from support.synthetic.run import run_case
 
 RTOL = 1e-12
 
 
 @pytest.mark.parametrize("case", SUMMARY, ids=lambda c: c.name)
-def test_summary_cases(
-    request: pytest.FixtureRequest, adapter: str, case: Case, tmp_path: Path
-):
-    skip_unless_supported(adapter, "summary")
-    expect_known_failure(request, adapter, "summary", case)
-    result = ADAPTERS[adapter](case, tmp_path)
+def test_summary_cases(case: Case):
+    result = run_case(case)
     for name, value in case.summary.items():
         assert result.summary[name] == pytest.approx(
             value, rel=RTOL, abs=0, nan_ok=True
@@ -49,7 +39,7 @@ def test_summary_cases(
 
 
 # ---------------------------------------------------------------------
-# Unit tests of agglpy.core.metrics (one run, no adapter)
+# Unit tests of agglpy.core.metrics
 # ---------------------------------------------------------------------
 
 

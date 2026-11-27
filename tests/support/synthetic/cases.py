@@ -253,8 +253,8 @@ STRUCTURES: list[Case] = [
         ],
         groups=[["a", "b", "c", "d", "e"]],
         note=(
-            "The legacy search starts from the largest particle; with it "
-            "at one end the whole chain must still be found."
+            "A search that starts from the largest particle, as agglpy "
+            "0.4's did, must still find the whole chain with it at one end."
         ),
     ),
     make_case(
