@@ -19,6 +19,7 @@ from agglpy.app._correction import based_on_detection
 from agglpy.app._records import (
     CorrectionRecord,
     DetectionRecord,
+    csv_sha256,
     nanometres,
     read_record,
     same_image,
@@ -43,7 +44,11 @@ from agglpy.params import RegionParams
 
 __all__ = [
     "STATUS_COLUMNS",
+    "CorrectionBase",
+    "CorrectionState",
+    "DetectionState",
     "ImageFacts",
+    "ImageFileState",
     "image_facts",
     "pixel_size",
     "table",
@@ -52,23 +57,52 @@ __all__ = [
 STATUS_COLUMNS = (
     "image",
     "include",
-    "file",
+    "image_file_state",
     "pixel_size_nm",
     "pixel_size_source",
     "particle_set",
     "particle_count",
-    "outside_image",
-    "detection",
-    "correction",
-    "kept",
-    "warnings",
+    "particles_outside_image",
+    "detection_state",
+    "correction_state",
+    "correction_base",
+    "particle_set_warnings",
 )
 _DTYPES = {
     "include": "bool",
     "pixel_size_nm": "Float64",
     "particle_count": "Int64",
-    "outside_image": "Int64",
+    "particles_outside_image": "Int64",
 }
+
+# The labels of the status columns, listed once so that mypy checks
+# every comparison with them
+ImageFileState = Literal["ok", "missing", "unreadable"]
+DetectionState = Literal[
+    "params not set",
+    "not detected",
+    "up to date",
+    "params changed",
+    "image changed",
+    "edited outside agglpy",
+    "no record",
+    "file unreadable",
+]
+# "" = no correction
+CorrectionState = Literal[
+    "",
+    "up to date",
+    "source changed",
+    "source missing",
+    "source unreadable",
+    "edited outside agglpy",
+    "no record",
+    "file unreadable",
+]
+# "" = no correction, or its record does not describe the CSV
+CorrectionBase = Literal[
+    "", "current detection", "older detection", "no detection"
+]
 
 
 @dataclass(frozen=True)
@@ -84,10 +118,11 @@ class ImageFacts:
         The sheet row.
     path : Path
         The image file, resolved.
-    file : {"ok", "missing", "unreadable"}
+    image_file_state : ImageFileState
         ``ok``, ``missing`` or ``unreadable``.
     meta : ImageMetadata or None
-        The image metadata; None unless ``file`` is ``ok``.
+        The image metadata; None unless ``image_file_state`` is
+        ``ok``.
     meta_warnings : tuple of WarningMessage
         The metadata reader's warnings (e.g. ``PixelSizeWarning``),
         caught.
@@ -104,15 +139,18 @@ class ImageFacts:
     size : tuple or None
         ``(width, height)`` in px from the image or a record;
         None when neither gives it.
-    detection : str
+    detection_state : DetectionState
         The ``status()`` label of the detection.
-    correction : str
-        The ``status()`` label of the correction.
+    correction_state : CorrectionState
+        The ``status()`` label of the correction file.
+    correction_base : CorrectionBase
+        The ``status()`` label of the detection the correction
+        started from.
     """
 
     entry: Entry
     path: Path
-    file: Literal["ok", "missing", "unreadable"]
+    image_file_state: ImageFileState
     meta: ImageMetadata | None
     meta_warnings: tuple[warnings.WarningMessage, ...]
     hct: ParticleFile | None
@@ -120,8 +158,9 @@ class ImageFacts:
     pixel_size: float | None
     pixel_size_source: str
     size: tuple[int, int] | None
-    detection: str
-    correction: str
+    detection_state: DetectionState
+    correction_state: CorrectionState
+    correction_base: CorrectionBase
 
     @property
     def used(self) -> ParticleFile | None:
@@ -173,7 +212,7 @@ def image_facts(
     path = resolve_stored(entry.file, folder)
     meta: ImageMetadata | None = None
     caught: list[warnings.WarningMessage] = []
-    file: Literal["ok", "missing", "unreadable"]
+    file: ImageFileState
     if not path.is_file():
         file = "missing"
     else:
@@ -195,7 +234,7 @@ def image_facts(
     return ImageFacts(
         entry=entry,
         path=path,
-        file=file,
+        image_file_state=file,
         meta=meta,
         meta_warnings=tuple(caught),
         hct=hct,
@@ -203,8 +242,9 @@ def image_facts(
         pixel_size=metres,
         pixel_size_source=source,
         size=_size(meta, records),
-        detection=_detection(hct, params, path, file),
-        correction=_correction(corr, hct),
+        detection_state=_detection_state(hct, params, path, file),
+        correction_state=_correction_state(corr, folder),
+        correction_base=_correction_base(corr, hct),
     )
 
 
@@ -266,29 +306,19 @@ def _row(facts: ImageFacts) -> dict[str, object]:
                     ).sum()
                 )
             )
-    corr = facts.corrected
-    started = (
-        corr.record.started_from
-        if corr is not None and isinstance(corr.record, CorrectionRecord)
-        else None
-    )
     return {
         "image": facts.entry.image,
         "include": facts.entry.include,
-        "file": facts.file,
+        "image_file_state": facts.image_file_state,
         "pixel_size_nm": nanometres(facts.pixel_size),
         "pixel_size_source": facts.pixel_size_source,
         "particle_set": facts.particle_set or "none",
         "particle_count": count,
-        "outside_image": outside,
-        "detection": facts.detection,
-        "correction": facts.correction,
-        "kept": (
-            ""
-            if started is None
-            else f"{started.kept} of {started.detection_count} detected"
-        ),
-        "warnings": (
+        "particles_outside_image": outside,
+        "detection_state": facts.detection_state,
+        "correction_state": facts.correction_state,
+        "correction_base": facts.correction_base,
+        "particle_set_warnings": (
             class_names(used.record.warnings)
             if used is not None and used.record is not None
             else ""
@@ -333,14 +363,19 @@ def _size(
     return None
 
 
-def _detection(
-    hct: ParticleFile | None, params: ImageParams, path: Path, file: str
-) -> str:
+def _detection_state(
+    hct: ParticleFile | None,
+    params: ImageParams,
+    path: Path,
+    file: ImageFileState,
+) -> DetectionState:
     if hct is None:
-        return "not set" if params.hct is None else "not detected"
-    if hct.state != "matching" or not isinstance(hct.record, DetectionRecord):
+        return "params not set" if params.hct is None else "not detected"
+    if hct.state != "matching":
         return hct.state
-    # a missing image is shown by the file column; params decide then
+    if not isinstance(hct.record, DetectionRecord):
+        return "no record"
+    # a missing image is shown by image_file_state; params decide then
     if file != "missing" and not same_image(hct.record.image, path):
         return "image changed"
     if hct.record.params != params:
@@ -348,17 +383,43 @@ def _detection(
     return "up to date"
 
 
-def _correction(corr: ParticleFile | None, hct: ParticleFile | None) -> str:
+def _correction_state(
+    corr: ParticleFile | None, folder: Path
+) -> CorrectionState:
     if corr is None:
         return ""
-    if corr.state != "matching" or not isinstance(
-        corr.record, CorrectionRecord
-    ):
+    if corr.state != "matching":
         return corr.state
-    started = corr.record.started_from
-    if started is None or not based_on_detection(started):
-        return "not from detection"
-    if hct is None or started.sha256 != hct.sha256:
+    if not isinstance(corr.record, CorrectionRecord):
+        return "no record"
+    # the imported copy stays in use; this only says it may be stale
+    source = resolve_stored(corr.record.source.path, folder)
+    if not source.is_file():
+        return "source missing"
+    try:
+        digest = csv_sha256(source)
+    except OSError:
+        # e.g. held open with a lock by another program
+        return "source unreadable"
+    if digest != corr.record.source.sha256:
+        return "source changed"
+    return "up to date"
+
+
+def _correction_base(
+    corr: ParticleFile | None, hct: ParticleFile | None
+) -> CorrectionBase:
+    # the base is known only from a record that describes the CSV
+    if (
+        corr is None
+        or corr.state != "matching"
+        or not isinstance(corr.record, CorrectionRecord)
+    ):
+        return ""
+    base = corr.record.base
+    if base is None or not based_on_detection(base):
+        return "no detection"
+    if hct is None or base.sha256 != hct.sha256:
         return "older detection"
     return "current detection"
 

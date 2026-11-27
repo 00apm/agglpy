@@ -9,22 +9,22 @@ from scipy.spatial import cKDTree
 
 from agglpy.app._files import replace_file
 from agglpy.app._records import (
+    BaseInfo,
     CorrectionRecord,
     DetectionRecord,
+    ImageInfo,
     ParticlesInfo,
     SourceInfo,
-    StartedFrom,
     csv_sha256,
     image_info,
     missing_image,
     now,
-    sha256,
     versions,
     write_record,
 )
 from agglpy.app._report import class_names, report, warning_text
 from agglpy.app._sheet import Entry
-from agglpy.app._sources import resolve_stored
+from agglpy.app._sources import resolve_stored, stored_path
 from agglpy.app._work import (
     CORRECTED_CSV,
     CORRECTED_RECORD,
@@ -33,8 +33,10 @@ from agglpy.app._work import (
     image_folder,
     inspect,
 )
-from agglpy.errors import OutputExistsError
+from agglpy.core.region import outside_region, region_bounds
+from agglpy.errors import CorrectionMismatchWarning, OutputExistsError
 from agglpy.io import particle_format, read_particles, write_particles
+from agglpy.params import RegionParams
 from agglpy.tables import _DUPLICATE_R_REL_TOL, _DUPLICATE_XY_TOL
 
 __all__ = ["based_on_detection", "count_kept", "run_import"]
@@ -45,9 +47,9 @@ _MIN_SHARED_FRACTION = 0.5
 
 # How a person's particles_corrected.csv is named in the error
 _CHANGED = {
-    "edited by hand": "was edited by hand",
+    "edited outside agglpy": "was edited outside agglpy",
     "no record": "has no record",
-    "unreadable": "does not read",
+    "file unreadable": "does not read",
 }
 
 
@@ -75,16 +77,29 @@ def count_kept(detected: pd.DataFrame, corrected: pd.DataFrame) -> int:
     return kept
 
 
-def based_on_detection(started: StartedFrom | None) -> bool:
+def based_on_detection(base: BaseInfo | None) -> bool:
     """Return whether a correction kept enough of its detection.
 
     The detection is the one it started from.
     """
     return (
-        started is not None
-        and started.detection_count > 0
-        and started.kept >= _MIN_SHARED_FRACTION * started.detection_count
+        base is not None
+        and base.detection_count > 0
+        and base.kept >= _MIN_SHARED_FRACTION * base.detection_count
     )
+
+
+def _stored_source(path: Path, folder: Path) -> str:
+    """Give the source path as the record stores it, with ``/``.
+
+    Relative to the collection when inside it, so the link survives
+    moving the collection; absolute outside it, where the source stays
+    put when the collection moves.
+    """
+    source, collection = path.resolve(), folder.resolve()
+    if source.is_relative_to(collection):
+        return stored_path(source, collection)
+    return source.as_posix()
 
 
 def run_import(
@@ -110,9 +125,9 @@ def run_import(
         warnings.simplefilter("always")
         resolved = particle_format(path) if format == "auto" else format
         table = read_particles(path, format=format)
-        # absolute and with "/": the notebook's working folder and the
-        # OS mean nothing to whoever reads the record later
-        source = SourceInfo(path.resolve().as_posix(), resolved, sha256(path))
+        source = SourceInfo(
+            _stored_source(path, folder), resolved, csv_sha256(path)
+        )
         read_end = len(caught)
         work = image_folder(folder, name)
         outcome, message = "imported", ""
@@ -132,23 +147,23 @@ def run_import(
                     f"({old.record.particles.count} particles, imported "
                     f"{old.record.created[:10]})"
                 )
-        started = _started_from(work, table)
+        base = _base(work, table)
         # warnings about the files already there belong to their records
         others_end = len(caught)
-        if started is not None and not based_on_detection(started):
-            warnings.warn(
-                f"correction keeps only {started.kept} of "
-                f"{started.detection_count} detected circles; shown as not "
-                "based on the detection",
-                UserWarning,
-                stacklevel=2,
-            )
         image_path = resolve_stored(entry.file, folder)
         image = (
             image_info(entry.file, image_path)
             if image_path.is_file()
             else missing_image(entry.file)
         )
+        signs = _mismatch_signs(table, base, image)
+        if signs:
+            warnings.warn(
+                f"check that this is the correction of {name}: "
+                + "; ".join(signs),
+                CorrectionMismatchWarning,
+                stacklevel=2,
+            )
         own = caught[:read_end] + caught[others_end:]
         texts = tuple(warning_text(w) for w in own)
         work.mkdir(parents=True, exist_ok=True)
@@ -169,7 +184,7 @@ def run_import(
                 ),
                 warnings=texts,
                 source=source,
-                started_from=started,
+                base=base,
             ),
         )
     row = {
@@ -182,14 +197,37 @@ def run_import(
     return report([row]), list(caught)
 
 
-def _started_from(work: Path, corrected: pd.DataFrame) -> StartedFrom | None:
+def _mismatch_signs(
+    corrected: pd.DataFrame, base: BaseInfo | None, image: ImageInfo
+) -> list[str]:
+    """Return the signs that the file is not the image's correction.
+
+    No outside check when the image size is unknown.
+    """
+    signs = []
+    if base is not None and not based_on_detection(base):
+        signs.append(
+            f"it keeps only {base.kept} of {base.detection_count} detected "
+            "circles (status() shows correction_base: no detection)"
+        )
+    if image.width is not None and image.height is not None:
+        bounds = region_bounds(RegionParams(), image.width, image.height)
+        outside = int(outside_region(corrected, bounds).sum())
+        if outside == 1:
+            signs.append("1 circle lies entirely outside the image")
+        elif outside:
+            signs.append(f"{outside} circles lie entirely outside the image")
+    return signs
+
+
+def _base(work: Path, corrected: pd.DataFrame) -> BaseInfo | None:
     """Return the detection present now, if its CSV reads."""
     hct = inspect(work / HCT_CSV, work / HCT_RECORD, DetectionRecord)
     if hct is None or hct.particles is None:
         return None
     # the record's date only describes the file it matches
     matching = hct.state == "matching" and hct.record is not None
-    return StartedFrom(
+    return BaseInfo(
         sha256=hct.sha256,
         detected=hct.record.created if matching and hct.record else None,
         kept=count_kept(hct.particles, corrected),

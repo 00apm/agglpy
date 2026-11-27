@@ -13,10 +13,12 @@ from agglpy.app._correction import count_kept
 from agglpy.app._records import (
     CorrectionRecord,
     DetectionRecord,
+    csv_sha256,
     read_record,
     sha256,
 )
 from agglpy.errors import (
+    CorrectionMismatchWarning,
     DuplicateParticlesWarning,
     FileFormatError,
     NonCircularParticlesWarning,
@@ -87,8 +89,10 @@ def test_import_writes_corrected_csv_and_record(
     rec = read_record(corrected_record(particles_col), CorrectionRecord)
     assert rec is not None
     assert rec.source.format == "imagej"
+    # outside the collection: absolute, it stays put when the
+    # collection moves
     assert rec.source.path == fiji_csv.resolve().as_posix()
-    assert rec.source.sha256 == sha256(fiji_csv)
+    assert rec.source.sha256 == csv_sha256(fiji_csv)
     assert rec.image.file == "../images/D7-017.tif"
     assert rec.particles.sha256 == sha256(corrected(particles_col))
     hct = read_record(
@@ -96,14 +100,26 @@ def test_import_writes_corrected_csv_and_record(
         DetectionRecord,
     )
     assert hct is not None
-    assert rec.started_from is not None
-    assert rec.started_from.kept == 2
-    assert rec.started_from.detection_count == 2
-    assert rec.started_from.detected == hct.created
-    assert rec.started_from.sha256 == hct.particles.sha256
+    assert rec.base is not None
+    assert rec.base.kept == 2
+    assert rec.base.detection_count == 2
+    assert rec.base.detected == hct.created
+    assert rec.base.sha256 == hct.particles.sha256
     table = read_particles(corrected(particles_col))
     assert table.columns.tolist() == ["id", "x", "y", "r"]
     assert len(table) == 2
+
+
+def test_source_inside_the_collection_is_stored_relative(
+    particles_col: Collection, fiji_csv: Path
+) -> None:
+    inside = particles_col.folder / "raw" / "corrections" / "D7-017.csv"
+    inside.parent.mkdir(parents=True)
+    shutil.copy(fiji_csv, inside)
+    particles_col.import_particles("D7-017", inside)
+    rec = read_record(corrected_record(particles_col), CorrectionRecord)
+    assert rec is not None
+    assert rec.source.path == "raw/corrections/D7-017.csv"
 
 
 def test_import_without_detection_or_image(
@@ -114,7 +130,7 @@ def test_import_without_detection_or_image(
     assert rep["outcome"].tolist() == ["imported"]
     rec = read_record(corrected_record(particles_col), CorrectionRecord)
     assert rec is not None
-    assert rec.started_from is None
+    assert rec.base is None
     assert rec.image.file == "../images/D7-017.tif"
     assert rec.image.sha256 is None
 
@@ -141,7 +157,7 @@ def test_hand_edited_correction_refuses_then_force(
     before = corrected(particles_col).read_bytes()
     with pytest.raises(
         OutputExistsError,
-        match=r"particles_corrected\.csv of D7-017 was edited by hand; "
+        match=r"particles_corrected\.csv of D7-017 was edited outside agglpy; "
         r"force=True replaces it",
     ):
         particles_col.import_particles("D7-017", fiji_csv)
@@ -159,27 +175,65 @@ def test_correction_without_record_refuses(
         particles_col.import_particles("D7-017", fiji_csv)
 
 
-def test_correction_from_scratch_warns(
-    particles_col: Collection, tmp_path: Path
+FEW_KEPT = (
+    "it keeps only 0 of 2 detected circles (status() shows "
+    "correction_base: no detection)"
+)
+
+
+@pytest.mark.parametrize(
+    ("detected", "extra", "signs"),
+    [
+        (False, ["1,10.5,10.5,5.0"], [FEW_KEPT]),
+        (
+            True,
+            ["9,500.0,80.0,5.0", "10,-30.0,80.0,5.0"],
+            ["2 circles lie entirely outside the image"],
+        ),
+        (
+            False,
+            ["1,10.5,10.5,5.0", "2,500.0,80.0,5.0"],
+            [FEW_KEPT, "1 circle lies entirely outside the image"],
+        ),
+    ],
+    ids=["few-kept", "outside", "both"],
+)
+def test_correction_that_may_not_fit_its_image_warns(
+    particles_col: Collection,
+    tmp_path: Path,
+    detected: bool,
+    extra: list[str],
+    signs: list[str],
 ) -> None:
     particles_col.detect(progress=False)
+    rows = []
+    if detected:
+        # the detected circles, so only the extra rows stand out
+        hct = read_particles(
+            work(particles_col, "D7-017") / "particles_hct.csv"
+        )
+        rows = [f"{r.id},{r.x},{r.y},{r.r}" for r in hct.itertuples()]
     source = tmp_path / "mine.csv"
-    source.write_text("id,x,y,r\n1,10.5,10.5,5.0\n", encoding="utf-8")
-    with pytest.warns(
-        UserWarning, match="keeps only 0 of 2 detected circles"
-    ) as ws:
+    source.write_text(
+        "\n".join(["id,x,y,r", *rows, *extra]) + "\n", encoding="utf-8"
+    )
+    with pytest.warns(CorrectionMismatchWarning) as ws:
         particles_col.import_particles("D7-017", source)
-    (w,) = [w for w in ws if "keeps only" in str(w.message)]
+    (w,) = [w for w in ws if w.category is CorrectionMismatchWarning]
     assert str(w.message) == (
-        "correction keeps only 0 of 2 detected circles; shown as not based "
-        "on the detection"
+        "check that this is the correction of D7-017: " + "; ".join(signs)
     )
     assert os.path.normcase(w.filename) == os.path.normcase(__file__)
     rec = read_record(corrected_record(particles_col), CorrectionRecord)
     assert rec is not None
     assert rec.source.format == "agglpy"
-    assert rec.started_from is not None
-    assert rec.started_from.kept == 0
+    assert rec.base is not None
+    assert rec.base.kept == (2 if detected else 0)
+    # kept in the record, so status() still shows it later
+    st = particles_col.status().set_index("image")
+    assert st.loc["D7-017", "particle_set_warnings"] == (
+        "CorrectionMismatchWarning"
+    )
 
 
 def test_unknown_name(particles_col: Collection, fiji_csv: Path) -> None:
@@ -226,7 +280,7 @@ def test_source_untouched(particles_col: Collection, fiji_csv: Path) -> None:
     assert (fiji_csv.read_bytes(), fiji_csv.stat().st_mtime_ns) == before
 
 
-@pytest.mark.filterwarnings("ignore:correction keeps only")
+@pytest.mark.filterwarnings("ignore::agglpy.errors.CorrectionMismatchWarning")
 def test_old_fitting_csv_reads_as_imagej(
     particles_col: Collection, tmp_path: Path
 ) -> None:

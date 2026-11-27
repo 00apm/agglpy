@@ -234,7 +234,16 @@ class NotReadyError(AgglpyError, ValueError):
 
 
 class OutdatedParticlesWarning(UserWarning):
-    """Particles from an outdated detection are used.
+    """The particles in use no longer match their input.
 
-    The detection was made with other params or another image file.
+    A detection made with other params or another image file, or a
+    correction whose source file changed since it was imported.
+    """
+
+
+class CorrectionMismatchWarning(UserWarning):
+    """An imported correction may not belong to its image.
+
+    It keeps fewer than half of the detected circles, or has circles
+    lying entirely outside the image.
     """

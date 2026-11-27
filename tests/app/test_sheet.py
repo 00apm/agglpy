@@ -62,7 +62,7 @@ def test_constants() -> None:
         "width",
         "height",
         "particle_set",
-        "outside_region",
+        "particles_outside_region",
     } < RESERVED_COLUMNS
     assert set(FIXED_COLUMNS) < RESERVED_COLUMNS
 

@@ -172,7 +172,7 @@ class Image:
         From the detection's record, so they stay what the stored
         circles came from when ``agglpy.yml`` changes later. Give them
         to ``preview(params=...)`` to see that detection again; a CSV
-        edited by hand since (``status()``: ``edited by hand``) no
+        edited since (``status()``: ``edited outside agglpy``) no
         longer matches it. None when there is no detection or its
         record does not read.
         """

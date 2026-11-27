@@ -64,12 +64,12 @@ sheet's user columns, then `note`.
 | `fov_area` | m² | field of view: area of the analysed region | exact |
 | `width`, `height` | px | size of the whole image file | exact |
 | `particle_set` | text | `hct` (detection) or `corrected` (imported correction) | label |
-| `outside_region` | count | circles of the particle file lying entirely outside the region, left out | exact |
+| `particles_outside_region` | count | circles of the particle file lying entirely outside the region, left out | exact |
 | user columns, `note` | as in the sheet | copied from the sheet; group by them with `by=` | label |
 
 A wrong pixel size scales every length, area and volume of its image: check `pixel_size_source`. The analysed
 region cuts the data bar off the bottom ([methodology §1](methodology.md#1-input-image-preprocessing)); a large
-`outside_region` hints at a wrong `bottom_fraction`. Comparing `hct` with `corrected` images compares detection
+`particles_outside_region` hints at a wrong `bottom_fraction`. Comparing `hct` with `corrected` images compares detection
 quality too.
 
 ## Particle table

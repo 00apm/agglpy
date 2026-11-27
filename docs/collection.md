@@ -51,7 +51,7 @@ by row and column):
 - `pixel_size_nm`: a number from 0.001 to 10 000, `.` as decimal point.
 - `images.xlsx`: one worksheet, no formulas (paste values instead). `images.csv`: UTF-8.
 - Reserved names, not allowed for user columns: `pixel_size`, `pixel_size_source`, `fov_area`, `width`,
-  `height`, `particle_set`, `outside_region` (agglpy adds them to the results' `images` table).
+  `height`, `particle_set`, `particles_outside_region` (agglpy adds them to the results' `images` table).
 
 **Adding images.** `create(..., images=)` and `col.add_images(...)` take folders or files. A folder gives its
 image files (`.tif`, `.tiff`, `.png`, `.jpg`, `.jpeg`, `.bmp`, any case) directly inside it; `pattern=` takes
@@ -149,10 +149,11 @@ Each image has up to two particle sets in its work folder, each a CSV with a rec
 
 **The set in use** is decided by the CSV files alone: `particles_corrected.csv` if it exists, else
 `particles_hct.csv`. `col[name].particle_set` names it, `col[name].particles` reads it. `detect()` never touches a
-correction; a correction is never reported as outdated.
+correction. `analyze()` warns with `OutdatedParticlesWarning` about the set in use only: a detection made with
+other params or another image file, or a correction whose source file changed since the import.
 
 **Records** are what agglpy compares the CSV and the image with. Do not edit them. A CSV whose hash no longer
-matches its record is *edited by hand*: agglpy keeps it and does not overwrite it without `force=True`. Read a
+matches its record is *edited outside agglpy*: agglpy keeps it and does not overwrite it without `force=True`. Read a
 record with `col[name].detection` / `col[name].correction` (plain dicts); `col[name].detection_params` gives the
 params of the stored detection, for `col[name].preview(params=...)`.
 
@@ -161,9 +162,9 @@ params of the stored detection, for `col[name].preview(params=...)`.
 | Outcome | Meaning |
 |---|---|
 | `detected` | Detected and written |
-| `replaced` | `force=True` replaced a `particles_hct.csv` edited by hand, without a record or unreadable |
-| `skipped` | Detection not set (`ranges: []`), the image has a correction, or up to date (same params, same image file) |
-| `kept` | `particles_hct.csv` is edited by hand, has no record or does not read; kept |
+| `replaced` | `force=True` replaced a `particles_hct.csv` edited outside agglpy, without a record or unreadable |
+| `skipped` | Params not set (`ranges: []`), the image has a correction, or up to date (same params, same image file) |
+| `kept` | `particles_hct.csv` is edited outside agglpy, has no record or does not read; kept |
 | `error` | This image failed (message in the table); its files are unchanged, the other images go on |
 
 Warnings of each image go into its record and the `warnings` column, and each warning class is raised once after
@@ -176,7 +177,7 @@ Particle files hold `id, x, y, r` in **px**, with pixel centres at integers: pix
 as in OpenCV, NumPy and scikit-image. `x` runs to the right, `y` down, and the origin is the top-left corner of the
 whole image file, data bar included, whatever region detection used. A circle that crosses the image edge, or has
 its centre outside, is a partly visible particle and stays in the file; `analyze()` leaves out only circles lying
-entirely outside the analysed region (`ParticlesOutsideRegionWarning`, counted in `outside_region`).
+entirely outside the analysed region (`ParticlesOutsideRegionWarning`, counted in `particles_outside_region`).
 
 ImageJ and Fiji count from pixel edges, so a circle read from Fiji is shifted by −0.5 px. `agglpy.io.read_particles`
 does the conversion; the details are in [Methodology](methodology.md#4-manual-correction), "Coordinates" and
@@ -201,11 +202,18 @@ The file is read (format recognised from the header; `format=` chooses one), rew
 `agglpy/D7-017/particles_corrected.csv` and used from then on; the source file is only read. Ovals whose width
 and height differ by at most 1 px are read as circles (`r = (Width + Height)/4`), other shapes are left out, both
 reported in one `NonCircularParticlesWarning`. Ids are the numbers Fiji shows. An agglpy particle file
-(`id, x, y, r`) imports the same way. Importing again replaces the correction; a correction edited by hand needs
+(`id, x, y, r`) imports the same way. Importing again replaces the correction; a correction edited outside agglpy needs
 `force=True`. See `help(col.import_particles)`.
 
 The record notes how many detected circles the correction kept (centres within 2 px, radii within 10 %). A
-correction that keeps fewer than half of them is shown as `not from detection`.
+correction that keeps fewer than half of them is shown as `correction_base: no detection`. When it keeps fewer
+than half, or has circles lying entirely outside the image, the import warns with `CorrectionMismatchWarning`
+("check that this is the correction of D7-017: ..."): a file of another image, or a wrong coordinate offset. The
+warning is kept in the record, so `status()` lists it under `particle_set_warnings`.
+
+The record stores the source path relative to the collection when the file lies inside it, absolute otherwise.
+Keep the Fiji files inside the collection (for example `raw/corrections/`): moving the whole folder then keeps every
+link.
 
 ## Status
 
@@ -214,41 +222,48 @@ correction that keeps fewer than half of them is shown as `not from detection`.
 | Column | Content |
 |---|---|
 | `image`, `include` | From the sheet |
-| `file` | `ok`, `missing` or `unreadable` |
+| `image_file_state` | `ok`, `missing` or `unreadable` |
 | `pixel_size_nm`, `pixel_size_source` | The value used, in nm, and where it comes from ([Pixel size](#pixel-size)) |
 | `particle_set`, `particle_count` | `corrected`, `hct` or `none`, and its number of circles |
-| `outside_image` | Circles lying entirely outside the image |
-| `detection`, `correction` | Labels below |
-| `kept` | For a correction: `k of n detected` |
-| `warnings` | Warning classes in the record of the set in use |
+| `particles_outside_image` | Circles lying entirely outside the image |
+| `detection_state`, `correction_state`, `correction_base` | Labels below |
+| `particle_set_warnings` | Warning classes in the record of the set in use |
 
-| `detection` | Meaning | What to do |
+| `detection_state` | Meaning | What to do |
 |---|---|---|
-| `not set` | `hct.ranges` is empty | Set ranges (`set_params`, or tune and `p.keep()`) |
+| `params not set` | `hct.ranges` is empty | Set ranges (`set_params`, or tune and `p.keep()`) |
 | `not detected` | Ranges set, no `particles_hct.csv` | `col.detect()` |
 | `up to date` | Same params, same image file | Nothing |
 | `params changed` | `agglpy.yml` changed since the detection | `col.detect()`; `analyze()` warns with `OutdatedParticlesWarning` until then |
-| `image changed` | The image file is not the one detected | `col.detect()`; check the `file` path |
-| `edited by hand` | `particles_hct.csv` differs from its record | Keep it, or `detect(force=True)` |
+| `image changed` | The image file is not the one detected | `col.detect()`; check the sheet's `file` path |
+| `edited outside agglpy` | `particles_hct.csv` differs from its record | Keep it, or `detect(force=True)` |
 | `no record` | The record is missing or does not read | `detect(force=True)` |
-| `unreadable` | `particles_hct.csv` does not read | `detect(force=True)` |
+| `file unreadable` | `particles_hct.csv` does not read | `detect(force=True)` |
 
-| `correction` | Meaning | What to do |
+| `correction_state` | Meaning | What to do |
 |---|---|---|
 | *(empty)* | No correction | — |
+| `up to date` | `particles_corrected.csv` matches its record, and the source file the one imported | Nothing |
+| `source changed` | The source file changed since the import (other line endings alone do not count); the imported copy is used | `col.import_particles()` again; `analyze()` warns with `OutdatedParticlesWarning` until then |
+| `source missing` | The source file is not at the path in the record (moved or deleted); the imported copy is used | Nothing, or move it back |
+| `source unreadable` | The source file is there but does not open (e.g. locked by another program); the imported copy is used | Close it, then check again |
+| `edited outside agglpy` | `particles_corrected.csv` differs from its record | Import the corrected file again |
+| `no record` | The record is missing or does not read | Import again |
+| `file unreadable` | `particles_corrected.csv` does not read | Import again, or delete it |
+
+| `correction_base` | Meaning | What to do |
+|---|---|---|
+| *(empty)* | No correction, or its record does not describe `particles_corrected.csv` (see `correction_state`) | — |
 | `current detection` | Started from the `particles_hct.csv` present now | Nothing |
 | `older detection` | Started from a detection since replaced or removed | Check the correction still fits |
-| `not from detection` | No detection at import, or it kept fewer than half of the detected circles | Check it is the right file |
-| `edited by hand` | `particles_corrected.csv` differs from its record | Import the corrected file again |
-| `no record` | The record is missing or does not read | Import again |
-| `unreadable` | `particles_corrected.csv` does not read | Import again, or delete it |
+| `no detection` | No detection at import, or the correction kept fewer than half of its circles (the counts: `col[name].correction["base"]`) | Check it is the right file |
 
 `status()` and `analyze()` read the same facts: `analyze()` refuses (`NotReadyError`, listing every image and the fix) while an
 included image has no pixel size, no particles, or a missing or unreadable file. Select images from the table:
 
 ```python
 st = col.status()
-col.detect(st.detection == "params changed")
+col.detect(st.detection_state == "params changed")
 ```
 
 ## Which calls write files

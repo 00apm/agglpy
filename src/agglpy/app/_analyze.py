@@ -40,7 +40,7 @@ _DTYPES: dict[str, Any] = {
     "width": "int64",
     "height": "int64",
     "particle_set": object,
-    "outside_region": "int64",
+    "particles_outside_region": "int64",
 }
 
 
@@ -51,7 +51,7 @@ def run(
 
     Every image is checked before any is analysed. Each image's
     warnings are caught; returns the results and the summary warnings
-    (outdated detections first, then one per class) for the caller to
+    (outdated particles first, then one per class) for the caller to
     emit at the user's line.
 
     Raises
@@ -127,7 +127,7 @@ def run(
                 len(result.particles),
                 f.particle_set,
                 len(result.agglomerates),
-                row["outside_region"],
+                row["particles_outside_region"],
                 nanometres(p),
                 f.pixel_size_source,
             )
@@ -188,22 +188,29 @@ def summary_text(messages: list[tuple[str, str]]) -> str:
 
 
 def _outdated(f: ImageFacts, params: ImageParams) -> str | None:
-    """Return why the detection in use no longer matches.
+    """Return why the particles in use no longer match their input.
 
-    None if it still does.
+    With the fix; None if they still do. A missing correction source
+    is not named: it can't be imported again, and the copy in use
+    still is what was imported.
     """
-    if f.particle_set != "hct":
-        return None  # a correction is the user's final word
-    if f.detection == "image changed":
-        return "image file changed since detect()"
-    if f.detection != "params changed":
+    if f.particle_set == "corrected":
+        if f.correction_state != "source changed":
+            return None
+        return (
+            "the correction's source file changed since import_particles(); "
+            "the imported copy was used; import it again"
+        )
+    if f.detection_state == "image changed":
+        return "image file changed since detect(); run col.detect()"
+    if f.detection_state != "params changed":
         return None
     if params.hct is None:
         return (
             "detection was switched off in agglpy.yml after detect(); "
             "set hct again or import_particles()"
         )
-    return "params changed since detect()"
+    return "params changed since detect(); run col.detect()"
 
 
 def _outdated_text(outdated: list[tuple[str, str]]) -> str:
@@ -211,11 +218,10 @@ def _outdated_text(outdated: list[tuple[str, str]]) -> str:
     were = "image was" if count == 1 else "images were"
     return "\n".join(
         [
-            f"{count} {were} analysed with particles from an outdated "
-            "detection:",
+            f"{count} {were} analysed with outdated particles:",
             *(f"  {name}: {reason}" for name, reason in outdated),
-            "These results do not reflect the current params. Run "
-            "col.detect() to update them, then analyze() again.",
+            "These results do not reflect the current inputs. Update them, "
+            "then analyze() again.",
         ]
     )
 
@@ -234,8 +240,12 @@ def _check_ready(sheet: Sheet, facts: list[ImageFacts]) -> None:
         if used is None:
             problems.append("no particles")
             fixes["run detect() or import_particles()"] = None
-        if f.file != "ok":
-            state = "not found" if f.file == "missing" else "does not read"
+        if f.image_file_state != "ok":
+            state = (
+                "not found"
+                if f.image_file_state == "missing"
+                else "does not read"
+            )
             problems.append(f"image file {state}: {f.entry.file}")
             fixes[f"fix the image file or its path in {where}"] = None
         if used is not None and used.particles is None:
@@ -291,7 +301,7 @@ def _one(
         "width": f.meta.width,
         "height": f.meta.height,
         "particle_set": f.particle_set,
-        "outside_region": len(result.outside_ids),
+        "particles_outside_region": len(result.outside_ids),
     }
     return result, row
 
@@ -330,7 +340,7 @@ def _record(
         "pixel_size": row["pixel_size"],
         "pixel_size_source": row["pixel_size_source"],
         "region": plain(params.region, "region"),
-        "outside_region": row["outside_region"],
+        "particles_outside_region": row["particles_outside_region"],
         "particle_set": row["particle_set"],
         "particles": {
             "file": HCT_CSV if f.particle_set == "hct" else CORRECTED_CSV,
@@ -338,8 +348,9 @@ def _record(
             "sha256": used.sha256,
             "state": used.state,
         },
-        "detection": f.detection,
-        "correction": f.correction,
+        "detection_state": f.detection_state,
+        "correction_state": f.correction_state,
+        "correction_base": f.correction_base,
         "made_by": _made_by(used.record),
         "warnings": texts,
     }
@@ -357,7 +368,7 @@ def _made_by(
             "params": plain(record.params, "params"),
         }
     if isinstance(record, CorrectionRecord):
-        started = record.started_from
+        base = record.base
         return {
             "kind": "correction",
             "created": record.created,
@@ -366,13 +377,13 @@ def _made_by(
                 "path": record.source.path,
                 "format": record.source.format,
             },
-            "started_from": (
+            "base": (
                 None
-                if started is None
+                if base is None
                 else {
-                    "detected": started.detected,
-                    "kept": started.kept,
-                    "detection_count": started.detection_count,
+                    "detected": base.detected,
+                    "kept": base.kept,
+                    "detection_count": base.detection_count,
                 }
             ),
         }

@@ -808,9 +808,11 @@ class Collection:
 
         Warns
         -----
-        UserWarning
-            If the correction keeps less than half of the detected
-            circles: it is then shown as not based on the detection.
+        CorrectionMismatchWarning
+            If the file may not be this image's correction: it keeps
+            less than half of the detected circles (``status()`` then
+            shows ``correction_base: no detection``), or circles lie
+            entirely outside the image.
         NonCircularParticlesWarning
             If ImageJ shapes were read as circles or dropped.
         DuplicateParticlesWarning
@@ -837,17 +839,20 @@ class Collection:
         """Report where each image's particles come from.
 
         Writes nothing. Images are hashed again only when their size or
-        time differs from the record; particle files always.
+        time differs from the record; particle files and the source
+        files of corrections always.
 
         Returns
         -------
         DataFrame
             One row per sheet image, in sheet order (index 0 … n-1):
-            ``image``, ``include``, ``file``, ``pixel_size_nm``,
-            ``pixel_size_source``, ``particle_set``,
-            ``particle_count``, ``outside_image`` (circles entirely
-            outside the image), ``detection``, ``correction``,
-            ``kept`` and ``warnings`` (of the set in use).
+            ``image``, ``include``, ``image_file_state``,
+            ``pixel_size_nm``, ``pixel_size_source``,
+            ``particle_set``, ``particle_count``,
+            ``particles_outside_image`` (circles entirely outside
+            the image), ``detection_state``, ``correction_state``,
+            ``correction_base`` and ``particle_set_warnings`` (of the
+            set in use).
 
         Raises
         ------
@@ -866,9 +871,10 @@ class Collection:
 
         Notes
         -----
-        The values of ``file``, ``pixel_size_source``,
-        ``particle_set``, ``detection`` and ``correction``: see
-        *Collection* (``docs/collection.md``), section *Status*.
+        The values of ``image_file_state``, ``pixel_size_source``,
+        ``particle_set`` and the ``*_state`` / ``correction_base``
+        labels: see *Collection* (``docs/collection.md``), section
+        *Status*.
         """
         sheet, config = self._read(check=True)
         with warnings.catch_warnings(record=True) as caught:
@@ -911,11 +917,12 @@ class Collection:
         -----
         OutdatedParticlesWarning
             First, if a detection in use was made with other params or
-            another image file: the results don't reflect the current
-            params.
+            another image file, or a correction's source file changed
+            since it was imported: the results don't reflect the
+            current inputs.
         ParticlesOutsideRegionWarning
             If circles lying entirely outside the region were left out
-            (counted in ``outside_region``).
+            (counted in ``particles_outside_region``).
         DuplicateParticlesWarning
             If an enclosed particle lies inside a near-identical
             circle; it counts as enclosed.
