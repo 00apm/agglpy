@@ -99,9 +99,6 @@ select = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# Frozen legacy code (D-013), deleted in roadmap 2.9 together with these
-# lines. New modules get PEP 8 names and no print() from the start.
-"src/agglpy/_legacy/*" = ["N", "T20", "E501", "W505"]
 # The expected agglpy.yml template, compared line by line: its comments
 # are as long as the template writes them.
 "tests/app/test_config.py" = ["E501"]
@@ -109,7 +106,6 @@ select = [
 "examples/*" = ["T20", "D"]
 # Test functions get no docstrings (pytest prints their names).
 "tests/**" = ["D"]
-"src/agglpy/_legacy/**" = ["D"]
 
 [tool.ruff.lint.pycodestyle]
 max-doc-length = 72         # PEP 8: 72 for comments and docstrings (W505)
@@ -137,7 +133,6 @@ exclude = [
 ]
 # Properties have a noun-phrase summary and no Returns section.
 override_RT01 = ['^(The|A|An|Whether) ']
-exclude_files = ['.*_legacy']
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -154,12 +149,6 @@ markers = [
 python_version = "3.11"
 warn_return_any = true
 disallow_untyped_defs = true
-
-# Legacy modules are frozen (D-013) and deleted in roadmap 2.9: mypy
-# still reads them, but reports errors only in the code that stays.
-[[tool.mypy.overrides]]
-module = ["agglpy._legacy.*"]
-ignore_errors = true
 
 # SciPy ships no type information; scipy-stubs would have to follow the
 # scipy version range (floor 1.13), so scipy objects are typed as Any.
@@ -179,27 +168,8 @@ root_package = "agglpy"
 include_external_packages = true
 
 # A subpackage (agglpy.core, …) covers every module in it; a new
-# top-level module is added to the first two contracts' source_modules
+# top-level module is added to the first contract's source_modules
 # (an edge module also to the edge contracts at the end).
-[[tool.importlinter.contracts]]
-name = "New code never imports the legacy modules (D-019)"
-type = "forbidden"
-source_modules = [
-    "agglpy._notebook",
-    "agglpy._yaml",
-    "agglpy.app",
-    "agglpy.core",
-    "agglpy.draw",
-    "agglpy.errors",
-    "agglpy.export",
-    "agglpy.io",
-    "agglpy.logger",
-    "agglpy.params",
-    "agglpy.pipeline",
-    "agglpy.tables",
-]
-forbidden_modules = ["agglpy._legacy"]
-
 [[tool.importlinter.contracts]]
 name = "Foundation, core, pipeline, io and export never import plotting or progress bars (rules 1, 4)"
 type = "forbidden"
