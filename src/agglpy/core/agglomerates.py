@@ -284,7 +284,7 @@ def _warn_enclosed_duplicates(
 def _distance(
     xy: NDArray[np.float64], a: NDArray[np.intp], b: NDArray[np.intp]
 ) -> NDArray[np.float64]:
-    # sqrt(dx² + dy²) like the legacy code: IEEE sqrt is correctly
+    # sqrt(dx² + dy²) like agglpy 0.4: IEEE sqrt is correctly
     # rounded, so a distance that is exact in theory is exact here.
     # Annotated: numpy's stubs type xy[a, 0] as Any.
     dx: NDArray[np.float64] = xy[a, 0] - xy[b, 0]

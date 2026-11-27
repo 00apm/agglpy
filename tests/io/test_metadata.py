@@ -66,7 +66,7 @@ def test_real_zeiss_2048_px() -> None:
     ("width", "raw", "text", "expected"),
     [
         # D7-019 (3072 px), D6-027 (2048 px), the 512-px sample (no
-        # text field; legacy took ap_pixel_size, 2x too small)
+        # text field; agglpy 0.4 took ap_pixel_size, 2x too small)
         (3072, 1.172808e-07, (39.09, "nm"), 39.0936e-9),
         (2048, 1.172808e-07, (58.64, "nm"), 58.6404e-9),
         (512, 5.824988e-09, None, 11.649976e-9),

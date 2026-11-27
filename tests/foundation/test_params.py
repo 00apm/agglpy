@@ -17,7 +17,7 @@ from agglpy.params import (
 )
 
 
-def test_hct_range_defaults_match_the_legacy_hct() -> None:
+def test_hct_range_defaults_match_agglpy_04() -> None:
     r = HCTRange(d_min=5, d_max=25)
     assert (
         r.min_dist_ratio,

@@ -1,4 +1,4 @@
-"""agglpy.io.read_image: the grey array legacy used, from any path."""
+"""agglpy.io.read_image: the grey array agglpy 0.4 used, any path."""
 
 import os
 import shutil
@@ -21,18 +21,18 @@ REAL_IMAGES = {
 }
 
 
-def _legacy_grey(path: Path) -> np.ndarray:
+def _v04_grey(path: Path) -> np.ndarray:
     """What v0.4 used: cv2.imread, then BGR -> grey."""
     return cv2.cvtColor(cv2.imread(str(path)), cv2.COLOR_BGR2GRAY)
 
 
 @pytest.mark.parametrize("name", list(REAL_IMAGES))
-def test_real_zeiss_images_equal_legacy(name: str) -> None:
-    # Zeiss palette TIFFs: palette -> RGB -> BT.601 grey, as legacy
+def test_real_zeiss_images_equal_v04(name: str) -> None:
+    # Zeiss palette TIFFs: palette -> RGB -> BT.601 grey, as agglpy 0.4
     path = REAL_IMAGES[name]
     image = read_image(path)
     assert image.dtype == np.uint8 and image.ndim == 2
-    np.testing.assert_array_equal(image, _legacy_grey(path))
+    np.testing.assert_array_equal(image, _v04_grey(path))
 
 
 def test_shape_is_height_by_width() -> None:
@@ -44,7 +44,7 @@ def test_path_with_characters_outside_the_code_page(tmp_path: Path) -> None:
     folder = tmp_path / "próbka żółw µm 試料"
     folder.mkdir()
     path = shutil.copy(REAL_IMAGES["D5-015"], folder / "D5-015 ä.tif")
-    expected = _legacy_grey(REAL_IMAGES["D5-015"])
+    expected = _v04_grey(REAL_IMAGES["D5-015"])
     np.testing.assert_array_equal(read_image(path), expected)
 
 
