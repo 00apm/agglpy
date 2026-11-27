@@ -19,12 +19,11 @@ import tifffile
 from agglpy.errors import FileFormatError, PixelSizeWarning
 from agglpy.io import ImageMetadata, read_image_metadata
 
-from support.paths import DATA_DIR
+from support.paths import IMAGES_DIR
 from support.tiffs import write_fei, write_imagej, write_zeiss
 
-INPUT = DATA_DIR / "input"
-D7_017 = INPUT / "multiple_image" / "images" / "D7-017" / "D7-017.tif"
-D6_027 = INPUT / "multiple_image_old" / "D6-027" / "D6-027.tif"
+D7_017 = IMAGES_DIR / "D7-017.tif"
+D6_027 = IMAGES_DIR / "D6-027.tif"
 ZEISS = "Zeiss CZ_SEM (1024-px reference scaled to {} px)"
 
 

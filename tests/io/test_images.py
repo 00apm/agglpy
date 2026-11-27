@@ -13,14 +13,11 @@ import tifffile
 from agglpy.errors import FileFormatError
 from agglpy.io import read_image
 
-from support.paths import DATA_DIR
+from support.paths import IMAGES_DIR
 
-INPUT = DATA_DIR / "input"
 REAL_IMAGES = {
-    "D7-017": INPUT / "multiple_image" / "images" / "D7-017" / "D7-017.tif",
-    "D7-019": INPUT / "multiple_image" / "images" / "D7-019" / "D7-019.tif",
-    "D6-027": INPUT / "multiple_image_old" / "D6-027" / "D6-027.tif",
-    "D5-015": INPUT / "single_image" / "D5-015.tif",
+    name: IMAGES_DIR / f"{name}.tif"
+    for name in ("D7-017", "D7-019", "D6-027", "D5-015")
 }
 
 

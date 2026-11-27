@@ -30,16 +30,9 @@ from agglpy.io import read_particles
 from agglpy.tables import make_particles
 
 from support.collection import work
-from support.paths import DATA_DIR
+from support.paths import PARTICLES_DIR
 
-FITTING = (
-    DATA_DIR
-    / "input"
-    / "multiple_image"
-    / "images"
-    / "D7-017"
-    / "D7-017_fitting.csv"
-)
+FITTING = PARTICLES_DIR / "D7-017_fitting.csv"
 
 
 def corrected(col: Collection) -> Path:
