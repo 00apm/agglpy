@@ -11,12 +11,12 @@ from agglpy import _yaml
 from agglpy.app import _records as records_module
 from agglpy.app._config import ImageParams
 from agglpy.app._records import (
+    BaseInfo,
     CorrectionRecord,
     DetectionRecord,
     ImageInfo,
     ParticlesInfo,
     SourceInfo,
-    StartedFrom,
     image_info,
     missing_image,
     read_record,
@@ -70,7 +70,7 @@ def detection() -> DetectionRecord:
     )
 
 
-def correction(started_from: StartedFrom | None) -> CorrectionRecord:
+def correction(base: BaseInfo | None) -> CorrectionRecord:
     return CorrectionRecord(
         created="2026-10-26T15:00:00+01:00",
         agglpy="0.5.0",
@@ -79,7 +79,7 @@ def correction(started_from: StartedFrom | None) -> CorrectionRecord:
         particles=ParticlesInfo("particles_corrected.csv", 390, "ab" * 32),
         warnings=(),
         source=SourceInfo("C:/data/fiji/D7-017_v2.csv", "imagej", "51" * 32),
-        started_from=started_from,
+        base=base,
     )
 
 
@@ -91,20 +91,32 @@ def test_detection_record_reads_back_equal(
 
 
 @pytest.mark.parametrize(
-    "started_from",
+    "base",
     [
-        StartedFrom("3f" * 32, "2026-10-19T14:02:00+01:00", 380, 405),
-        StartedFrom("3f" * 32, None, 380, 405),
+        BaseInfo("3f" * 32, "2026-10-19T14:02:00+01:00", 380, 405),
+        BaseInfo("3f" * 32, None, 380, 405),
         None,
     ],
     ids=["with-detection", "detection-without-record", "no-detection"],
 )
 def test_correction_record_reads_back_equal(
-    tmp_path: Path, started_from: StartedFrom | None
+    tmp_path: Path, base: BaseInfo | None
 ) -> None:
-    record = correction(started_from)
+    record = correction(base)
     write_record(tmp_path / "r.yml", record)
     assert read_record(tmp_path / "r.yml", CorrectionRecord) == record
+
+
+def test_correction_record_with_started_from_is_none(tmp_path: Path) -> None:
+    # the key's name before base; such records are rewritten once, not
+    # read by the library
+    path = tmp_path / "D7-017" / "particles_corrected_record.yml"
+    path.parent.mkdir()
+    write_record(path, correction(None))
+    text = path.read_text(encoding="utf-8")
+    path.write_text(text.replace("base:", "started_from:"), encoding="utf-8")
+    with pytest.warns(UnreadableRecordWarning, match="treated as missing"):
+        assert read_record(path, CorrectionRecord) is None
 
 
 def test_record_text_starts_with_header_and_kind(

@@ -96,11 +96,11 @@ def test_import_writes_corrected_csv_and_record(
         DetectionRecord,
     )
     assert hct is not None
-    assert rec.started_from is not None
-    assert rec.started_from.kept == 2
-    assert rec.started_from.detection_count == 2
-    assert rec.started_from.detected == hct.created
-    assert rec.started_from.sha256 == hct.particles.sha256
+    assert rec.base is not None
+    assert rec.base.kept == 2
+    assert rec.base.detection_count == 2
+    assert rec.base.detected == hct.created
+    assert rec.base.sha256 == hct.particles.sha256
     table = read_particles(corrected(particles_col))
     assert table.columns.tolist() == ["id", "x", "y", "r"]
     assert len(table) == 2
@@ -114,7 +114,7 @@ def test_import_without_detection_or_image(
     assert rep["outcome"].tolist() == ["imported"]
     rec = read_record(corrected_record(particles_col), CorrectionRecord)
     assert rec is not None
-    assert rec.started_from is None
+    assert rec.base is None
     assert rec.image.file == "../images/D7-017.tif"
     assert rec.image.sha256 is None
 
@@ -178,8 +178,8 @@ def test_correction_from_scratch_warns(
     rec = read_record(corrected_record(particles_col), CorrectionRecord)
     assert rec is not None
     assert rec.source.format == "agglpy"
-    assert rec.started_from is not None
-    assert rec.started_from.kept == 0
+    assert rec.base is not None
+    assert rec.base.kept == 0
 
 
 def test_unknown_name(particles_col: Collection, fiji_csv: Path) -> None:

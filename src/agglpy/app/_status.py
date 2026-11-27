@@ -393,10 +393,10 @@ def _correction_base(
         or not isinstance(corr.record, CorrectionRecord)
     ):
         return ""
-    started = corr.record.started_from
-    if started is None or not based_on_detection(started):
+    base = corr.record.base
+    if base is None or not based_on_detection(base):
         return "no detection"
-    if hct is None or started.sha256 != hct.sha256:
+    if hct is None or base.sha256 != hct.sha256:
         return "older detection"
     return "current detection"
 

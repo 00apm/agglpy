@@ -194,8 +194,8 @@ def test_correction_labels(
     assert r["correction_base"] == "current detection"
     assert r["detection_state"] == "up to date"
     # the count behind the base is in the record, not in the table
-    started = particles_col["D7-017"].correction["started_from"]
-    assert (started["kept"], started["detection_count"]) == (2, 2)
+    base = particles_col["D7-017"].correction["base"]
+    assert (base["kept"], base["detection_count"]) == (2, 2)
     # a new detection: the correction started from the older one
     write_disc_image(image(particles_col), OTHER_DISCS)
     particles_col.detect("D7-017", force=True, progress=False)

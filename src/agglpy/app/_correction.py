@@ -9,11 +9,11 @@ from scipy.spatial import cKDTree
 
 from agglpy.app._files import replace_file
 from agglpy.app._records import (
+    BaseInfo,
     CorrectionRecord,
     DetectionRecord,
     ParticlesInfo,
     SourceInfo,
-    StartedFrom,
     csv_sha256,
     image_info,
     missing_image,
@@ -75,15 +75,15 @@ def count_kept(detected: pd.DataFrame, corrected: pd.DataFrame) -> int:
     return kept
 
 
-def based_on_detection(started: StartedFrom | None) -> bool:
+def based_on_detection(base: BaseInfo | None) -> bool:
     """Return whether a correction kept enough of its detection.
 
     The detection is the one it started from.
     """
     return (
-        started is not None
-        and started.detection_count > 0
-        and started.kept >= _MIN_SHARED_FRACTION * started.detection_count
+        base is not None
+        and base.detection_count > 0
+        and base.kept >= _MIN_SHARED_FRACTION * base.detection_count
     )
 
 
@@ -132,13 +132,13 @@ def run_import(
                     f"({old.record.particles.count} particles, imported "
                     f"{old.record.created[:10]})"
                 )
-        started = _started_from(work, table)
+        base = _base(work, table)
         # warnings about the files already there belong to their records
         others_end = len(caught)
-        if started is not None and not based_on_detection(started):
+        if base is not None and not based_on_detection(base):
             warnings.warn(
-                f"correction keeps only {started.kept} of "
-                f"{started.detection_count} detected circles; status() "
+                f"correction keeps only {base.kept} of "
+                f"{base.detection_count} detected circles; status() "
                 "shows correction_base: no detection",
                 UserWarning,
                 stacklevel=2,
@@ -169,7 +169,7 @@ def run_import(
                 ),
                 warnings=texts,
                 source=source,
-                started_from=started,
+                base=base,
             ),
         )
     row = {
@@ -182,14 +182,14 @@ def run_import(
     return report([row]), list(caught)
 
 
-def _started_from(work: Path, corrected: pd.DataFrame) -> StartedFrom | None:
+def _base(work: Path, corrected: pd.DataFrame) -> BaseInfo | None:
     """Return the detection present now, if its CSV reads."""
     hct = inspect(work / HCT_CSV, work / HCT_RECORD, DetectionRecord)
     if hct is None or hct.particles is None:
         return None
     # the record's date only describes the file it matches
     matching = hct.state == "matching" and hct.record is not None
-    return StartedFrom(
+    return BaseInfo(
         sha256=hct.sha256,
         detected=hct.record.created if matching and hct.record else None,
         kept=count_kept(hct.particles, corrected),

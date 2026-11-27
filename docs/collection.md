@@ -245,7 +245,7 @@ correction that keeps fewer than half of them is shown as `correction_base: no d
 | *(empty)* | No correction, or its record does not describe `particles_corrected.csv` (see `correction_state`) | — |
 | `current detection` | Started from the `particles_hct.csv` present now | Nothing |
 | `older detection` | Started from a detection since replaced or removed | Check the correction still fits |
-| `no detection` | No detection at import, or the correction kept fewer than half of its circles (the counts: `col[name].correction["started_from"]`) | Check it is the right file |
+| `no detection` | No detection at import, or the correction kept fewer than half of its circles (the counts: `col[name].correction["base"]`) | Check it is the right file |
 
 `status()` and `analyze()` read the same facts: `analyze()` refuses (`NotReadyError`, listing every image and the fix) while an
 included image has no pixel size, no particles, or a missing or unreadable file. Select images from the table:

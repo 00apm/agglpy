@@ -26,12 +26,12 @@ from agglpy.io import read_image_metadata
 
 __all__ = [
     "RECORD_FORMAT",
+    "BaseInfo",
     "CorrectionRecord",
     "DetectionRecord",
     "ImageInfo",
     "ParticlesInfo",
     "SourceInfo",
-    "StartedFrom",
     "csv_sha256",
     "image_info",
     "missing_image",
@@ -84,7 +84,7 @@ class SourceInfo:
 
 
 @dataclass(frozen=True)
-class StartedFrom:
+class BaseInfo:
     """The detection present when a correction was imported."""
 
     sha256: str
@@ -117,7 +117,7 @@ class CorrectionRecord:
     particles: ParticlesInfo
     warnings: tuple[str, ...]
     source: SourceInfo
-    started_from: StartedFrom | None
+    base: BaseInfo | None
 
 
 Record = DetectionRecord | CorrectionRecord
@@ -240,7 +240,7 @@ def record_text(record: Record) -> str:
     data["particles"] = plain(record.particles, "particles")
     if isinstance(record, CorrectionRecord):
         data["source"] = plain(record.source, "source")
-        data["started_from"] = plain(record.started_from, "started_from")
+        data["base"] = plain(record.base, "base")
     data["warnings"] = list(record.warnings)
     version = f" {record.agglpy}" if record.agglpy else ""
     _yaml.set_top_comment(
@@ -317,15 +317,13 @@ def _parse(data: Any, kind: type[Record]) -> Record:
     if kind is DetectionRecord:
         _known(fields, "", (*_COMMON_KEYS, "params"))
         return DetectionRecord(params=_params(fields), **common)
-    _known(fields, "", (*_COMMON_KEYS, "source", "started_from"))
-    started = fields.get("started_from", ...)
-    if started is ...:
-        raise _UnreadableError("started_from is missing")
+    _known(fields, "", (*_COMMON_KEYS, "source", "base"))
+    base = fields.get("base", ...)
+    if base is ...:
+        raise _UnreadableError("base is missing")
     return CorrectionRecord(
         source=_source(_section(fields, "source")),
-        started_from=None
-        if started is None
-        else _started(_mapping(started, "started_from")),
+        base=None if base is None else _base_info(_mapping(base, "base")),
         **common,
     )
 
@@ -374,13 +372,13 @@ def _source(data: Mapping[str, Any]) -> SourceInfo:
     )
 
 
-def _started(data: Mapping[str, Any]) -> StartedFrom:
-    _known(data, "started_from", StartedFrom.__dataclass_fields__)
-    return StartedFrom(
-        sha256=_str(data, "sha256", "started_from"),
-        detected=_str(data, "detected", "started_from", optional=True),
-        kept=_int(data, "kept", "started_from"),
-        detection_count=_int(data, "detection_count", "started_from"),
+def _base_info(data: Mapping[str, Any]) -> BaseInfo:
+    _known(data, "base", BaseInfo.__dataclass_fields__)
+    return BaseInfo(
+        sha256=_str(data, "sha256", "base"),
+        detected=_str(data, "detected", "base", optional=True),
+        kept=_int(data, "kept", "base"),
+        detection_count=_int(data, "detection_count", "base"),
     )
 
 

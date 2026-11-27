@@ -362,7 +362,7 @@ def _made_by(
             "params": plain(record.params, "params"),
         }
     if isinstance(record, CorrectionRecord):
-        started = record.started_from
+        base = record.base
         return {
             "kind": "correction",
             "created": record.created,
@@ -371,13 +371,13 @@ def _made_by(
                 "path": record.source.path,
                 "format": record.source.format,
             },
-            "started_from": (
+            "base": (
                 None
-                if started is None
+                if base is None
                 else {
-                    "detected": started.detected,
-                    "kept": started.kept,
-                    "detection_count": started.detection_count,
+                    "detected": base.detected,
+                    "kept": base.kept,
+                    "detection_count": base.detection_count,
                 }
             ),
         }
