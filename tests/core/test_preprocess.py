@@ -75,13 +75,13 @@ def test_order_is_median_rolling_ball_clahe():
         ClaheParams(clip_limit=2.0, tile_grid=(4, 4)),
     )
     assert np.array_equal(preprocess(image, ALL_STEPS), expected)
-    # the legacy order (median, CLAHE, rolling ball) gives another
+    # agglpy 0.4's order (median, CLAHE, rolling ball) gives another
     # image, so this test tells the orders apart
-    legacy = _subtract_background(
+    v04 = _subtract_background(
         _clahe(_median_blur(image, 3), ClaheParams(2.0, (4, 4))),
         RollingBallParams(radius=15),
     )
-    assert not np.array_equal(expected, legacy)
+    assert not np.array_equal(expected, v04)
 
 
 def test_median_and_clahe_are_the_opencv_calls():

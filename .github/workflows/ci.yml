@@ -42,8 +42,7 @@ jobs:
           "numpydoc==1.11.0"
       - run: ruff check src tests examples
       - run: ruff format --check src tests examples
-      # the docstrings of the public API (docs/contributing/docstrings.md);
-      # the legacy package is excluded in pyproject.toml
+      # the docstrings of the public API (docs/contributing/docstrings.md)
       - run: numpydoc lint $(git ls-files 'src/agglpy/*.py')
       # import-linter reads the package from the source tree; no
       # dependencies needed
@@ -61,8 +60,7 @@ jobs:
           python-version: "3.11"
           cache: pip
           cache-dependency-path: pyproject.toml
-      # legacy modules are silenced in pyproject.toml (deleted in 2.9);
-      # new code must be clean, so this job blocks
+      # mypy must report no errors, so this job blocks
       - run: python -m pip install -e ".[typing]"
       - run: mypy src/agglpy
 

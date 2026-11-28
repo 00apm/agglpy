@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from agglpy.app._sheet import RESERVED_COLUMNS
-from agglpy.errors import ParamsError, UnmatchedPathsWarning
+from agglpy.errors import ParamsError, UnmatchedPathsWarning, _listed
 
 __all__ = [
     "IMAGE_SUFFIXES",
@@ -28,8 +28,6 @@ __all__ = [
 ]
 
 IMAGE_SUFFIXES = (".tif", ".tiff", ".png", ".jpg", ".jpeg", ".bmp")
-
-_LISTED = 10
 
 PathLike = str | os.PathLike[str]
 
@@ -191,12 +189,9 @@ def apply_rule(
             names[i] = match["image"]
         values.append({c: match[c] for c in columns if match[c] is not None})
     if unmatched:
-        listed = ", ".join(unmatched[:_LISTED])
-        if len(unmatched) > _LISTED:
-            listed += f" and {len(unmatched) - _LISTED} more"
         warnings.warn(
             f"{len(unmatched)} image paths did not match columns_from_path "
-            f"{rule!r}; their columns were left empty: {listed}",
+            f"{rule!r}; their columns were left empty: {_listed(unmatched)}",
             UnmatchedPathsWarning,
             stacklevel=2,
         )

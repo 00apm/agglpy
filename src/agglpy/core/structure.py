@@ -17,11 +17,10 @@ from agglpy.core import _graph
 from agglpy.core.agglomerates import (
     _check_contacts,
     _contact_rows,
-    _some,
     _whole,
 )
 from agglpy.core.properties import _radii, _require
-from agglpy.errors import ParamsError, TableError
+from agglpy.errors import ParamsError, TableError, _listed
 from agglpy.params import _integer
 
 __all__ = [
@@ -339,19 +338,19 @@ def _agglomerate_rows(
     repeats = pd.Index(ids).duplicated()
     if repeats.any():
         raise TableError(
-            f"agglomerates: ids {_some(np.unique(ids[repeats]))} repeat; "
+            f"agglomerates: ids {_listed(np.unique(ids[repeats]))} repeat; "
             "one row per agglomerate"
         )
     extra = np.setdiff1d(ids, groups)
     if len(extra):
         raise TableError(
-            f"agglomerates: ids {_some(extra)} have no particles; give "
+            f"agglomerates: ids {_listed(extra)} have no particles; give "
             "the agglomerate table of these particles"
         )
     missing = np.setdiff1d(groups, ids)
     if len(missing):
         raise TableError(
-            f"agglomerates: no row for agglomerates {_some(missing)}; "
+            f"agglomerates: no row for agglomerates {_listed(missing)}; "
             "give the agglomerate table of these particles"
         )
     rows = np.searchsorted(groups, ids).astype(np.intp)
@@ -361,7 +360,7 @@ def _agglomerate_rows(
         if wrong.any():
             raise TableError(
                 "agglomerates: member_count does not match the particles "
-                f"of agglomerates {_some(ids[wrong])}; give the "
+                f"of agglomerates {_listed(ids[wrong])}; give the "
                 "agglomerate table of these particles"
             )
     return rows

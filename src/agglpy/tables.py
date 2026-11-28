@@ -18,12 +18,12 @@ from scipy.spatial import cKDTree
 from agglpy.errors import (
     DuplicateParticlesWarning,
     ParticleTableError,
+    _listed,
 )
 
 PARTICLE_COLUMNS: tuple[str, ...] = ("id", "x", "y", "r")
 """The schema columns of the particle table, in order."""
 _FLOAT_COLUMNS = ("x", "y", "r")
-_MAX_LISTED_DUPLICATES = 10
 
 
 def make_particles(
@@ -149,12 +149,8 @@ def validate_particles(
 
 def _duplicates_message(pairs: list[tuple[int, int]]) -> str:
     """Return the duplicate warning's text; io prefixes the file."""
-    listed = pairs[:_MAX_LISTED_DUPLICATES]
-    more = len(pairs) - len(listed)
-    suffix = f" and {more} more" if more else ""
     return (
-        f"{len(pairs)} pairs of near-identical circles (ids): "
-        f"{', '.join(map(str, listed))}{suffix}"
+        f"{len(pairs)} pairs of near-identical circles (ids): {_listed(pairs)}"
     )
 
 

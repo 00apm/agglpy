@@ -20,7 +20,6 @@ dependencies = [
     "tifffile >= 2022.8.12",
     "matplotlib >= 3.8.4, < 4",
     "openpyxl >= 3.1.5, < 4",
-    "pyyaml >= 6.0.2, < 7",
     # Round-trip YAML keeps the comments in agglpy.yml. Minor releases
     # of 0.x have broken the API: stop at the next one.
     "ruamel.yaml >= 0.18.6, < 0.20",
@@ -53,12 +52,17 @@ notebook = [
     # frontend), else the canvas shows an error instead of the figure.
     "ipympl >= 0.9.8, < 0.10",
 ]
-test = ["pytest >= 8.3.3, < 9", "pytest-regressions >= 2.5, < 3"]
+test = [
+    "pytest >= 8.3.3, < 9",
+    "pytest-regressions >= 2.5, < 3",
+    # tests check with PyYAML that other tools read and write agglpy's
+    # YAML
+    "pyyaml >= 6.0.2, < 7",
+]
 typing = [
     "mypy >= 1.11.2, < 2",
     "pandas-stubs >= 2.1.1.230928, < 3",
     "types-openpyxl >= 3.1.5",
-    "types-pyyaml >= 6.0.12.20240917",
     "types-tqdm >= 4.66.0.20240417",
 ]
 lint = [
@@ -99,12 +103,6 @@ select = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# Frozen legacy code (D-013), deleted in roadmap 2.9 together with these
-# lines. New modules get PEP 8 names and no print() from the start.
-"src/agglpy/_legacy/*" = ["N", "T20", "E501", "W505"]
-"tests/legacy/*" = ["N", "E501", "W505"]
-# The golden runner is rewritten on the new pipeline in 2.8.
-"tests/golden/test_golden.py" = ["N", "E501", "W505"]
 # The expected agglpy.yml template, compared line by line: its comments
 # are as long as the template writes them.
 "tests/app/test_config.py" = ["E501"]
@@ -112,7 +110,6 @@ select = [
 "examples/*" = ["T20", "D"]
 # Test functions get no docstrings (pytest prints their names).
 "tests/**" = ["D"]
-"src/agglpy/_legacy/**" = ["D"]
 
 [tool.ruff.lint.pycodestyle]
 max-doc-length = 72         # PEP 8: 72 for comments and docstrings (W505)
@@ -140,7 +137,6 @@ exclude = [
 ]
 # Properties have a noun-phrase summary and no Returns section.
 override_RT01 = ['^(The|A|An|Whether) ']
-exclude_files = ['.*_legacy']
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -157,12 +153,6 @@ markers = [
 python_version = "3.11"
 warn_return_any = true
 disallow_untyped_defs = true
-
-# Legacy modules are frozen (D-013) and deleted in roadmap 2.9: mypy
-# still reads them, but reports errors only in the code that stays.
-[[tool.mypy.overrides]]
-module = ["agglpy._legacy.*"]
-ignore_errors = true
 
 # SciPy ships no type information; scipy-stubs would have to follow the
 # scipy version range (floor 1.13), so scipy objects are typed as Any.
@@ -181,27 +171,15 @@ ignore_missing_imports = true
 root_package = "agglpy"
 include_external_packages = true
 
-# A subpackage (agglpy.core, …) covers every module in it; a new
-# top-level module is added to the first two contracts' source_modules
-# (an edge module also to the edge contracts at the end).
+# The first contract covers the whole package. In the others a
+# subpackage (agglpy.core, …) covers every module in it; a new
+# foundation, layer or edge module is added to the second contract's
+# source_modules (an edge module also to the edge contracts at the end).
 [[tool.importlinter.contracts]]
-name = "New code never imports the legacy modules (D-019)"
+name = "agglpy never imports PyYAML: YAML goes through agglpy._yaml"
 type = "forbidden"
-source_modules = [
-    "agglpy._notebook",
-    "agglpy._yaml",
-    "agglpy.app",
-    "agglpy.core",
-    "agglpy.draw",
-    "agglpy.errors",
-    "agglpy.export",
-    "agglpy.io",
-    "agglpy.logger",
-    "agglpy.params",
-    "agglpy.pipeline",
-    "agglpy.tables",
-]
-forbidden_modules = ["agglpy._legacy"]
+source_modules = ["agglpy"]
+forbidden_modules = ["yaml"]
 
 [[tool.importlinter.contracts]]
 name = "Foundation, core, pipeline, io and export never import plotting or progress bars (rules 1, 4)"

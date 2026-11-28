@@ -1,8 +1,7 @@
 """Size classes and distributions (``agglpy.core.distributions``).
 
-The synthetic checks call the functions of each implementation
-directly (``STATS``) with the core's vocabulary; the unit tests below
-run the core on tables written by hand, with hand-worked values.
+Hand-worked size classes and one hand-worked distribution, then unit
+tests on tables written by hand.
 """
 
 import math
@@ -19,19 +18,18 @@ from agglpy.core.distributions import (
 )
 from agglpy.errors import ParamsError, TableError, ValuesNotCountedWarning
 
-from support.synthetic.adapters import (
-    STATS,
-    expect_known_failure,
-    skip_unless_supported,
-)
-from support.synthetic.cases import Case, make_case
-
 RTOL = 1e-12
 
 
-def _check_case(name: str) -> Case:
-    """Empty Case so these checks can use the known-failure list."""
-    return make_case(name, [], groups=[])
+def _distribution(values: list[float], edges: np.ndarray) -> pd.DataFrame:
+    """Number distribution of the values, as one image."""
+    images = pd.DataFrame({"image": ["case"]})
+    table = pd.DataFrame({"image": "case", "value": values})
+    # The case leaves a value out on purpose; the warning has its own
+    # tests below.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", ValuesNotCountedWarning)
+        return distribution(images, table, "value", edges)
 
 
 # name, size_classes arguments, expected edges
@@ -77,8 +75,6 @@ CLASS_CASES = [
     ids=[c[0] for c in CLASS_CASES],
 )
 def test_size_classes_cases(
-    request: pytest.FixtureRequest,
-    adapter: str,
     name: str,
     ends: tuple[float, float],
     kwargs: dict,
@@ -86,33 +82,19 @@ def test_size_classes_cases(
 ):
     # Edges run from start to end inclusive: `count` classes, or one
     # per step (for log classes the factor between edges).
-    skip_unless_supported(adapter, "size_classes")
-    expect_known_failure(request, adapter, "size_classes", _check_case(name))
-    edges = STATS[adapter].size_classes(*ends, **kwargs)
+    edges = size_classes(*ends, **kwargs)
     assert len(edges) == len(expected)
     assert list(edges) == pytest.approx(expected, rel=RTOL, abs=0)
 
 
-def test_log_size_classes_need_a_positive_start(adapter: str):
-    skip_unless_supported(adapter, "size_classes")
-    with pytest.raises(
-        ValueError, match=r"start > 0|Start and end must be positive"
-    ):
-        STATS[adapter].size_classes(0, 1e-5, count=2, scale="log")
-
-
-def test_distribution_case(request: pytest.FixtureRequest, adapter: str):
+def test_distribution_case():
     # Right-closed classes (a, b]: a value on an edge belongs to the
     # class it closes; the outer edge is included, so 0 counts. Values
     # outside the classes are not counted, and the fractions refer to
     # the counted values only (8 here, not 9).
-    skip_unless_supported(adapter, "distribution")
-    expect_known_failure(
-        request, adapter, "distribution", _check_case("edges_and_range")
-    )
     edges = np.array([0.0, 10, 20, 30, 40])
     values = [0, 5, 10, 15, 20, 20, 35, 40, 45]
-    dist = STATS[adapter].distribution(values, edges)
+    dist = _distribution(values, edges)
 
     # [0,10]: 0 5 10 | (10,20]: 15 20 20 | (20,30]: - | (30,40]: 35 40
     expected = {
@@ -131,7 +113,7 @@ def test_distribution_case(request: pytest.FixtureRequest, adapter: str):
 
 
 # ---------------------------------------------------------------------
-# Unit tests of agglpy.core.distributions (one run, no adapter)
+# Unit tests of agglpy.core.distributions
 # ---------------------------------------------------------------------
 
 

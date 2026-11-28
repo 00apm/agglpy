@@ -19,12 +19,11 @@ import tifffile
 from agglpy.errors import FileFormatError, PixelSizeWarning
 from agglpy.io import ImageMetadata, read_image_metadata
 
-from support.paths import DATA_DIR
+from support.paths import IMAGES_DIR
 from support.tiffs import write_fei, write_imagej, write_zeiss
 
-INPUT = DATA_DIR / "input"
-D7_017 = INPUT / "multiple_image" / "images" / "D7-017" / "D7-017.tif"
-D6_027 = INPUT / "multiple_image_old" / "D6-027" / "D6-027.tif"
+D7_017 = IMAGES_DIR / "D7-017.tif"
+D6_027 = IMAGES_DIR / "D6-027.tif"
 ZEISS = "Zeiss CZ_SEM (1024-px reference scaled to {} px)"
 
 
@@ -67,7 +66,7 @@ def test_real_zeiss_2048_px() -> None:
     ("width", "raw", "text", "expected"),
     [
         # D7-019 (3072 px), D6-027 (2048 px), the 512-px sample (no
-        # text field; legacy took ap_pixel_size, 2x too small)
+        # text field; agglpy 0.4 took ap_pixel_size, 2x too small)
         (3072, 1.172808e-07, (39.09, "nm"), 39.0936e-9),
         (2048, 1.172808e-07, (58.64, "nm"), 58.6404e-9),
         (512, 5.824988e-09, None, 11.649976e-9),

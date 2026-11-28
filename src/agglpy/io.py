@@ -30,6 +30,7 @@ from agglpy.errors import (
     ParamsError,
     ParticleTableError,
     PixelSizeWarning,
+    _listed,
 )
 from agglpy.tables import (
     PARTICLE_COLUMNS,
@@ -329,7 +330,6 @@ _RENAMES = {
         "Radius (pixels)": "r",
     },
 }
-_MAX_LISTED = 10
 # An ImageJ oval is read as a circle up to this |Width - Height| (px):
 # the grain of ImageJ's integer bounding boxes.
 _NEAR_CIRCLE_PX = 1.0
@@ -565,13 +565,6 @@ def _warn_shapes(
     warnings.warn(
         "; ".join(parts) + ".", NonCircularParticlesWarning, stacklevel=4
     )
-
-
-def _listed(labels: list[str]) -> str:
-    """Join labels by commas, cut after ``_MAX_LISTED``."""
-    more = len(labels) - _MAX_LISTED
-    tail = f" and {more} more" if more > 0 else ""
-    return ", ".join(labels[:_MAX_LISTED]) + tail
 
 
 def write_particles(

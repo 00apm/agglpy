@@ -33,13 +33,12 @@ from agglpy.io import read_image, read_image_metadata, read_particles
 from agglpy.params import HCTParams, HCTRange, RegionParams
 from agglpy.pipeline import ImageResult, analyze, detect_particles
 
-from support.paths import DATA_DIR
+from support.paths import DATA_DIR, IMAGES_DIR, PARTICLES_DIR
 
-IMAGES_DIR = DATA_DIR / "input" / "multiple_image" / "images"
 IMAGE_NAMES = ["D7-017", "D7-019"]
 REGION = RegionParams(bottom_fraction=0.1)
 
-# Settings of the v0.4 golden run (tests/data/golden/D7/settings.yml)
+# Settings of the v0.4.0 golden run the expected files were made with
 RANGES = {
     "D7-017": (
         HCTRange(3, 60, canny_threshold=220, accumulator_threshold=13),
@@ -71,7 +70,7 @@ def original_datadir() -> Path:
 @functools.cache
 def _automatic(name: str) -> tuple[pd.DataFrame, list, ImageResult]:
     """Detect and analyse once per image; the warnings of detection."""
-    tif = IMAGES_DIR / name / f"{name}.tif"
+    tif = IMAGES_DIR / f"{name}.tif"
     with warnings.catch_warnings(record=True) as record:
         warnings.simplefilter("always")
         circles = detect_particles(
@@ -86,11 +85,11 @@ def _automatic(name: str) -> tuple[pd.DataFrame, list, ImageResult]:
 
 @functools.cache
 def _corrected(name: str) -> ImageResult:
-    meta = read_image_metadata(IMAGES_DIR / name / f"{name}.tif")
+    meta = read_image_metadata(IMAGES_DIR / f"{name}.tif")
     with warnings.catch_warnings():
         # a clean set: no agglpy warning
         warnings.simplefilter("error", UserWarning)
-        particles = read_particles(IMAGES_DIR / name / f"{name}_fitting.csv")
+        particles = read_particles(PARTICLES_DIR / f"{name}_fitting.csv")
         return analyze(
             particles, width=meta.width, height=meta.height, region=REGION
         )

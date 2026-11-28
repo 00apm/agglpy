@@ -8,6 +8,8 @@ import pytest
 
 from examples.agglomerate_types import agglomerate_types, type_counts
 from support.paths import EXAMPLES_DIR
+from support.synthetic.cases import CLASSIFICATION, Case
+from support.synthetic.run import run_case
 
 
 @pytest.mark.parametrize(
@@ -26,6 +28,14 @@ def test_rule(member_count, size_ratio, threshold, expected):
         {"member_count": [member_count], "size_ratio": [size_ratio]}
     )
     assert agglomerate_types(table, threshold).tolist() == [expected]
+
+
+@pytest.mark.parametrize("case", CLASSIFICATION, ids=lambda c: c.name)
+def test_synthetic_cases(case: Case):
+    # Hand-worked cases at and around the threshold, grouped and
+    # measured by the core.
+    types = run_case(case).agglomerate_types()
+    assert types == case.agglomerate_types(), case.note
 
 
 def test_type_counts_per_image():

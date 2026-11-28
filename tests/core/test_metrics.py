@@ -1,13 +1,11 @@
 """Population metrics (``agglpy.core.metrics``).
 
-The synthetic summary cases (``support.synthetic.cases.SUMMARY``) run
-once per implementation; the unit tests below run the core on tables
-written by hand, with hand-worked values.
+The synthetic summary cases (``support.synthetic.cases.SUMMARY``),
+then unit tests on tables written by hand, with hand-worked values.
 """
 
 import math
 import warnings
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -25,36 +23,15 @@ from agglpy.errors import ParamsError, TableError
 from agglpy.tables import make_particles
 
 from support.structure_cases import G1, G4, G5, graph_tables
-from support.synthetic.adapters import (
-    ADAPTERS,
-    REAL_PIXEL_SIZE,
-    expect_known_failure,
-    skip_unless_supported,
-)
 from support.synthetic.cases import SUMMARY, Case
+from support.synthetic.run import run_case
 
 RTOL = 1e-12
 
-# Diameters in the summary are compared in px; a real pixel size checks
-# that they are converted and the counts and ratios are not.
-SUMMARY_RUNS = [
-    pytest.param(c, px, id=f"{c.name}-px{px:g}")
-    for c in SUMMARY
-    for px in (1.0, REAL_PIXEL_SIZE)
-]
 
-
-@pytest.mark.parametrize(("case", "pixel_size"), SUMMARY_RUNS)
-def test_summary_cases(
-    request: pytest.FixtureRequest,
-    adapter: str,
-    case: Case,
-    pixel_size: float,
-    tmp_path: Path,
-):
-    skip_unless_supported(adapter, "summary")
-    expect_known_failure(request, adapter, "summary", case, pixel_size)
-    result = ADAPTERS[adapter](case, tmp_path, pixel_size=pixel_size)
+@pytest.mark.parametrize("case", SUMMARY, ids=lambda c: c.name)
+def test_summary_cases(case: Case):
+    result = run_case(case)
     for name, value in case.summary.items():
         assert result.summary[name] == pytest.approx(
             value, rel=RTOL, abs=0, nan_ok=True
@@ -62,7 +39,7 @@ def test_summary_cases(
 
 
 # ---------------------------------------------------------------------
-# Unit tests of agglpy.core.metrics (one run, no adapter)
+# Unit tests of agglpy.core.metrics
 # ---------------------------------------------------------------------
 
 

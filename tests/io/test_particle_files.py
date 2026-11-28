@@ -1,8 +1,4 @@
-"""agglpy.io.read_particles and write_particles.
-
-Replaces the CSV importer tests of tests/legacy/test_particle_csv.py
-for the new API (that file goes with the legacy code).
-"""
+"""agglpy.io.read_particles and write_particles."""
 
 import os
 import warnings
@@ -22,14 +18,11 @@ from agglpy.errors import (
 from agglpy.io import particle_format, read_particles, write_particles
 from agglpy.tables import PARTICLE_COLUMNS, make_particles
 
-from support.paths import DATA_DIR
+from support.paths import PARTICLES_DIR
 
-INPUT = DATA_DIR / "input"
-D7_017_FITTING = (
-    INPUT / "multiple_image" / "images" / "D7-017" / "D7-017_fitting.csv"
-)
-D7_017_V00 = INPUT / "multiple_image" / "images" / "D7-017" / "D7-017_HCT.csv"
-V04_FILE = INPUT / "PPcsv_small" / "set1_HCT.csv"
+D7_017_FITTING = PARTICLES_DIR / "D7-017_fitting.csv"
+D7_017_V00 = PARTICLES_DIR / "D7-017_HCT.csv"
+V04_FILE = PARTICLES_DIR / "set1_HCT.csv"
 
 # Header and one row per format
 AGGLPY = ("id,x,y,r", "1,100.5,100.5,30.0")
