@@ -55,7 +55,8 @@ notebook = [
 test = [
     "pytest >= 8.3.3, < 9",
     "pytest-regressions >= 2.5, < 3",
-    # tests read agglpy's YAML files with PyYAML, as other tools would
+    # tests check with PyYAML that other tools read and write agglpy's
+    # YAML
     "pyyaml >= 6.0.2, < 7",
 ]
 typing = [
@@ -170,26 +171,14 @@ ignore_missing_imports = true
 root_package = "agglpy"
 include_external_packages = true
 
-# A subpackage (agglpy.core, …) covers every module in it; a new
-# top-level module is added to the first two contracts' source_modules
-# (an edge module also to the edge contracts at the end).
+# The first contract covers the whole package. In the others a
+# subpackage (agglpy.core, …) covers every module in it; a new
+# foundation, layer or edge module is added to the second contract's
+# source_modules (an edge module also to the edge contracts at the end).
 [[tool.importlinter.contracts]]
 name = "agglpy never imports PyYAML: YAML goes through agglpy._yaml"
 type = "forbidden"
-source_modules = [
-    "agglpy._notebook",
-    "agglpy._yaml",
-    "agglpy.app",
-    "agglpy.core",
-    "agglpy.draw",
-    "agglpy.errors",
-    "agglpy.export",
-    "agglpy.io",
-    "agglpy.logger",
-    "agglpy.params",
-    "agglpy.pipeline",
-    "agglpy.tables",
-]
+source_modules = ["agglpy"]
 forbidden_modules = ["yaml"]
 
 [[tool.importlinter.contracts]]
