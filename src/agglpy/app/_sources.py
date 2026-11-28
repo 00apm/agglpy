@@ -29,7 +29,6 @@ __all__ = [
 
 IMAGE_SUFFIXES = (".tif", ".tiff", ".png", ".jpg", ".jpeg", ".bmp")
 
-
 PathLike = str | os.PathLike[str]
 
 
