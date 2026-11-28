@@ -6,6 +6,8 @@ handler for the built-in one catches them too; the warnings subclass
 ``UserWarning``.
 """
 
+from collections.abc import Iterable
+
 
 class AgglpyError(Exception):
     """Base class of the errors agglpy raises on purpose."""
@@ -176,3 +178,11 @@ class CorrectionMismatchWarning(UserWarning):
     It keeps fewer than half of the detected circles, or has circles
     lying entirely outside the image.
     """
+
+
+def _listed(values: Iterable[object], limit: int = 10) -> str:
+    """Join the first ``limit`` values by commas, then how many more."""
+    items = list(values)
+    more = len(items) - limit
+    listed = ", ".join(map(str, items[:limit]))
+    return listed + (f" and {more} more" if more > 0 else "")

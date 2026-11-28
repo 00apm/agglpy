@@ -1,4 +1,4 @@
-"""Exception hierarchy of the new code."""
+"""The error and warning classes; the helper listing values."""
 
 import pytest
 
@@ -27,6 +27,7 @@ from agglpy.errors import (
     UnmatchedPathsWarning,
     UnreadableRecordWarning,
     ValuesNotCountedWarning,
+    _listed,
 )
 
 
@@ -107,3 +108,16 @@ def test_output_errors_are_agglpy_and_os_errors(
     assert issubclass(error, AgglpyError)
     assert issubclass(error, os_error)
     assert not issubclass(error, ValueError)
+
+
+@pytest.mark.parametrize(
+    ("count", "expected"),
+    [
+        (0, ""),
+        (3, "1, 2, 3"),
+        (10, "1, 2, 3, 4, 5, 6, 7, 8, 9, 10"),
+        (12, "1, 2, 3, 4, 5, 6, 7, 8, 9, 10 and 2 more"),
+    ],
+)
+def test_listed_shows_ten_values_then_counts(count: int, expected: str):
+    assert _listed(range(1, count + 1)) == expected

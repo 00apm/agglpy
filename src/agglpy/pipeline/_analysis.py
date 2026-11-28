@@ -8,11 +8,13 @@ import pandas as pd
 from agglpy.core.agglomerates import find_agglomerates
 from agglpy.core.properties import agglomerate_properties, particle_properties
 from agglpy.core.region import Bounds, outside_region, region_bounds
-from agglpy.errors import ParamsError, ParticlesOutsideRegionWarning
+from agglpy.errors import (
+    ParamsError,
+    ParticlesOutsideRegionWarning,
+    _listed,
+)
 from agglpy.params import RegionParams
 from agglpy.tables import validate_particles
-
-_MAX_LISTED = 10
 
 
 @dataclass(frozen=True, eq=False)
@@ -153,14 +155,11 @@ def analyze(
 
 
 def _warn_outside(ids: tuple[int, ...], total: int, bounds: Bounds) -> None:
-    listed = ", ".join(map(str, ids[:_MAX_LISTED]))
-    more = len(ids) - _MAX_LISTED
-    suffix = f" and {more} more" if more > 0 else ""
     warnings.warn(
         f"{len(ids)} of {total} particles lie entirely outside the "
         f"analysed region (x {bounds.x_min:g} to {bounds.x_max:g}, "
         f"y {bounds.y_min:g} to {bounds.y_max:g} px) and were left out: "
-        f"ids {listed}{suffix}; widen the region if they are real",
+        f"ids {_listed(ids)}; widen the region if they are real",
         ParticlesOutsideRegionWarning,
         # skip this helper and analyze: point at analyze's caller
         stacklevel=3,

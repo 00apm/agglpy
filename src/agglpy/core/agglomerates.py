@@ -13,8 +13,7 @@ criterion and agglomerate classification*.
 
 import itertools
 import warnings
-from collections.abc import Sequence
-from typing import Any, NamedTuple
+from typing import NamedTuple
 
 import numpy as np
 import pandas as pd
@@ -23,7 +22,7 @@ from scipy.sparse import coo_matrix, csr_matrix
 from scipy.sparse.csgraph import connected_components
 from scipy.spatial import cKDTree
 
-from agglpy.errors import DuplicateParticlesWarning, TableError
+from agglpy.errors import DuplicateParticlesWarning, TableError, _listed
 from agglpy.tables import find_duplicates, validate_particles
 
 # Widens the candidate search a little, so rounding inside the KD-tree
@@ -270,12 +269,9 @@ def _warn_enclosed_duplicates(
     # Count particles, not pairs: three identical circles are 3 pairs
     # but only 2 enclosed particles.
     count = len({enclosed_by_pair[p] for p in pairs})
-    listed = ", ".join(map(str, pairs[:_MAX_LISTED]))
-    more = len(pairs) - _MAX_LISTED
-    suffix = f" and {more} more" if more > 0 else ""
     warnings.warn(
         f"{count} enclosed particle(s) lie inside a near-identical "
-        f"circle (id pairs): {listed}{suffix}; each counts as enclosed",
+        f"circle (id pairs): {_listed(pairs)}; each counts as enclosed",
         DuplicateParticlesWarning,
         stacklevel=3,
     )
@@ -390,7 +386,7 @@ def _check_contacts(particles: pd.DataFrame, contacts: pd.DataFrame) -> _Pairs:
     repeats = pd.Index(ids).duplicated()
     if repeats.any():
         raise TableError(
-            f"particles: ids {_some(np.unique(ids[repeats]))} repeat; "
+            f"particles: ids {_listed(np.unique(ids[repeats]))} repeat; "
             "each particle needs its own id"
         )
     labels = pd.Series(_whole(particles, "agglomerate_id", "particles"), ids)
@@ -399,7 +395,7 @@ def _check_contacts(particles: pd.DataFrame, contacts: pd.DataFrame) -> _Pairs:
     unknown = np.setdiff1d(np.concatenate(list(ends.values())), ids)
     if len(unknown):
         raise TableError(
-            f"contacts: ids {_some(unknown)} not in the particle table; "
+            f"contacts: ids {_listed(unknown)} not in the particle table; "
             "filter the contacts like the particles (e.g. to the same "
             "agglomerates)"
         )
@@ -420,12 +416,12 @@ def _check_contacts(particles: pd.DataFrame, contacts: pd.DataFrame) -> _Pairs:
     if (a == b).any():
         raise TableError(
             "contacts: pairs of a particle with itself: ids "
-            f"{_some(np.unique(a[a == b]))}"
+            f"{_listed(np.unique(a[a == b]))}"
         )
     pairs = pd.DataFrame({"a": np.minimum(a, b), "b": np.maximum(a, b)})
     repeated = pairs[pairs.duplicated()].drop_duplicates()
     if len(repeated):
-        listed = _some([f"({x}, {y})" for x, y in repeated.to_numpy()])
+        listed = _listed([f"({x}, {y})" for x, y in repeated.to_numpy()])
         raise TableError(f"contacts: pairs repeat: {listed}")
     # An agglomerate is held together exactly when its members form one
     # connected group of the pairs.
@@ -441,17 +437,10 @@ def _check_contacts(particles: pd.DataFrame, contacts: pd.DataFrame) -> _Pairs:
     if len(split):
         raise TableError(
             "contacts: agglomerates not held together by their pairs: "
-            f"{_some(split)}; give the whole contacts table of "
+            f"{_listed(split)}; give the whole contacts table of "
             "find_agglomerates for these particles"
         )
     return _Pairs(ids, pair_label, a, b)
-
-
-def _some(values: Sequence[object] | NDArray[Any] | pd.Index) -> str:
-    """List up to ten values, then how many more."""
-    listed = ", ".join(map(str, values[:_MAX_LISTED]))
-    more = len(values) - _MAX_LISTED
-    return listed + (f" and {more} more" if more > 0 else "")
 
 
 def _contact_rows(
